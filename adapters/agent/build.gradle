@@ -84,8 +84,8 @@ dependencies {
     implementation libs.slf4j.api
 
     // The agent CLI's stream-JSON output. The DTOs are internal to this module; `JsonNode` is
-    // `api` because the shared answer read (`ProgramResultRead.AnswerRead.Read`), which the
-    // agent round runner reaches from its own package, carries the parsed answer.
+    // `api` because a contract result (`ExecutorResult.answer()`), which this module's public
+    // mappings take and return, carries the answer as a JSON tree.
     implementation libs.jackson.annotations
     api libs.jackson.databind
     implementation libs.jackson.core

@@ -105,12 +105,18 @@ abstract class RoundFlowSpecBase extends Specification implements BareGitRepoFix
     /** Runs the pipeline to its outcome, the fake agent playing {@code scenario} in {@code box}. */
     TaskOutcome run(PipelineDefinition definition, TaskExecutionEnvironment box, String scenario,
             ScriptedCheckRounds checks) {
+        run(definition, box, FakeAgentSupport.propertiesFor(scenario), checks)
+    }
+
+    /** Runs the pipeline to its outcome, {@code agent}'s binary playing the rounds in {@code box}. */
+    TaskOutcome run(PipelineDefinition definition, TaskExecutionEnvironment box, FactoryProperties agent,
+            ScriptedCheckRounds checks) {
         def lease = new EnvironmentLease({ -> box }, BRANCH, [
             new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), definition.stages())
         ])
         def source = new SandboxRoundEnvironmentSource(lease, runner, clone, TASK, rounds, new VirtualClock())
         // Ahead of the fixed instant the local box stamps process starts with, so wall time is positive.
-        def executor = ClaudeStageFixture.executor(FakeAgentSupport.propertiesFor(scenario), new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)), ChildEnvAllowlist.none(), LAW, source)
+        def executor = ClaudeStageFixture.executor(agent, new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)), ChildEnvAllowlist.none(), LAW, source)
         def persistence = new EnvironmentAttemptPersistence(box, runner, clone, objects(), rounds, ClaimEpochSource.NONE)
         engine(definition, CheckRouting.of(executor, checks), persistence, Files.createDirectories(tempDir.resolve('workspace')),
                 source.identity())

@@ -1,12 +1,10 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.port.agent.RoundClose
-import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 
 /**
@@ -16,9 +14,6 @@ import java.nio.file.Path
  * every other {@code Round} method through untouched (FR2 of wire-host-mid-round-push).
  */
 final class PassThroughRounds implements RoundEnvironmentSource {
-
-    /** The request every round of this source reports, handed through untouched. */
-    static final RoundDecisionRequest DECISION = new RoundDecisionRequest(UntrustedText.agent('decision-content'), [])
 
     /** The round opened most recently — the handle a spec reads the recordings from. */
     FakeRound round
@@ -61,11 +56,6 @@ final class PassThroughRounds implements RoundEnvironmentSource {
         @Override
         void closeRound(RoundClose close) {
             closed = true
-        }
-
-        @Override
-        Optional<RoundDecisionRequest> readDecision() {
-            Optional.of(DECISION)
         }
 
         @Override

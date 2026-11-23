@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentInvocation
-import com.github.oinsio.gnomish.app.port.agent.DecisionRequestRead
 import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
@@ -15,8 +14,8 @@ import spock.lang.TempDir
  * FR2, FR4 of add-sandbox-core; FR9 of extract-agent-round-runner (design D3): the host-mode round
  * source opens each round as a fresh host environment over the DirectoryWorkspace root, its answer
  * file a fresh path in that environment's scratch area — outside the workspace, named to the agent in
- * {@code GNOMISH_ANSWER_FILE} — read at the close through the one tolerant {@link DecisionRequestRead},
- * before the scratch area leaves with the round. The answer file has no transport of its own.
+ * {@code GNOMISH_ANSWER_FILE} — which the round's executor reads before the close, and which leaves
+ * with the round's scratch area at the close. The answer file has no transport of its own.
  */
 class HostRoundEnvironmentSourceSpec extends Specification {
 
@@ -70,7 +69,9 @@ class HostRoundEnvironmentSourceSpec extends Specification {
     }
 
     // FR5 of define-executor-contract (task 7.1): a host round's environment has a scratch area from
-    // the open to the close or discard, where a program executor names its result files
+    // the open to the close or discard, where a program executor names its result files; the round's
+    // answer file lives there, so it leaves with the round too (FR9 of extract-agent-round-runner)
+    // Scenario: executor/agent-executor / The in-place answer file leaves with the round
     def "FR5: a round's environment has a scratch area that leaves at its #ending"() {
         given:
         def round = source.openRound(StageExecutorRequests.request(workspaceDir))
@@ -78,6 +79,8 @@ class HostRoundEnvironmentSourceSpec extends Specification {
 
         expect:
         Files.isDirectory(scratch)
+        round.answerFilePath().startsWith(scratch)
+        !round.answerFilePath().startsWith(workspaceDir)
 
         when:
         ending == 'close' ? round.closeRound(RoundClose.VERIFIABLE) : round.discard()
@@ -92,37 +95,21 @@ class HostRoundEnvironmentSourceSpec extends Specification {
         ending << ['close', 'discard']
     }
 
-    // FR9: the agent's request survives the close that removes the scratch area holding it
-    def "FR9: a request the fake agent wrote at the answer file is read at the close and handed on"() {
+    // FR9: the request the fake agent wrote leaves with the round's scratch area at the close
+    def "FR9: the answer file the fake agent wrote is gone after the close"() {
         given:
         def round = source.openRound(StageExecutorRequests.request(workspaceDir))
         def run = new FakeAgentInvocation(scenario: 'decision-needed', workingDirectory: workspaceDir,
         answerFilePath: round.answerFilePath()).run()
 
-        when:
-        round.closeRound(RoundClose.VERIFIABLE)
-
-        then:
-        run.exitCode() == 0
-        !Files.exists(round.answerFilePath())
-        with(round.readDecision().get()) {
-            question().forLog() == 'Refactor or patch?'
-            options()*.forLog() == ['refactor', 'patch']
-        }
-    }
-
-    // FR9: an agent that asked nothing leaves no file, and the round hands no request on
-    def "FR9: no answer file means no request, before and after the close"() {
-        given:
-        def round = source.openRound(StageExecutorRequests.request(workspaceDir))
-
         expect:
-        round.readDecision().isEmpty()
+        run.exitCode() == 0
+        Files.exists(round.answerFilePath())
 
         when:
         round.closeRound(RoundClose.VERIFIABLE)
 
         then:
-        round.readDecision().isEmpty()
+        !Files.exists(round.answerFilePath())
     }
 }

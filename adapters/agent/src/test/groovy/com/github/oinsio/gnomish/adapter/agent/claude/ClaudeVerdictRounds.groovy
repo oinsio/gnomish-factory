@@ -46,6 +46,11 @@ final class ClaudeVerdictRounds {
         INIT + '{"type":"result","subtype":"success","session_id":"s","result":' + new ObjectMapper().writeValueAsString(text) + '}\n'
     }
 
+    /** A stream whose result event reports the CLI's structured-output retries exhausted, with no output. */
+    static String retriesExhausted() {
+        INIT + '{"type":"result","subtype":"' + ClaudeAnswer.RETRIES_EXHAUSTED_SUBTYPE + '","session_id":"s","result":""}\n'
+    }
+
     /** The engine's result of one verdict round whose CLI printed {@code stream}. */
     static ExecutionResult engine(RunnerFixture fixture, String stream, AttemptKey key = new AttemptKey('TASK-1', 'build', 0)) {
         def result = fixture.start(RunnerFixture.request(Role.VERDICT), RunnerFixture.exited(0, stream))

@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.agent.ResumeVerificationStageExecutor
 import com.github.oinsio.gnomish.adapter.check.PinCheck
 import com.github.oinsio.gnomish.adapter.check.http.HttpRunContext
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
+import com.github.oinsio.gnomish.app.port.agent.AnswerFileReading
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.git.HostGitRounds
@@ -123,7 +124,7 @@ class ExecutorAdapterSelectorSpec extends Specification implements AppAssemblyFi
     // no-salvage owner found, so the interrupted round re-verifies without its stage executor.
     def "stageExecutor resumes a host interrupted verification over the run's cell without the stage chain"() {
         given:
-        def run = RunRound.of(new PendingVerification('snap', 'build', 0, RoundToken.of('0a1b2c'), Optional.empty(), 'snap', ['snap']))
+        def run = RunRound.of(new PendingVerification('snap', 'build', 0, RoundToken.of('0a1b2c'), new AnswerFileReading.Absent(), 'snap', ['snap']))
         def chain = Mock(StageExecutor)
         def decoration = Stub(HostGitRounds) {
             decorate(_, _) >> { RoundEnvironmentSource rounds, CurrentRound cell ->

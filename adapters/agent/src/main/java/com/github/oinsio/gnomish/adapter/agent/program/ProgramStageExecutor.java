@@ -86,9 +86,6 @@ public final class ProgramStageExecutor implements StageExecutor {
             // and still join the mapped result.
             round.closeRound(ProgramResultMapping.closeOf(contractRequest.role(), result));
             var denials = RoundDenialRead.onFinish(round);
-            // The executor read its own answer, a decision request included; the source's read of
-            // its round's answer file is the source's hygiene of its round.
-            round.readDecision();
             return ProgramResultMapping.toEngine(name, contractRequest.role(), key, result, denials);
         } catch (RuntimeException e) {
             // throwable-not-subject: the round's failed/infrastructure carries the cause's class and

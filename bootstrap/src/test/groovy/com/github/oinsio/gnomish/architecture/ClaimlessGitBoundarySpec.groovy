@@ -116,7 +116,9 @@ class ClaimlessGitBoundarySpec extends Specification {
      *       drives the container-mode round adapters (round source, snapshot, persistence, resume
      *       re-verification) as a {@code run} wires them, and asserts the round's identity, not a
      *       claim's; so does {@code PendingCommitResumeSpec}, over the same adapters and a pending
-     *       commit (design D21 of migrate-verify-to-executor-contract). {@code ContainerContinuationMedium} too: the container medium of the identity
+     *       commit (design D21 of migrate-verify-to-executor-contract), and {@code AnswerReadIdentitySpec}, over the
+     *       same adapters and a snapshot's answer file, which asserts the round's outcome (FR21, NFR-R5
+     *       of extract-agent-round-runner). {@code ContainerContinuationMedium} too: the container medium of the identity
      *       specs of make-checkpoint-gate-durable (task 5.3) parks through the same round adapters
      *       and continues through {@code run --resume}, and asserts the continuation commit, not a
      *       claim.
@@ -128,6 +130,7 @@ class ClaimlessGitBoundarySpec extends Specification {
      * </ul>
      */
     private static final List<String> CLAIMLESS_SPECS = [
+        'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/AnswerReadIdentitySpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/BoardReaderSplitFactory.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/ContainerContinuationMedium.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/ContainerGitModeRunnerSpec.groovy',

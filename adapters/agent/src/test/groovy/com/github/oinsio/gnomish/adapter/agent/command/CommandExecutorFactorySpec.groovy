@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.adapter.agent.command
 
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramStageExecutor
 import com.github.oinsio.gnomish.app.describe.ProgramBounds
-import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
@@ -17,7 +16,6 @@ import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironmen
 import com.github.oinsio.gnomish.subprocess.ChildOutput
 import com.github.oinsio.gnomish.subprocess.ProcessLaunch
 import com.github.oinsio.gnomish.subprocess.StdinSource
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -103,14 +101,9 @@ class CommandExecutorFactorySpec extends Specification {
         def host = new HostTaskExecutionEnvironment(workspace, new VirtualClock(), ChildEnvAllowlist.none(), launch)
         host.materialize('gnomish/TASK-7', null)
 
-        and: 'a round source that would even report a decision request at the close'
+        and: 'a round source over that environment'
         def round = Stub(RoundEnvironmentSource.Round) {
             environment() >> host
-            readDecision() >> Optional.of(new RoundDecisionRequest(UntrustedText.agent('ship?'),
-                    [
-                        UntrustedText.agent('a'),
-                        UntrustedText.agent('b')
-                    ]))
         }
         def rounds = Stub(RoundEnvironmentSource) {
             openRound(_) >> round

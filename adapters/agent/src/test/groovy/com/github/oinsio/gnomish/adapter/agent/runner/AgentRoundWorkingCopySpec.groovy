@@ -40,7 +40,7 @@ class AgentRoundWorkingCopySpec extends Specification {
 
         when:
         def result = fixture.start(RunnerFixture.request(role),
-                RunnerFixture.exited(0, 'answer {"verdict":"pass"}\ndone\n'))
+                RunnerFixture.exited(0, 'answer {"kind":"verdict","sarif":{"version":"2.1.0","runs":[]}}\ndone\n'))
 
         then:
         result.status() == Status.FAILED

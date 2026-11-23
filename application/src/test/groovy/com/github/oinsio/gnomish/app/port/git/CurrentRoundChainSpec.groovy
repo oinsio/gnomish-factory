@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.git
 
+import com.github.oinsio.gnomish.app.port.agent.AnswerFileReading
 import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import spock.lang.Specification
@@ -46,7 +47,7 @@ class CurrentRoundChainSpec extends Specification {
         def live = new CurrentRound()
 
         when:
-        restored.restore(new PendingVerification('snap-9', 'build', 2, TOKEN, Optional.empty(), 'pend-b',
+        restored.restore(new PendingVerification('snap-9', 'build', 2, TOKEN, new AnswerFileReading.Absent(), 'pend-b',
                 ['pend-b', 'pend-a', 'snap-9']))
         live.open(TOKEN)
         live.snapshotted('snap-9', RoundClose.VERIFIABLE)
@@ -85,7 +86,7 @@ class CurrentRoundChainSpec extends Specification {
     // FR3, D14: the record's chain runs from its registered commit down to its snapshot
     def "FR3: a pending verification whose chain #why is refused"() {
         when:
-        new PendingVerification('snap', 'build', 0, TOKEN, Optional.empty(), 'pend', chain)
+        new PendingVerification('snap', 'build', 0, TOKEN, new AnswerFileReading.Absent(), 'pend', chain)
 
         then:
         def failure = thrown(IllegalArgumentException)
@@ -103,7 +104,7 @@ class CurrentRoundChainSpec extends Specification {
         def chain = ['pend', 'snap']
 
         when:
-        def verification = new PendingVerification('snap', 'build', 0, TOKEN, Optional.empty(), 'pend', chain)
+        def verification = new PendingVerification('snap', 'build', 0, TOKEN, new AnswerFileReading.Absent(), 'pend', chain)
         chain.add('late')
 
         then:

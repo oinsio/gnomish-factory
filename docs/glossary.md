@@ -441,12 +441,13 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   (`roundToken`, beside `taskId` and `stage`); the **usage snapshot** names the
   last round it folded by it (`through`). A fresh round mints it from the tip it
   opens on; a resumed round never mints — it reuses the token its record
-  carries. Three producers, every one through the one parse `RoundToken.of`:
-  `SandboxRoundEnvironmentSource` mints it in container mode,
-  `MidRoundPushRounds` — the git-mode decoration of the host round source, the
-  one piece of the host wiring that holds git — mints it in host git mode over
-  the task worktree's tip, and `SnapshotTipCheck` reuses the recorded one on the
-  resume path; the engine takes it through the domain port `RoundIdentity` and
+  carries. Two producers, both through the one parse `RoundToken.of`: the one
+  minting step `RoundTokenMint` (`adapters/git`), called by
+  `SandboxRoundEnvironmentSource` in container mode over the task branch's tip
+  and by `MidRoundPushRounds` — the git-mode decoration of the host round
+  source, the one piece of the host wiring that holds git — in host git mode
+  over the task worktree's tip, and `SnapshotTipCheck`, which reuses the
+  recorded one on the resume path; the engine takes it through the domain port `RoundIdentity` and
   stamps it on the round's record. `RoundToken` lives in `domain/engine`.
   Type: `RoundToken` (introduced by `make-checkpoint-gate-durable`, D10; host
   mode by `define-executor-contract`, design D14; ADR 0020, decision 8).

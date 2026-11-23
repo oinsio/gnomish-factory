@@ -12,7 +12,7 @@ import spock.lang.Specification
  */
 class ResultFileJsonReadSpec extends Specification {
 
-    def reader = new ResultFileReader(ResultFileReader.DECISION_FILE_CAP_BYTES, UntrustedText.&agent)
+    def reader = new ResultFileReader(ResultFileReader.ANSWER_FILE_CAP_BYTES, UntrustedText.&agent)
 
     def "FR6: a result document binds to its DTO"() {
         when:

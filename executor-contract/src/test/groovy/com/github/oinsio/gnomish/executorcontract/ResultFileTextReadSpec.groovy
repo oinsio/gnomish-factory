@@ -118,7 +118,7 @@ class ResultFileTextReadSpec extends Specification {
 
     def "FR6: the channel caps are the ones the reads carry today"() {
         expect:
-        ResultFileReader.DECISION_FILE_CAP_BYTES == 1_048_576
+        ResultFileReader.ANSWER_FILE_CAP_BYTES == 4_194_304
         ResultFileReader.FINDINGS_FILE_CAP_BYTES == 262_144
         ResultFileReader.MAX_CAP_BYTES == 16_777_216
     }

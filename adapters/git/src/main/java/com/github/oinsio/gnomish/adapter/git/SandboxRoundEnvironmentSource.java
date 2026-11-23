@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
 import com.github.oinsio.gnomish.app.port.agent.RoundClose;
-import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
 import com.github.oinsio.gnomish.app.port.git.CurrentRound;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
@@ -17,7 +16,6 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.InstantSource;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * The sandboxed {@link RoundEnvironmentSource} (the integration pass of
@@ -26,28 +24,29 @@ import java.util.Optional;
  * {@code EnvelopePaths.answerFile} ({@link BranchDecisionFile}; FR23, D17; FR9 of
  * extract-agent-round-runner) named by the round's {@link RoundToken} — the task branch's tip
  * when the round opened, minted here for a fresh round ({@link RoundToken#of}) and opened in the
- * run's {@link CurrentRound} (FR13 of make-checkpoint-gate-durable, design D10) — every round closes
+ * run's {@link CurrentRound} (FR13 of make-checkpoint-gate-durable, design D10) through the one minting
+ * step {@link RoundTokenMint}, shared with the host decoration {@link MidRoundPushRounds} — every round closes
  * with the in-box snapshot commit + harvest recording the attempt commit into the same cell ({@link
  * EnvironmentRoundSnapshot}, FR21, D15), and a rate-limited {@link
  * MidRoundHarvestListener} mirrors mid-round gnome commits out best-effort
  * (FR5).
  *
  * <p>Kept in sync with {@code com.github.oinsio.gnomish.adapter.agent.HostRoundEnvironmentSource}
- * (no shared classpath between {@code adapters/git} and {@code adapters/agent}): both implement
- * {@link RoundEnvironmentSource} for their execution mode and must open/close rounds with an
- * answer file named in {@code GNOMISH_ANSWER_FILE}, a round listener, and close-round semantics consistent with FR4/FR21; and
- * in a branch mode both rounds open on a round token minted from the tip the round opens on through
- * {@code RoundToken.of} — for the host, by its git-mode decoration {@link MidRoundPushRounds}; and
- * both hand out an environment with a scratch area from the open to the close — here the live box's,
- * there a host temp directory materialized at the open and disposed at the close or discard (task 7.1
- * of define-executor-contract: a program executor names its result files under it).
- *
- * <p>Kept in sync with {@link MidRoundPushRounds}: both mint the round token once per opened round
- * from a {@link VerifiedTip} read of the tip the round opens on, through {@link RoundToken#of}, and
- * open it in the run's {@link CurrentRound} before the round runs (FR21 of define-executor-contract).
+ * (no shared classpath between {@code adapters/git} and {@code adapters/agent}). What the two hold alike for every
+ * medium — an open round names its answer path in {@code GNOMISH_ANSWER_FILE}, a round listener
+ * and the identity it opened under; a close ends the round's environment duties and a discard after
+ * it is a no-op; a discard leaves no scratch area of the round's own — is pinned by the port contract
+ * {@code RoundEnvironmentSourceContract}, which both modules run. What stays in sync by hand is what
+ * that contract does not hold: the answer path is one round's own, never read across rounds (there
+ * by a per-round scratch directory disposed at the close or the discard, here by a path named after
+ * the round token); it stays readable at the path the open named until the close, where the round's
+ * executor reads it; and the close's durable effect is the mode's own (FR4, FR21 of
+ * add-sandbox-core: none on the host, whose round commit is the persistence's; in the box the
+ * snapshot commit and its harvest).
  *
  * <p>Implements FR4, FR5, FR21, FR23 of add-sandbox-core; FR13 of make-checkpoint-gate-durable; FR18 of
- * supervise-daemon-loops-and-embed-dashboard; FR21 of define-executor-contract.
+ * supervise-daemon-loops-and-embed-dashboard; FR21 of define-executor-contract; M1 of
+ * extract-agent-round-runner.
  */
 public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSource {
 
@@ -60,6 +59,7 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
     private final String taskId;
     private final String branch;
     private final CurrentRound rounds;
+    private final RoundTokenMint mint;
     private final InstantSource clock;
 
     /**
@@ -84,6 +84,7 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
         this.taskId = taskId;
         this.branch = TaskIdSanitizer.branchName(taskId);
         this.rounds = rounds;
+        this.mint = new RoundTokenMint(runner, rounds);
         this.clock = clock;
         this.harvestSuppressor = RepeatSuppressor.withDefaultRollUp(clock);
     }
@@ -104,10 +105,11 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
         String stage = request.stage().name();
         TaskExecutionEnvironment environment = lease.environmentFor(stage);
         AttemptKey key = new AttemptKey(taskId, stage, request.attempt());
-        rounds.open(openTip());
-        // The handle reads the identity back from the cell, like every other consumer of it.
-        RoundToken token = rounds.opened();
-        BranchDecisionFile.Handle decision = BranchDecisionFile.open(environment, key, token);
+        // The container minting of a round's identity (design D10 of make-checkpoint-gate-durable): the
+        // task branch's tip in the factory clone as the round opens — a failed resolution fails the
+        // round's open rather than naming a decision path after nothing.
+        RoundToken token = mint.open(cloneDir, TaskBranchRefs.head(taskId));
+        BranchDecisionFile.Handle decision = BranchDecisionFile.open(key, token);
         var midRound = new MidRoundHarvestListener(
                 environment,
                 new HarvestAdmission(runner, cloneDir),
@@ -123,17 +125,6 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
     @Override
     public RoundIdentity identity() {
         return rounds;
-    }
-
-    /**
-     * The container minting of a round's identity (design D10 of make-checkpoint-gate-durable): the task
-     * branch's tip in the factory clone as the round opens, verified before use ({@link
-     * VerifiedTip}) — a failed resolution fails the round's open rather than naming a decision
-     * path after nothing.
-     */
-    private RoundToken openTip() {
-        String revision = TaskBranchRefs.head(taskId);
-        return RoundToken.of(VerifiedTip.required(revision, "rev-parse", runner.run(cloneDir, "rev-parse", revision)));
     }
 
     private final class SandboxRound implements Round {
@@ -180,11 +171,6 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
         public void closeRound(RoundClose close) {
             new EnvironmentRoundSnapshot(environment, runner, cloneDir, rounds)
                     .snapshot(taskId, key.stage(), key.attempt(), close);
-        }
-
-        @Override
-        public Optional<RoundDecisionRequest> readDecision() {
-            return decision.read();
         }
 
         @Override

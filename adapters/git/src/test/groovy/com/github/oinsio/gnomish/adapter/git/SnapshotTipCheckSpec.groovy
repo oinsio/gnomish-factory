@@ -1,13 +1,16 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
-import com.github.oinsio.gnomish.app.port.agent.DecisionRequestRead
+import com.github.oinsio.gnomish.app.port.agent.AnswerFileRead
+import com.github.oinsio.gnomish.app.port.agent.AnswerFileReading
 import com.github.oinsio.gnomish.app.port.git.PendingVerification
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.RoundToken
+import com.github.oinsio.gnomish.executorcontract.Answer
 import com.github.oinsio.gnomish.executorcontract.ResultSource
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -27,6 +30,13 @@ import spock.lang.TempDir
  * request the round asked — if any — is read from the snapshot's tree at exactly that round's path.
  */
 class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, RegisteredBranchFixture {
+
+    static final String DECISION = '{"kind":"decision-request","question":"which db?","options":["pg","sqlite"]}'
+
+    /** The question the reading of a recovered answer file asks. */
+    private static String questionOf(PendingVerification found) {
+        ((found.answer() as AnswerFileReading.Answered).answer() as Answer.DecisionRequest).question().forLog()
+    }
 
     static final String TASK = 'TIP-1'
     static final String BRANCH = 'gnomish/TIP-1'
@@ -82,7 +92,7 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
             attemptCommit() == tip()
             stage() == 'implement'
             round() == 3
-            request().isEmpty()
+            answer() == new AnswerFileReading.Absent()
         }
 
         and: 'FR13 (design D10 as amended): the recorded token travels on, typed — the round it names, not the snapshot'
@@ -128,7 +138,7 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
         def found = new SnapshotTipCheck(runner, clone).inspect(TASK)
 
         then:
-        found.get() == new PendingVerification(snapshot, 'implement', 3, token, Optional.empty(), pending, [pending, snapshot])
+        found.get() == new PendingVerification(snapshot, 'implement', 3, token, new AnswerFileReading.Absent(), pending, [pending, snapshot])
     }
 
     def "FR20: a registered snapshot is its own registered commit"() {
@@ -168,11 +178,11 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
         given:
         def token = RoundToken.of(tip())
         def path = EnvelopePaths.answerFile(new AttemptKey(TASK, 'implement', 0), token).relative()
-        commitFile(path, '{"question":"which db?"}', ServiceCommitMessages.snapshot('implement', 0, token))
+        commitFile(path, DECISION, ServiceCommitMessages.snapshot('implement', 0, token))
         registeredCommitOn(ServiceCommitMessages.pending('implement', 0, token), tip())
 
         expect:
-        new SnapshotTipCheck(runner, clone).inspect(TASK).get().request().get().question().forLog() == 'which db?'
+        questionOf(new SnapshotTipCheck(runner, clone).inspect(TASK).get()) == 'which db?'
     }
 
     // D21: only the round's own commits are crossed — a commit of another identity, another kind or
@@ -266,49 +276,51 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
         given:
         def token = RoundToken.of(tip())
         def path = EnvelopePaths.answerFile(new AttemptKey(TASK, 'implement', 0), token).relative()
-        commitFile(path, '{"question":"which db?"}', ServiceCommitMessages.snapshot('implement', 0, token))
+        commitFile(path, DECISION, ServiceCommitMessages.snapshot('implement', 0, token))
 
         and: 'the working copy no longer holds it — the read is of the snapshot, not of a working copy'
         Files.delete(clone.resolve(path))
 
         expect:
-        new SnapshotTipCheck(runner, clone).inspect(TASK).get().request().get().question().forLog() == 'which db?'
+        questionOf(new SnapshotTipCheck(runner, clone).inspect(TASK).get()) == 'which db?'
     }
 
-    // FR6 of define-executor-contract; crash-consistency item 14: recovery parses the request
-    //     through the live path's read, so a resumed round asks exactly what the live one would.
-    def "FR6: the recovered request is what the live read makes of the same bytes, fallbacks included"() {
-        given: 'a round that wrote garbage instead of decision JSON, and died after its snapshot'
+    // FR21, NFR-R5 of extract-agent-round-runner; crash-consistency item 14: recovery parses the
+    //     answer file through the live path's read, so a resumed round reads exactly what the live
+    //     one would — a refusal included, never a question built from the text.
+    def "FR21, NFR-R5: the recovered reading is what the live read makes of the same bytes (#content)"() {
+        given: 'a round that wrote its answer file, and died after its snapshot'
         def token = RoundToken.of(tip())
         def path = EnvelopePaths.answerFile(new AttemptKey(TASK, 'implement', 0), token).relative()
-        def garbage = 'not json, the agent rambled'
-        commitFile(path, garbage, ServiceCommitMessages.snapshot('implement', 0, token))
+        commitFile(path, text, ServiceCommitMessages.snapshot('implement', 0, token))
 
         when:
-        def logs = LogCaptureSupport.attach(DecisionRequestRead)
-        def recovered = new SnapshotTipCheck(runner, clone).inspect(TASK).get().request()
-        def live = DecisionRequestRead.read({ long limit ->
-            Optional.of(garbage.getBytes(StandardCharsets.UTF_8))
-        } as ResultSource)
-        logs.detach()
+        def recovered = new SnapshotTipCheck(runner, clone).inspect(TASK).get().answer()
+        def live = AnswerFileRead.read({ long limit ->
+            Optional.of(text.getBytes(StandardCharsets.UTF_8))
+        } as ResultSource, UntrustedText.&agent)
 
         then:
         recovered == live
-        recovered.get().question().forLog() == garbage
-        recovered.get().options().isEmpty()
+        recovered.class == kind
+
+        where:
+        content | text || kind
+        'a decision request' | DECISION || AnswerFileReading.Answered
+        'text that is not JSON' | 'not json, the agent rambled' || AnswerFileReading.Refused
     }
 
     def "NFR-R4: a request at the same key under another round's token is not read"() {
         given: 'an earlier round left its request on the branch'
         def earlier = RoundToken.of(tip())
         commitFile(EnvelopePaths.answerFile(new AttemptKey(TASK, 'implement', 0), earlier).relative(),
-                '{"question":"stale?"}', 'gnomish: task approved')
+                DECISION, 'gnomish: task approved')
 
         and: 'the current round, opened on the next tip, asked nothing'
         tipWithSubject(ServiceCommitMessages.snapshot('implement', 0, RoundToken.of(tip())))
 
         expect:
-        new SnapshotTipCheck(runner, clone).inspect(TASK).get().request().isEmpty()
+        new SnapshotTipCheck(runner, clone).inspect(TASK).get().answer() == new AnswerFileReading.Absent()
     }
 
     def "FR21, FR15: a malformed snapshot subject never classifies as an interrupted verification"() {

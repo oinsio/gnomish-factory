@@ -123,7 +123,6 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
         delegate.round.environment.is(round.environment())
         round.answerFilePath() == Path.of('decision.json')
         round.answerEnvFragment() == [GNOMISH_ANSWER_FILE: 'decision.json']
-        round.readDecision() == Optional.of(PassThroughRounds.DECISION)
         delegate.round.closed
         delegate.round.discarded
     }
@@ -207,7 +206,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
     }
 
     // NFR-R1: a failing rev-parse skips the observation and never throws — the round closes
-    // and reads its decision exactly as an undisturbed one does.
+    // exactly as an undisturbed one does.
     def "a failing rev-parse inside onProgress never throws and leaves the round usable"() {
         given: 'a round opened over the worktree, whose HEAD then stops resolving'
         def delegate = new PassThroughRounds()
@@ -223,7 +222,6 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
         then:
         noExceptionThrown()
         delegate.round.closed
-        round.readDecision() == Optional.of(PassThroughRounds.DECISION)
         logs.list.findAll { it.level == Level.WARN }*.formattedMessage
         .any {
             it.startsWith(OperatorEvent.MID_ROUND_POLL_SKIPPED.head())

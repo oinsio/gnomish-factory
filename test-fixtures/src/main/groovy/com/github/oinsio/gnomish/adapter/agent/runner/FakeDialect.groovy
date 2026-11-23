@@ -21,7 +21,8 @@ import java.time.Instant
  * {@code answer <json>} — and anything else is no event. It renders the role's input on stdin and the
  * role's word as the one argument — never a session flag, a continuation on the request included —
  * writes the answer an {@code answer} event carries itself (the word
- * {@code malformed} is an answer that does not match its schema), stops on a bound when a {@code stop}
+ * {@code malformed} is an answer that does not match its schema, the word {@code exhausted} a CLI
+ * that reports its structured-output retries exhausted), stops on a bound when a {@code stop}
  * event came, completes when a {@code done} event came, and is broken otherwise. It records what the
  * runner handed it, so a spec sees what the runner's path did without reaching into it.
  *
@@ -31,6 +32,9 @@ import java.time.Instant
  * the runner's specs pin.
  */
 final class FakeDialect implements AgentDialect<FakeEvent> {
+
+    /** The reason of an {@code answer exhausted} event's malformed answer. */
+    static final String RETRIES_EXHAUSTED = 'the CLI exhausted its structured-output retries'
 
     /** The credential names its describe declares. */
     List<String> credentials = []
@@ -109,6 +113,9 @@ final class FakeDialect implements AgentDialect<FakeEvent> {
         }
         if (answer.payload == 'malformed') {
             return new DialectAnswer.Malformed(UntrustedText.agent('no verdict field'))
+        }
+        if (answer.payload == 'exhausted') {
+            return new DialectAnswer.Malformed(UntrustedText.factory(RETRIES_EXHAUSTED))
         }
         Files.writeString(answerFile, answer.payload)
         new DialectAnswer.Written()

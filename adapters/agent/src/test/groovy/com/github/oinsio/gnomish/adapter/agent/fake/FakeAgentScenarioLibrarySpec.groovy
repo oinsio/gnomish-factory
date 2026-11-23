@@ -58,7 +58,7 @@ class FakeAgentScenarioLibrarySpec extends Specification {
     }
 
     // NFR-O2, D1: garbage decision content is still written verbatim — the
-    // adapter's tolerant read (not the fake) is responsible for degrading it.
+    // one answer read (not the fake) refuses it (FR21 of extract-agent-round-runner).
     def "decision-garbage writes unparseable content verbatim"() {
         given:
         Path decisionFile = workDir.resolve('decision.json')

@@ -50,7 +50,7 @@ import spock.lang.Timeout
  */
 abstract class AgentEntrySpecBase extends Specification {
 
-    static final String VERDICT_STDOUT = 'hello m s\nanswer {"verdict":"pass"}\ndone ok\n'
+    static final String VERDICT_STDOUT = 'hello m s\nanswer {"kind":"verdict","sarif":{"version":"2.1.0","runs":[]}}\ndone ok\n'
 
     @TempDir
     Path workspace

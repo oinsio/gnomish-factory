@@ -112,7 +112,7 @@ class RoundTokenIdentitySpec extends Specification implements BareGitRepoFixture
         next.answerFilePath().toString() == requestPath(answered)
         answered != openedOn
         gitExitCode(origin, 'cat-file', '-e', "${answered}:${next.answerFilePath()}") != 0
-        next.readDecision().isEmpty()
+        next.environment().readFile(next.answerFilePath().toString(), 1).isEmpty()
     }
 
     // FR15, M5: a kill between the snapshot and the state commit — another instance's pickup

@@ -44,6 +44,15 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
     String agentRound = FakeAgentScenario.stdout('plain-round')
 
     /**
+     * What an in-box file read answers for a path the read names: the file's content, or {@code null}
+     * for a file the box does not hold. Every path is absent by default, as in a real box over the
+     * fake agent's {@code plain-round}, which writes no answer file; a scenario about what the gnome
+     * left in the box answers its path. Matched against the production read command, so the answer
+     * of a read is never the self-check probe's.
+     */
+    Closure<String> boxFile = { String path -> null }
+
+    /**
      * What the image inspection answers with (its {@code .Config} JSON), or {@code null} — the
      * default — for an image declaring no volume and carrying this factory's contract label
      * ({@link RecordingDockerCli#answerDeclaredVolumes}). A scenario about the image-contract
@@ -93,6 +102,14 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
         // The agent CLI's own exec: every round and vote asks for stream-json output.
         if (args.contains('stream-json')) {
             return new FakeExecProcess(0, agentRound)
+        }
+        // An in-box file read: the script's positional path follows the script and its $0.
+        int read = args.indexOf(ContainerFileChannel.READ_SCRIPT)
+        if (read >= 0) {
+            def content = boxFile(args[read + 2])
+            return content == null
+                    ? new FakeExecProcess(ContainerFileChannel.ABSENT_EXIT, '')
+                    : new FakeExecProcess(0, content)
         }
         // The two exec'd self-check probes: direct egress must fail; the proxied
         // probe of a denied host must observe the guard's 403.

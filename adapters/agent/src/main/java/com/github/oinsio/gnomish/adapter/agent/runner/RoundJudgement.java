@@ -1,14 +1,11 @@
 package com.github.oinsio.gnomish.adapter.agent.runner;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.github.oinsio.gnomish.adapter.agent.RoundScratchDirectory;
+import com.github.oinsio.gnomish.adapter.agent.program.AnswerOutcome;
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramEnd;
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramFailures;
-import com.github.oinsio.gnomish.adapter.agent.program.ProgramResultRead;
-import com.github.oinsio.gnomish.adapter.agent.program.ProgramResultRead.AnswerRead;
-import com.github.oinsio.gnomish.executorcontract.Answer;
-import com.github.oinsio.gnomish.executorcontract.AnswerReading;
-import com.github.oinsio.gnomish.executorcontract.ExecutorContractJson;
+import com.github.oinsio.gnomish.app.port.agent.AnswerFileRead;
+import com.github.oinsio.gnomish.app.port.agent.AnswerFileReading;
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest;
 import com.github.oinsio.gnomish.executorcontract.ExecutorResult;
 import com.github.oinsio.gnomish.executorcontract.FailureClass;
@@ -20,14 +17,14 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import org.jspecify.annotations.Nullable;
 
 /**
  * The judgement of one agent round that ended (FR1, FR2, FR8, UX2 of extract-agent-round-runner): its
  * usage and status from the dialect, and for a completed round its answer, read back through the one
- * capped answer read ({@link ProgramResultRead#answerOnHost}, {@link ProgramResultRead#answerIn}) —
- * from the round scratch directory when the dialect extracted it from the stream, from the round's
- * environment when the agent wrote it itself.
+ * answer read ({@link AnswerFileRead#onHost}, {@link AnswerFileRead#in}) — from the round scratch
+ * directory when the dialect extracted it from the stream, from the round's environment when the agent
+ * wrote it itself — and made the round's result by the one mapping the recovery of a snapshot shares
+ * ({@link AnswerOutcome#ofAgent}; FR21, NFR-R5, design D15).
  *
  * <p>The dialect's status maps to the contract's: {@link RoundStatus.Completed} to {@code completed};
  * {@link RoundStatus.LimitReached} to {@code failed/limit} whose reason is exactly the bound, so the
@@ -39,10 +36,13 @@ import org.jspecify.annotations.Nullable;
  * <p>An agent round keeps no state past its end (FR9, NFR-R2, design D4 as amended 2026-11-21): a
  * completed round's {@code decision-request} answer leaves with its question and options and no
  * continuation key, a key the agent wrote removed, since the CLI's session lives on the worker and is
- * no record. Any other answer, and one that does not read as an answer at all, leaves as the agent
- * wrote it: judging it is the reader's.
+ * no record. A file that does not read as an answer is refused by the read, never passed on; and a
+ * final answer the dialect found malformed — its CLI's structured-output retries exhausted among the
+ * causes — is refused alike. What a refusal means follows the request's role, by the one mapping
+ * (FR20, design D15 part 3): a {@code transform} round's quality failure, which burns one attempt and
+ * starts no second request; a {@code verdict} or {@code decision} request's cannot-verify.
  *
- * <p>Implements FR1, FR2, FR8, FR9, NFR-R2, UX2 of extract-agent-round-runner.
+ * <p>Implements FR1, FR2, FR8, FR9, FR20, FR21, NFR-R2, UX2 of extract-agent-round-runner.
  *
  * @param <E> the dialect's own event type
  */
@@ -111,33 +111,19 @@ final class RoundJudgement<E> {
 
     private ExecutorResult answered(ParsedEvents<E> events, String answerFile, Usage usage) {
         Path extracted = scratch.answerPath();
-        AnswerRead read =
+        AnswerFileReading read =
                 switch (dialect.answer(request, events, extracted)) {
-                    case DialectAnswer.Written ignored ->
-                        ProgramResultRead.answerOnHost(extracted, UntrustedText::agent);
+                    case DialectAnswer.Written ignored -> AnswerFileRead.onHost(extracted, UntrustedText::agent);
                     case DialectAnswer.NotWritten ignored ->
-                        ProgramResultRead.answerIn(environment, answerFile, UntrustedText::agent);
+                        AnswerFileRead.in(environment, answerFile, UntrustedText::agent);
+                    // No file was written: the dialect's reason is the whole cause, and nothing is quoted.
                     case DialectAnswer.Malformed malformed ->
-                        new AnswerRead.Refused("its final answer does not match the answer's schema: "
-                                + malformed.reason().excerpt(512));
+                        new AnswerFileReading.Refused(
+                                "its final answer does not match the answer's schema: "
+                                        + malformed.reason().excerpt(512),
+                                UntrustedText.agent(""));
                 };
-        return switch (read) {
-            case AnswerRead.None ignored -> completed(null, usage);
-            case AnswerRead.Read answer -> completed(keyless(answer.answer()), usage);
-            case AnswerRead.Refused refused -> failure(refused.cause()).withUsage(usage);
-        };
-    }
-
-    /** {@code answer} with no continuation key when it is a decision request; otherwise as written. */
-    private static JsonNode keyless(JsonNode answer) {
-        if (Answer.read(answer, UntrustedText::agent) instanceof AnswerReading.Parsed(Answer.DecisionRequest asked)) {
-            return ExecutorContractJson.answerTree(new Answer.DecisionRequest(asked.question(), asked.options(), null));
-        }
-        return answer;
-    }
-
-    private static ExecutorResult completed(@Nullable JsonNode answer, Usage usage) {
-        return new ExecutorResult(Status.COMPLETED, null, null, null, answer, usage, List.of());
+        return AnswerOutcome.ofAgent(request.role(), name, read, scratch.tailForFailure(), usage);
     }
 
     private static Usage measured(Usage usage, Duration wallTime) {

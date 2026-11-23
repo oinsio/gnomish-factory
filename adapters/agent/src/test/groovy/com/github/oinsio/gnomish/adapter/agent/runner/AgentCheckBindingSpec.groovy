@@ -81,7 +81,7 @@ class AgentCheckBindingSpec extends AgentEntrySpecBase {
         then:
         bound.executor() instanceof GuardedExecutor
         result.status() == Status.COMPLETED
-        result.answer().toString() == '{"verdict":"pass"}'
+        result.answer().toString() == '{"kind":"verdict","sarif":{"version":"2.1.0","runs":[]}}'
         asked == [
             [commit: 'abc123', egress: dialect.describe().egress()]
         ]
@@ -132,7 +132,7 @@ class AgentCheckBindingSpec extends AgentEntrySpecBase {
         then:
         bound.executor() instanceof GuardedExecutor
         result.status() == Status.COMPLETED
-        result.answer().toString() == '{"verdict":"pass"}'
+        result.answer().toString() == '{"kind":"verdict","sarif":{"version":"2.1.0","runs":[]}}'
         agentLaunches*.command() == [['fake-agent', 'verdict']]
         agentLaunches.first().directory().toPath() == workspace
         !answerDirectory.toFile().exists()

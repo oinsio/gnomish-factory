@@ -320,7 +320,7 @@ This stage edits no file under `.claude/`: where a task names a row of
   each with `--json-schema`; record the CLI version and the outcome per row in D15. **The gnome
   does not run this and does not tick it.** Tasks 5.1–5.5 do not wait for it; 5.6 and 5.7 do. If
   you reach 5.6 while 5.0 is open, stop and report that
-- [ ] 5.1 The round source stays; its duties are pinned (FR18, M9, D14). The deletions of the
+- [x] 5.1 The round source stays; its duties are pinned (FR18, M9, D14). The deletions of the
   first text that are already in HEAD stand: `CliStageExecutor`, `ExecutorRoundExecution` and
   their helpers, with the `ExecutorRoundExecution.java:111,138` row gone from
   `GuardProbeOwnerSpec` (M6). `HostRoundEnvironmentSource` and `SandboxRoundEnvironmentSource`
@@ -344,7 +344,7 @@ This stage edits no file under `.claude/`: where a task names a row of
   composes (`executor/agent-executor`, "Round prompt composition"), so the question and the
   reply of 2.5a reach the CLI's stdin unchanged; no request carries a continuation (D4, NG8)
   (D7, D8, D14)
-- [ ] 5.1a Dispatch arm (carried from D8 and the `ExecutorRegistry` row of D10 of
+- [x] 5.1a Dispatch arm (carried from D8 and the `ExecutorRegistry` row of D10 of
   `define-executor-contract`): `ExecutorDispatch` (`:bootstrap`) sends a `program` stage to the
   registry by `executor.name` and every other stage to one type-keyed `agent-cli` arm, kept "until
   `extract-agent-round-runner` makes the agent a named executor"; with the `claude` entry of
@@ -352,7 +352,7 @@ This stage edits no file under `.claude/`: where a task names a row of
   `ExecutorRegistry` like any other, under the reserved name (D12); the `COMMAND` arm stays
   (design D6 of `add-command-executor`). The switch is already in HEAD: verify it against this
   text and tick (D8)
-- [ ] 5.2 Pairs (D7 as amended, M1). Remove the code markers of the dissolved pairs
+- [x] 5.2 Pairs (D7 as amended, M1). Remove the code markers of the dissolved pairs
   (`ExecutorRoundExecution` ↔ `JudgeRoundExecution`, `RoundTimeout` ↔ `AgentSettingsValidator`)
   where any is left. Collapse `MidRoundPushRounds` ↔ `SandboxRoundEnvironmentSource` into one
   round-token minting step in `adapters/git` that the host decoration and the sandbox round
@@ -363,7 +363,7 @@ This stage edits no file under `.claude/`: where a task names a row of
   one file `HostRoundEnvironmentSource`; no marker names a deleted class. The registry rows in
   `.claude/rules/manual-sync-pairs.md` are the human's: list the rows to remove and the row to
   reword in `implement.md`
-- [ ] 5.4 One read of the answer file, live and at recovery (FR21, NFR-R5, M8, D15 part 4; D8
+- [x] 5.4 One read of the answer file, live and at recovery (FR21, NFR-R5, M8, D15 part 4; D8
   row "The answer read"). Consumers, each visited: `RoundJudgement` (the live agent round),
   `ProgramResultRead` (a `program` and a built-in), `BranchDecisionFile`, `SnapshotTipCheck`
   (recovery at the register), `HostRoundEnvironmentSource`'s read at close. One function in
@@ -378,7 +378,7 @@ This stage edits no file under `.claude/`: where a task names a row of
   to the one function. Identity spec `AnswerReadIdentitySpec` on a real bare origin: the same
   bytes at a round's answer path give the same round outcome live and from a snapshot resumed by
   a second instance — one row a valid decision request, one row text that is not JSON
-- [ ] 5.5 An invalid `transform` answer is a quality failure (FR20, D15 part 3). In the runner's
+- [x] 5.5 An invalid `transform` answer is a quality failure (FR20, D15 part 3). In the runner's
   judgement of an exited round: a refused reading of a `transform` answer — unparseable, empty,
   over the cap, refused by the contract, or the dialect reporting its structured-output retries
   exhausted — becomes `failed/quality` with one finding naming the cause and carrying a bounded

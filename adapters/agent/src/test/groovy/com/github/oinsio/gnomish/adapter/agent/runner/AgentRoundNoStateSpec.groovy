@@ -73,20 +73,22 @@ class AgentRoundNoStateSpec extends Specification {
         'the dialect having extracted it, key included' | "hello m session-9\nanswer ${ASKED},\"continuationKey\":\"forged\"}\ndone\n" | null
     }
 
-    def "FR9: an answer that is not a decision request is left as the agent wrote it"() {
+    // FR21 (design D15): another kind of answer leaves as the contract's answer, untouched by the
+    //     key removal; a document that is no answer is refused by the one read, never passed on
+    def "FR9, FR21: an answer that is not a decision request keeps its fields, and no answer at all is refused"() {
         when:
         def result = fixture.start(RunnerFixture.request(Role.TRANSFORM), RunnerFixture.exited(0, 'hello m session-9\ndone\n'), { Path answer, Path err ->
             Files.writeString(answer, written)
         })
 
         then:
-        result.answer().toString() == written
+        result.answer()?.toString() == carried
+        result.status() == status
 
         where:
-        written << [
-            '{"kind":"select","chosen":"a","ranking":["a"],"continuationKey":"kept"}',
-            '{"kind":"decision-request","continuationKey":"kept"}'
-        ]
+        written | carried | status
+        '{"kind":"select","chosen":"a","ranking":["a"]}' | '{"kind":"select","chosen":"a","ranking":["a"]}' | Status.COMPLETED
+        '{"kind":"decision-request","continuationKey":"kept"}' | null | Status.FAILED
     }
 
     // Scenario: executor/agent-round-runner / No agent executor declares resumable

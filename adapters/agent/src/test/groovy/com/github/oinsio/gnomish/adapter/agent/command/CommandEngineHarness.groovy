@@ -70,9 +70,7 @@ final class CommandEngineHarness {
             }, answerEnvFragment: {
                 [:]
             },
-            closeRound: { }, readDecision: {
-                Optional.empty()
-            }, discard: { }] as RoundEnvironmentSource.Round
+            closeRound: { }, discard: { }] as RoundEnvironmentSource.Round
         def rounds = [openRound: { request ->
                 round
             }, identity: {

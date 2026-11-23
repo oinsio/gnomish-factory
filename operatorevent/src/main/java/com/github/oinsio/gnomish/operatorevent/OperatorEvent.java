@@ -30,8 +30,10 @@ public enum OperatorEvent {
     // agent executor and judge adapters
     AGENT_PROGRESS_LISTENER_THREW("GF001"),
     COMPOSITE_PROGRESS_LISTENER_THREW("GF002"),
-    DECISION_FILE_EMPTY("GF003"),
-    DECISION_FILE_NOT_JSON("GF004"),
+    // GF003 and GF004 are retired (extract-agent-round-runner, task 5.4): the decision file's
+    // tolerant read and its empty-file and raw-text fallbacks are gone; an answer file that is not a
+    // valid answer is refused by the one answer read and becomes the round's result. Retired, not
+    // refilled.
     ROUND_DENIALS_UNREADABLE_ON_FINISH("GF005"),
     ROUND_DENIALS_ORPHANED_ON_FAILURE("GF006"),
     ROUND_DENIALS_UNREADABLE_ON_FAILURE("GF007"),

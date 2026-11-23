@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.app.port.agent.AnswerFileReading
 import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.git.ClosedRound
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
@@ -66,7 +67,7 @@ class PendingCommitRecognitionSpec extends Specification implements HostSnapshot
         found.stage() == 'implement'
         found.round() == ROUND
         found.token() == cell.opened()
-        found.request().isEmpty()
+        found.answer() == new AnswerFileReading.Absent()
     }
 
     // crash-consistency item 14: the pickup rebuilds the round from the record through the live

@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.app.port.agent.RoundClose
-import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
@@ -9,7 +8,7 @@ import java.nio.file.Path
 
 /**
  * An open round reduced to what a launch-level spec of an agent stage round reaches: its environment
- * and answer path, with a close and a decision read that do nothing. Discarded at most once.
+ * and answer path, with a close that does nothing. Discarded at most once.
  */
 class StandInRound implements RoundEnvironmentSource.Round {
 
@@ -44,11 +43,6 @@ class StandInRound implements RoundEnvironmentSource.Round {
 
     @Override
     void closeRound(RoundClose close) {
-    }
-
-    @Override
-    Optional<RoundDecisionRequest> readDecision() {
-        Optional.empty()
     }
 
     /** Whether the round was discarded; a failed round is, exactly once. */

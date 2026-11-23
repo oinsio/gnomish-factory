@@ -82,9 +82,7 @@ class ExecutorRegistryCommandSpec extends Specification {
                 Path.of('answer.json')
             }, answerEnvFragment: {
                 [:]
-            }, closeRound: { }, readDecision: {
-                Optional.empty()
-            }, discard: { }] as RoundEnvironmentSource.Round
+            }, closeRound: { }, discard: { }] as RoundEnvironmentSource.Round
         [openRound: { StageExecutor.Request request ->
                 opened << request
                 round

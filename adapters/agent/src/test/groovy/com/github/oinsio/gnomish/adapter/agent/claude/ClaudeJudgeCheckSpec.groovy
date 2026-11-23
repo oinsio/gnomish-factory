@@ -157,6 +157,35 @@ class ClaudeJudgeCheckSpec extends Specification {
         'a blank final text' | ClaudeVerdictRounds.finalText('   ')
     }
 
+    // Scenario: executor/agent-round-runner / An invalid verdict answer burns no attempt
+    // FR20 (design D15, part 3): a verdict keeps the malformed answer of FR4, a cannot-verify — even
+    //     where a transform round's same fault burns an attempt
+    def "FR20: a verdict request that ends with #what is cannot-verify and leaves the stage's attempt count unchanged"() {
+        given:
+        def stage = judgedStage()
+        executor.scripted << completed()
+
+        when:
+        TaskOutcome outcome = null
+        LogCaptureSupport.capture(VerifyOrchestrator, Level.INFO) {
+            LogCaptureSupport.capture(ClaudeAnswer, Level.INFO) {
+                outcome = run(stage, [stream])
+            }
+        }
+
+        then:
+        (outcome as TaskOutcome.Escalated).report() instanceof EscalationReport.CannotVerify
+        outcome.finalState().attemptsUsed() == 0
+        outcome.finalState().attempts()*.result() == [
+            AttemptRecord.Result.CANNOT_VERIFY
+        ]
+
+        where:
+        what | stream
+        'its structured-output retries exhausted' | ClaudeVerdictRounds.retriesExhausted()
+        'a reply the verdict schema refuses' | ClaudeVerdictRounds.structured('{"passed":"yes"}')
+    }
+
     // Scenario: verification/verdict-executors / A judge pass keeps its findings
     def "FR7: a passing judge reply carries its findings in the order written"() {
         expect:

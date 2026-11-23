@@ -88,7 +88,6 @@ class AgentStageRoundsSpec extends AgentEntrySpecBase {
         then:
         1 * rounds.openRound(_) >> round
         1 * round.closeRound(RoundClose.VERIFIABLE)
-        1 * round.readDecision() >> Optional.empty()
         0 * round.discard()
         result.status() instanceof ExecutionResult.Completed
         agentLaunches*.command() == [['fake-agent', 'transform']]

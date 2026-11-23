@@ -50,10 +50,9 @@ import spock.lang.Specification
  * over exactly the families the current cut migrates and is never red over one it does not. The
  * table below holds cut A's families — git, docker, in-box exec and agent, plus the one domain
  * carrier the agent adapter constructs — and, since task 5.0, cut B's: tracker, manifest label,
- * branch document, and the report and status text they reach. A private Jackson wire record
- * ({@code DecisionRequestRead.Payload}) is deliberately absent: it is the shape the JSON has, not
- * an accessor the factory reads text through — the result reader mints its fields, and the
- * request the read builds from it is listed.
+ * branch document, and the report and status text they reach. The one answer read's refusal
+ * ({@code AnswerFileReading.Refused}) is listed for the text it took of a refused file; the answer
+ * it reads is the contract's, whose fields the result reader mints.
  *
  * <p>Lives in {@code :bootstrap} for the same reason as {@link AtomicWriteBoundarySpec}: this is
  * the module whose test classpath sees every layer at once.
@@ -202,8 +201,8 @@ class UntrustedTextGateSpec extends Specification {
         'com.github.oinsio.gnomish.adapter.git.RemoteDefaultBranch':
         'an ls-remote --symref answer into the default branch name, gated by DefaultBranch\'s rules',
         'com.github.oinsio.gnomish.adapter.git.SnapshotTipCheck':
-        'a registered commit\'s subject into the snapshot\'s or pending commit\'s stage, round and round token; the decision' +
-        ' request it reads at the token path is the document itself, handed raw to the tolerant reader that mints it',
+        'a registered commit\'s subject into the snapshot\'s or pending commit\'s stage, round and round token; the answer' +
+        ' file it reads at the token path is the document itself, handed raw to the one answer read that mints it',
         'com.github.oinsio.gnomish.adapter.git.TaskBranchLister':
         'for-each-ref output into the list of task-branch refs, each held to the factory\'s own prefix',
         'com.github.oinsio.gnomish.adapter.git.TaskWorktreeManager':
@@ -289,7 +288,8 @@ class UntrustedTextGateSpec extends Specification {
         'com.github.oinsio.gnomish.adapter.agent.claude.AgentEvent$AssistantEvent': ['sessionId', 'model'],
         'com.github.oinsio.gnomish.adapter.agent.claude.AgentEvent$UserEvent': ['sessionId'],
         'com.github.oinsio.gnomish.adapter.agent.claude.AgentEvent$ResultEvent': ['sessionId'],
-        'com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest': ['question', 'options'],
+        // FR21 of extract-agent-round-runner: what the one answer read took of a refused answer file.
+        'com.github.oinsio.gnomish.app.port.agent.AnswerFileReading$Refused': ['written'],
         'com.github.oinsio.gnomish.domain.engine.Verdict$CannotVerify': ['reason', 'details'],
         'com.github.oinsio.gnomish.domain.engine.ExecutionResult$DecisionRequest': ['question', 'options'],
         'com.github.oinsio.gnomish.domain.engine.ExecutionResult$Failed': ['reason'],

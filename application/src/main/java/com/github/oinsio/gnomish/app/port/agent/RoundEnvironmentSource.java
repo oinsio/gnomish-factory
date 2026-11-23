@@ -5,7 +5,6 @@ import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.nio.file.Path;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * Where a stage round of any registry entry (the shared round wrapper, {@code
@@ -72,22 +71,19 @@ public interface RoundEnvironmentSource {
          * recording the attempt commit (FR21, D15) under the subject {@code close}
          * names (design D22 of migrate-verify-to-executor-contract); the host
          * source ignores {@code close} — the git-mode host snapshot is taken
-         * after a {@code completed} result only — and reads its answer file before
-         * its scratch area leaves with the round. Runs before {@link #readDecision()}.
+         * after a {@code completed} result only — and disposes the round's
+         * environment with its scratch area. A {@link #discard()} after the close
+         * changes nothing (design D14 of extract-agent-round-runner).
          *
          * @param close whether the round's executor completed; never null
          */
         void closeRound(RoundClose close);
 
         /**
-         * The decision request the agent wrote to the answer file this round, if any —
-         * read at or after {@link #closeRound} through the one tolerant {@link DecisionRequestRead}, so no
-         * implementation hands raw decision content on for a second parse (FR6 of
-         * define-executor-contract).
+         * Infrastructure-failure cleanup (NFR-R3): discards round-scoped state, so a discard after
+         * an open leaves no scratch area of the round's own behind (design D14 of
+         * extract-agent-round-runner). The round's answer is read by its executor, never here.
          */
-        Optional<RoundDecisionRequest> readDecision();
-
-        /** Infrastructure-failure cleanup (NFR-R3): discards round-scoped state. */
         void discard();
     }
 }

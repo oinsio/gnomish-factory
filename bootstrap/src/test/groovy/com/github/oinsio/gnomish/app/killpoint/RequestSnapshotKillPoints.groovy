@@ -57,7 +57,7 @@ final class RequestSnapshotKillPoints {
 
     static final String STAGE = 'build'
 
-    static final String REQUEST = '{"question":"which db?","options":["pg","sqlite"]}'
+    static final String REQUEST = '{"kind":"decision-request","question":"which db?","options":["pg","sqlite"]}'
 
     static final String REPLY = 'pg'
 
@@ -142,7 +142,8 @@ final class RequestSnapshotKillPoints {
         world.store.appendDecision(world.taskId, new Decision(REPLY, null, null, null), TaskState.atStageStart(STAGE))
         def rounds = new CurrentRound()
         def next = roundSource(world, rounds).openRound(request(world, 0))
-        assert next.readDecision().isEmpty(): 'the next round read the answered request'
+        assert next.environment().readFile(next.answerFilePath().toString(), 1).isEmpty():
+        'the next round\'s own path holds the answered request'
         assert next.answerFilePath().toString().endsWith("-${rounds.opened().commit()}.json")
     }
 

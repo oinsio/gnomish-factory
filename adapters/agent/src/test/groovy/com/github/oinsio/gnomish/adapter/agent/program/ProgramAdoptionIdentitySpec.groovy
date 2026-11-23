@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent.program
 
+import com.github.oinsio.gnomish.app.port.agent.AnswerFileReading
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.git.PendingVerification
 import com.github.oinsio.gnomish.domain.engine.RoundToken
@@ -62,7 +63,7 @@ class ProgramAdoptionIdentitySpec extends ProgramPollSpecBase {
 
     /** The resuming run: its cell restored from the chain, its table new, its binding over {@code where}. */
     private ProgramExecutor resuming(List<String> chain, Path where = round, String expectedHead = null) {
-        cell.restore(new PendingVerification(snapshot, 'implement', 1, TOKEN, Optional.empty(), chain.first(), chain))
+        cell.restore(new PendingVerification(snapshot, 'implement', 1, TOKEN, new AnswerFileReading.Absent(), chain.first(), chain))
         def environment = environmentAt(where)
         opened << environment
         executor([Capability.POLL], environment, new PendingScope(new PendingRuns(), null, expectedHead), cell)

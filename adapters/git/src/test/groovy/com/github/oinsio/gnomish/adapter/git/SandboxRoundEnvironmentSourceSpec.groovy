@@ -173,31 +173,6 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
         round.roundListener() instanceof MidRoundHarvestListener
     }
 
-    def "FR23: readDecision returns empty when the agent wrote no decision file"() {
-        given:
-        def round = source().openRound(request())
-
-        expect:
-        round.readDecision().isEmpty()
-    }
-
-    def "FR23: readDecision returns the request the agent wrote at this round's decision path"() {
-        given:
-        def round = source().openRound(request(1))
-        def decisionFile = new File(
-                ((LocalBoxEnvironment) round.environment()).workingCopy.toFile(),
-                tokenPath(1))
-        decisionFile.parentFile.mkdirs()
-        decisionFile.text = '{"question":"which db?"}'
-
-        when:
-        def decision = round.readDecision()
-
-        then:
-        decision.isPresent()
-        decision.get().question().forLog() == 'which db?'
-    }
-
     def "FR21: closeRound snapshots the environment and records the harvested attempt commit"() {
         given:
         def openTip = branchTip()

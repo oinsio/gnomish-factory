@@ -47,9 +47,8 @@ import org.slf4j.LoggerFactory;
  * {@code rev-parse} that fails or prints no ref <b>skips the observation</b> — the tip is reported
  * neither moved nor lost, and no push rests on it — instead of reducing to the empty string, which
  * differs from every real SHA and so would read as movement on one event and as a return to it on
- * the next. It therefore reads {@link HostBranchProbe#readHead()} rather than {@link
- * HostBranchProbe#currentHead()}, whose refusal belongs to the round baseline that is recorded
- * durably. The poll runs once per progress event, so a resolution that keeps failing reports to a
+ * the next. It therefore reads {@link HostBranchProbe#readHead()} rather than the round's opening
+ * ({@link RoundTokenMint}), whose refusal belongs to the round baseline that is recorded durably. The poll runs once per progress event, so a resolution that keeps failing reports to a
  * {@link RepeatSuppressor} through {@link MidRoundPollLog} and only the edges are logged (FR4) —
  * the same treatment its sandboxed twin {@link MidRoundHarvestListener} gives the same subject.
  *

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.app.port.agent.AnswerFileReading
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import java.nio.file.Path
 import spock.lang.Specification
@@ -44,7 +45,7 @@ class HostInterruptedVerificationReadSpec extends Specification implements HostS
         found.get().stage() == 'implement'
         found.get().round() == ROUND
         found.get().token() == token
-        found.get().request().isEmpty()
+        found.get().answer() == new AnswerFileReading.Absent()
     }
 
     def "FR19: a registered host pending commit is read through to the snapshot below it"() {

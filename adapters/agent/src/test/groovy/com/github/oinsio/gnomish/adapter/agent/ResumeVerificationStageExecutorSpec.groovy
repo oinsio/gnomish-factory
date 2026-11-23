@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.adapter.agent
 
-import com.github.oinsio.gnomish.app.port.agent.DecisionRequestRead
+import com.github.oinsio.gnomish.app.port.agent.AnswerFileRead
+import com.github.oinsio.gnomish.app.port.agent.AnswerFileReading
 import com.github.oinsio.gnomish.app.port.agent.RoundClose
-import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest
 import com.github.oinsio.gnomish.app.port.git.ClosedRound
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.git.PendingVerification
@@ -32,8 +32,9 @@ import spock.lang.Specification
  * other request delegates, and the pending state is consumed exactly once.
  *
  * <p>FR15, NFR-R4 of make-checkpoint-gate-durable (design D10): a pending verification carrying the
- * request the snapshot's tree held re-raises it as DecisionNeeded through the shared tolerant
- * reader, with the same empty telemetry, and still never runs the agent.
+ * request the snapshot's tree held re-raises it as DecisionNeeded, with the same empty telemetry, and
+ * still never runs the agent. FR21, NFR-R5 of extract-agent-round-runner (design D15): the reading
+ * is the one answer read's, and a refused one is the failure the live round would have had.
  */
 class ResumeVerificationStageExecutorSpec extends Specification {
 
@@ -44,13 +45,13 @@ class ResumeVerificationStageExecutorSpec extends Specification {
     static final RoundToken LIVE = RoundToken.of('0f0f0f0f')
 
     /**
-     * The pending verification of the interrupted round; {@code request} is the decision file the
-     * snapshot's tree held, read through the same {@link DecisionRequestRead} the detector uses.
+     * The pending verification of the interrupted round; {@code answer} is the answer file the
+     * snapshot's tree held, read through the same {@link AnswerFileRead} the detector uses.
      */
-    private static PendingVerification pending(String request = null) {
-        def read = request == null ? Optional.<RoundDecisionRequest> empty() : DecisionRequestRead.read({ long limit ->
-            Optional.of(request.getBytes(StandardCharsets.UTF_8))
-        } as ResultSource)
+    private static PendingVerification pending(String answer = null) {
+        def read = answer == null ? new AnswerFileReading.Absent() : AnswerFileRead.read({ long limit ->
+            Optional.of(answer.getBytes(StandardCharsets.UTF_8))
+        } as ResultSource, UntrustedText.&agent)
         new PendingVerification('abc123', 'work', 2, RECORDED, read, 'abc123', ['abc123'])
     }
 
@@ -165,7 +166,7 @@ class ResumeVerificationStageExecutorSpec extends Specification {
         def delegate = Mock(StageExecutor)
         def ref = new CurrentRound()
         def executor = new ResumeVerificationStageExecutor(delegate, ref, pending(
-                        '{"question":"which db?","options":["pg","sqlite"]}'))
+                        '{"kind":"decision-request","question":"which db?","options":["pg","sqlite"],"continuationKey":"k-1"}'))
 
         when:
         def result = executor.execute(request('work', 2))
@@ -174,13 +175,10 @@ class ResumeVerificationStageExecutorSpec extends Specification {
         0 * delegate.execute(_)
         ref.closed() == new ClosedRound(RECORDED, 'abc123', 'abc123', RoundClose.VERIFIABLE)
 
-        and: "the snapshot's question, mapped through the same reader a live round uses"
+        and: "the snapshot's question, mapped through the same mapping a live round's result takes"
         def needed = result.answer() as ExecutionResult.DecisionRequest
-        needed.question() == UntrustedText.agent('which db?')
-        needed.options() == [
-            UntrustedText.agent('pg'),
-            UntrustedText.agent('sqlite')
-        ]
+        needed.question().forLog() == 'which db?'
+        needed.options()*.forLog() == ['pg', 'sqlite']
 
         and: "the same empty telemetry as the Completed resume: the round's own died with its state commit"
         result.usage() == new ExecutorUsage(Duration.ZERO, [], [:])
@@ -188,17 +186,30 @@ class ResumeVerificationStageExecutorSpec extends Specification {
         result.denials().isEmpty()
     }
 
-    // Scenario: executor/agent-executor / A garbage request in a snapshot is re-raised as raw text
-    def "FR15: an unparseable request still re-raises, its raw content as the question"() {
+    // Scenario: executor/agent-executor / Recovery reads a snapshot's answer as the live round does
+    def "FR20, FR21, NFR-R5: an answer file the live round would refuse is the live round's failure, never a question"() {
         given:
-        def executor = new ResumeVerificationStageExecutor(
-                Mock(StageExecutor), new CurrentRound(), pending('not json'))
+        def delegate = Mock(StageExecutor)
+        def executor = new ResumeVerificationStageExecutor(delegate, new CurrentRound(), pending(text))
 
         when:
         def result = executor.execute(request('work', 2))
 
-        then:
-        (result.answer() as ExecutionResult.DecisionRequest).question() == UntrustedText.agent('not json')
-        (result.answer() as ExecutionResult.DecisionRequest).options().isEmpty()
+        then: 'no agent round, no decision request raised from the bytes'
+        0 * delegate.execute(_)
+        result.answer() == null
+
+        and: 'the failure the one mapping gives a refused transform answer (FR20): a quality failure naming the executor and the cause'
+        def failed = result.status() as ExecutionResult.Failed
+        failed.failureClass() == ExecutionResult.FailureClass.QUALITY
+        failed.reason().forLog() ==~ /agent executor 'claude': wrote (a malformed answer file|an answer file that is no valid answer): .+/
+        failed.findings()*.message() == [failed.reason().raw()]
+        result.usage() == new ExecutorUsage(Duration.ZERO, [], [:])
+
+        where:
+        text << [
+            'not json',
+            '{"question":"which db?","options":["pg","sqlite"]}'
+        ]
     }
 }

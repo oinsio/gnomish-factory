@@ -1,15 +1,11 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.describe.ProgramChannel;
-import com.github.oinsio.gnomish.app.port.agent.DecisionRequestRead;
-import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePath;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.domain.engine.RoundToken;
-import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * The in-branch answer file of a round in a git mode (FR9 of extract-agent-round-runner, design D3;
@@ -30,39 +26,38 @@ import java.util.Optional;
  * and nothing else. The outcome-clearing commits remove {@code .gnomish-task/decisions/} as hygiene
  * (FR14), but no read relies on that removal — the token match alone decides liveness.
  *
- * <p>The read goes through the one tolerant {@link DecisionRequestRead} over the executor
- * contract's {@code ResultFileReader}, its one owner, which a resume of a snapshot's tree shares
- * ({@link SnapshotTipCheck}).
+ * <p>This class names the file and reads nothing: the live round reads it, after the agent exited
+ * and before persist, through the one answer read ({@code AnswerFileRead}) over the round's
+ * environment channel at {@link Handle#relativePath}, and a resume of a snapshot's tree reads the
+ * same path through the same read ({@link SnapshotTipCheck}; FR21, NFR-R5 of
+ * extract-agent-round-runner, design D15).
  *
  * <p>Implements FR23 of add-sandbox-core; FR13, FR16 of make-checkpoint-gate-durable; FR6 of
- * define-executor-contract; FR9 of extract-agent-round-runner.
+ * define-executor-contract; FR9, FR21 of extract-agent-round-runner.
  */
 public final class BranchDecisionFile {
 
     private BranchDecisionFile() {}
 
     /**
-     * Opens one round's in-branch answer file over {@code environment}.
+     * Opens one round's in-branch answer file.
      *
-     * @param environment the task's bound environment; the boundary-time read runs through it
      * @param key the round's key; with {@code token}, fixes the file name
      * @param token the round's token (FR13 of make-checkpoint-gate-durable); the one path read is
      *     named by it, so a file under any other token — carried over on the tip, left by a killed
      *     round, or written beside the real one — is never read
      * @return the round's handle; never null
      */
-    public static Handle open(TaskExecutionEnvironment environment, AttemptKey key, RoundToken token) {
-        return new Handle(environment, EnvelopePaths.answerFile(key, token));
+    public static Handle open(AttemptKey key, RoundToken token) {
+        return new Handle(EnvelopePaths.answerFile(key, token));
     }
 
-    /** One round's in-branch answer file: the path, its env fragment, and the boundary-time read. */
+    /** One round's in-branch answer file: the path and its env fragment. */
     public static final class Handle {
 
-        private final TaskExecutionEnvironment environment;
         private final EnvelopePath file;
 
-        private Handle(TaskExecutionEnvironment environment, EnvelopePath file) {
-            this.environment = environment;
+        private Handle(EnvelopePath file) {
             this.file = file;
         }
 
@@ -74,20 +69,6 @@ public final class BranchDecisionFile {
         /** The env fragment naming the answer file for the launched agent process. */
         public Map<String, String> envFragment() {
             return Map.of(ProgramChannel.ANSWER_FILE_VARIABLE, file.relative());
-        }
-
-        /**
-         * Reads this round's decision request through the environment channel at the round
-         * boundary — after the agent process exited, before persist — through the one tolerant
-         * {@link DecisionRequestRead} every medium shares, so the cap ({@code
-         * ResultFileReader.DECISION_FILE_CAP_BYTES}) and the fallbacks are the host round's and a
-         * resume's own (FR6 of define-executor-contract). An absent file (the agent finished
-         * without asking) is empty; a file under any other name is never read.
-         *
-         * @return the request, if the agent wrote this round's answer file
-         */
-        public Optional<RoundDecisionRequest> read() {
-            return DecisionRequestRead.read(limit -> environment.readFile(file.relative(), limit));
         }
     }
 }

@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.app
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.adapter.agent.program.AnswerOutcome
 import com.github.oinsio.gnomish.adapter.check.SandboxCheckEnvironmentSource
-import com.github.oinsio.gnomish.app.port.agent.DecisionRequestRead
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -21,8 +21,7 @@ import java.nio.file.Files
  *
  * <ul>
  *   <li>The file channel is used between rounds only — never while a process runs in the box.
- *   <li>Content the gnome leaves for the factory reaches the operator log as one sanitized, capped
- *       line.
+ *   <li>Content the gnome leaves for the factory leaves it only as sanitized, capped excerpts.
  *   <li>The commit a fresh box is pinned at is the factory's own resolution of the harvested tip,
  *       whatever the box does after.
  * </ul>
@@ -46,7 +45,13 @@ class SandboxRoundChannelSpec extends RoundFlowSpecBase {
     }
 
     // Scenario: sandbox/execution-environment / Environment content reaches logs only as sanitized excerpts
-    def "NFR-S3: a hostile file the gnome leaves for the factory reaches the log as one inert, capped line"() {
+    // Scenario: observability/factory-logging / Unbounded payload is capped
+    // FR20 of extract-agent-round-runner (design D15, part 3): a transform round's unparseable answer
+    //     file is the round's quality failure, which the engine answers with the next attempt and
+    //     writes no operator line for (logging.md, "One failure, one log"); the gnome's text leaves the
+    //     factory as the round's one finding — the cause in the factory's words quoting an excerpt of
+    //     what was written, one inert, capped line — and reaches no log line as written
+    def "NFR-S3: a hostile file the gnome leaves for the factory leaves it only as inert, capped excerpts"() {
         given: 'the gnome writes an answer file carrying line breaks, terminal escapes and a forged log line, far past a line'
         def hostile = ('x' * 5_000) + '\nnot json 2026-08-31 12:00:00 ERROR forged\u001B[31mred\u001B[0m\u2029tail'
         def box = localBox()
@@ -57,27 +62,36 @@ class SandboxRoundChannelSpec extends RoundFlowSpecBase {
         }
 
         when:
-        def logs = LogCaptureSupport.attach(DecisionRequestRead)
-        def outcome = run(pipeline(3), box, 'plain-round', new ScriptedCheckRounds())
+        def logs = LogCaptureSupport.attach(org.slf4j.Logger.ROOT_LOGGER_NAME, Level.WARN)
+        def outcome = run(pipeline(1), box, 'plain-round', new ScriptedCheckRounds())
         def lines = List.copyOf(logs.list)
         logs.detach()
 
-        // Task 5.1a of extract-agent-round-runner: the agent round runner reads the answer file through the
-        //     contract's one answer read, which refuses a malformed one (FR9, D3; the decision-file
-        //     protocol's tolerant read of a garbage file is REMOVED by that change's delta).
-        then: 'the factory read it from the box and refused it as a malformed answer, quoting a capped excerpt'
-        outcome instanceof TaskOutcome.Escalated
-        def cause = ((outcome as TaskOutcome.Escalated).report() as EscalationReport.CannotExecute).cause()
-        cause.contains("agent executor 'claude': wrote a malformed answer file")
-        cause.length() < 1_000
+        then: 'the factory read it from the box and refused it: the round\'s quality failure used the stage\'s one attempt'
+        (outcome as TaskOutcome.Escalated).report() instanceof EscalationReport.AttemptsExhausted
+        def findings = (outcome.finalState().attempts()[0].checkResults()[0].verdict() as Verdict.Fail).findings()
+        findings.size() == 1
 
-        and: 'the log carries it as one excerpt: no line break, no escape, capped'
-        lines.size() == 1
-        def line = lines[0].formattedMessage
-        lines[0].level == Level.WARN
-        line.contains('forged')
-        !line.contains('\n') && !line.contains('\u2029') && !line.contains('\u001B')
-        line.length() < 1_000
+        and: 'and quotes what was written as one inert excerpt, within the excerpt bound, its end kept'
+        def excerpt = findings[0].details()
+        excerpt.contains('x' * 100)
+        excerpt.endsWith('tail')
+        excerpt != hostile
+        excerpt.length() <= AnswerOutcome.EXCERPT_CHARS
+        !excerpt.contains('\n') && !excerpt.contains('\u2029') && !excerpt.contains('\u001B')
+
+        and: 'the finding names the cause and quotes that excerpt, in one line capped by the excerpt bound'
+        def cause = findings[0].message()
+        cause.startsWith("agent executor 'claude': wrote a malformed answer file: ")
+        cause.endsWith('; it wrote: ' + excerpt)
+        cause.length() - excerpt.length() < 1_000
+        !cause.contains('\n') && !cause.contains('\u2029') && !cause.contains('\u001B')
+
+        and: 'no operator line carries the text as written'
+        lines.every {
+            def line = it.formattedMessage
+            !line.contains(hostile) && !line.contains('\u001B') && !line.contains('\u2029')
+        }
     }
 
     // Scenario: sandbox/execution-environment / The materialize pin is chosen by the factory

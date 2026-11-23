@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.git
 
+import com.github.oinsio.gnomish.app.port.agent.AnswerFileReading
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import spock.lang.Specification
 
@@ -12,7 +13,7 @@ class RunRoundSpec extends Specification {
 
     def "FR19: every run gets a fresh cell of its own, beside the pending verification it was handed"() {
         given:
-        def pending = new PendingVerification('snap-1', 'build', 0, RoundToken.of('0a1b2c'), Optional.empty(), 'snap-1', ['snap-1'])
+        def pending = new PendingVerification('snap-1', 'build', 0, RoundToken.of('0a1b2c'), new AnswerFileReading.Absent(), 'snap-1', ['snap-1'])
 
         when:
         def first = RunRound.of(pending)

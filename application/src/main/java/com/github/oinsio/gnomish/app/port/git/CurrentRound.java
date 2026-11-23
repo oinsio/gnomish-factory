@@ -13,8 +13,8 @@ import org.jspecify.annotations.Nullable;
  * container (design D10 of make-checkpoint-gate-durable; D13 of define-executor-contract). One
  * instance lives for a task run; each round overwrites the previous one.
  *
- * <p><b>Writers</b> — exactly four: {@link #open} where a fresh round opens (the round source, over
- * the minted token), {@link #snapshotted} where the one round snapshot step lands the round's
+ * <p><b>Writers</b> — exactly four: {@link #open} where a fresh round opens (the one minting step
+ * {@code RoundTokenMint} in {@code adapters/git}, which both branch-mode round sources call), {@link #snapshotted} where the one round snapshot step lands the round's
  * snapshot, {@link #pendingRegistered} where a persistence lands a pending commit on it (design D21 of
  * migrate-verify-to-executor-contract), and {@link #restore} on the resume path, which runs those
  * same transitions over the durable record of an interrupted round. <b>Readers</b> get distinct

@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
 import com.github.oinsio.gnomish.adapter.scm.actions.GithubActionsExecutor
 import com.github.oinsio.gnomish.adapter.scm.status.ScmStatusExecutor
 import com.github.oinsio.gnomish.app.port.TrackerWrite
+import com.github.oinsio.gnomish.app.port.agent.AnswerFileReading
 import com.github.oinsio.gnomish.app.port.git.PendingVerification
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
@@ -909,7 +910,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         def pieces = support.pieces(null)
 
         when: 'the resume executor would restore an interrupted round into the pieces cell'
-        pieces.rounds().restore(new PendingVerification('abc123', 'work', 0, RoundToken.of('0a1b2c'), Optional.empty(), 'abc123', ['abc123']))
+        pieces.rounds().restore(new PendingVerification('abc123', 'work', 0, RoundToken.of('0a1b2c'), new AnswerFileReading.Absent(), 'abc123', ['abc123']))
 
         then: 'the check workspace reads that round, and a second pieces bundle hands the same cell'
         support.workspace().attemptCommitSha() == 'abc123'

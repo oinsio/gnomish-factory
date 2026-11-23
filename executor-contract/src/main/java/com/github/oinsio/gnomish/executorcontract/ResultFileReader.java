@@ -10,8 +10,8 @@ import java.util.function.Function;
 
 /**
  * The one reader of a factory-named result file (FR6 of define-executor-contract; the single-owner
- * table of its design, D10): an executor's result and answer files, the agent's decision file and a
- * command check's findings file are all read here and nowhere else.
+ * table of its design, D10): an executor's result and answer files and a command check's findings
+ * file are all read here and nowhere else.
  *
  * <p>One reader is one channel: a size cap and the capture family its text is minted in. A read
  * asks its {@link ResultSource} for one byte more than the cap, so a file of exactly the cap is
@@ -32,8 +32,11 @@ import java.util.function.Function;
  */
 public final class ResultFileReader {
 
-    /** The decision file's cap, on the host and in the task branch alike: one MiB. */
-    public static final int DECISION_FILE_CAP_BYTES = 1024 * 1024;
+    /**
+     * An answer file's cap, for every executor and every medium, live and at recovery: four MiB, room
+     * for a SARIF log at its result cap (FR21 of extract-agent-round-runner).
+     */
+    public static final int ANSWER_FILE_CAP_BYTES = 4 * 1024 * 1024;
 
     /** A command check's findings file cap: 256 KiB. */
     public static final int FINDINGS_FILE_CAP_BYTES = 256 * 1024;

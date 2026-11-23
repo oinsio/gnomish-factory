@@ -47,7 +47,7 @@ class AgentRoundRunnerSpec extends Specification {
         when:
         def result = fixture.start(RunnerFixture.request(role), RunnerFixture.exited(0, stdout), { Path answerFile, Path err ->
             if (agentWrites) {
-                Files.writeString(answerFile, '{"choice":"a"}')
+                Files.writeString(answerFile, '{"kind":"select","chosen":"a"}')
             }
         })
 
@@ -69,8 +69,8 @@ class AgentRoundRunnerSpec extends Specification {
         where:
         role | answerLine | agentWrites || prompt | expected
         Role.TRANSFORM | '' | false || 'build it' | null
-        Role.VERDICT | 'answer {"verdict":"pass"}\n' | false || 'is it built?' | '{"verdict":"pass"}'
-        Role.DECISION | '' | true || 'which one?' | '{"choice":"a"}'
+        Role.VERDICT | 'answer {"kind":"verdict","sarif":{"version":"2.1.0","runs":[]}}\n' | false || 'is it built?' | '{"kind":"verdict","sarif":{"version":"2.1.0","runs":[]}}'
+        Role.DECISION | '' | true || 'which one?' | '{"kind":"select","chosen":"a"}'
     }
 
     // Scenario: executor/agent-round-runner / Exit without result is infrastructure

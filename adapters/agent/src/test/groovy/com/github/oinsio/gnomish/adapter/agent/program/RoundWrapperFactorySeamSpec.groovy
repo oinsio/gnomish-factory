@@ -33,7 +33,6 @@ class RoundWrapperFactorySeamSpec extends Specification {
 
     def round = Stub(RoundEnvironmentSource.Round) {
         environment() >> environment
-        readDecision() >> Optional.empty()
     }
 
     def rounds = Stub(RoundEnvironmentSource) {
