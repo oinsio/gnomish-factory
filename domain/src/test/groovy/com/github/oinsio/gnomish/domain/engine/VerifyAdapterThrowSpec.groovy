@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.domain.engine
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyingStages
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -98,22 +97,22 @@ class VerifyAdapterThrowSpec extends VerifyOrchestratorSpecBase {
         builtinRunner.calls.isEmpty()
     }
 
-    // FR4, NFR-O1: a judge adapter throwing (propagating up through JudgeVoting.vote) is
-    //     caught into a CannotVerify with its stack trace
+    // FR4, NFR-O1: a judge's check round throwing is caught into a CannotVerify with its stack
+    //     trace, as every check round's (FR4 of extract-agent-round-runner)
     def "catches a throwing judge adapter into a CannotVerify carrying its stack trace"() {
-        given: 'a judge voter set to throw, then a builtin that would pass if reached'
-        def judgeVoter = new ScriptedJudgeVoter()
-        judgeVoter.toThrow = new RuntimeException('judge adapter kaboom')
+        given: 'a judge check round set to throw, then a builtin that would pass if reached'
+        def judges = new ScriptedCheckRounds()
+        judges.toThrow = new RuntimeException('judge adapter kaboom')
         def builtinRunner = new ScriptedCheckRounds([new Verdict.Pass(null, [])])
         def commandRunner = new ScriptedCheckRounds()
         def checks = [
-            judge(3),
+            judge(),
             builtin('files_exist')
         ]
 
         when: 'the chain is verified'
         def result = orchestrator(builtinRunner, commandRunner,
-                new ScriptedCheckRounds(), judgeVoter).verify(VerifyingStages.of(checks), CONTEXT, WORKSPACE, KEY, TaskState.atStageStart('build'), null)
+                new ScriptedCheckRounds(), judges).verify(VerifyingStages.of(checks), CONTEXT, WORKSPACE, KEY, TaskState.atStageStart('build'), null)
 
         then: 'the check is a CannotVerify whose details hold the thrown stack trace'
         result.results.size() == 1

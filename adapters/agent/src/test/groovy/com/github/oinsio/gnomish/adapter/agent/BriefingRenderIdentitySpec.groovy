@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.adapter.briefing.BriefingSections
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
-import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -11,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
@@ -75,8 +75,7 @@ class BriefingRenderIdentitySpec extends Specification {
     // Scenario: executor/agent-executor / Extraction is invisible to the console
     def "FR4: the judge prompt and a direct render of the task goal and decisions agree"() {
         when:
-        def prompt = new JudgePromptBuilder(LAW).build(
-                new VerifyCheck.Judge('criteria.md', 'claude-fake-judge-1', [:], 1), CONTEXT, new DirectoryWorkspace(workspaceDir))
+        def prompt = new JudgePromptBuilder(LAW).verdictInput(JudgeChecks.agent('criteria.md', 'claude-fake-judge-1').criteriaFile(), CONTEXT)
 
         then:
         prompt.contains(section { StringBuilder out ->

@@ -72,10 +72,9 @@ class ParticipantsSpec extends Specification {
         Participants.verdict('agent-cli', 0, byModel).byModel() == byModel
     }
 
-    def "the type word of #type is '#word', and judge votes run on the agent CLI's"() {
+    def "the type word of #type is '#word'"() {
         expect:
         Participants.typeWord(type) == word
-        Participants.JUDGE_EXECUTOR == 'agent-cli'
 
         where:
         type || word

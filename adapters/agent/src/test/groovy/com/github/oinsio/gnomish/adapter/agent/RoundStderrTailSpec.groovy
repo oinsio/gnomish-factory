@@ -4,10 +4,7 @@ import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.claude.AgentRoundResultExtractor
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
-import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
-import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
@@ -24,8 +21,9 @@ import spock.lang.TempDir
 
 /**
  * A round that does not succeed carries the tail of its CLI's stderr in its failure's detail —
- * the executor's {@code failed/infrastructure} reason, the judge's cannot-verify details and its one WARN —
- * on every path that ends it; a successful round leaves the tail as one DEBUG line and nowhere
+ * the executor's {@code failed/infrastructure} reason — on every path that ends it (the judge's
+ * round is the agent round runner's since task 4.1 of extract-agent-round-runner, pinned by its own
+ * specs); a successful round leaves the tail as one DEBUG line and nowhere
  * else (design D18 of fix-terminal-receipt-convergence, as amended 2026-10-17).
  *
  * <p>FR20 of fix-terminal-receipt-convergence.
@@ -47,16 +45,12 @@ class RoundStderrTailSpec extends Specification {
 
     LogCaptureSupport roundLogs
 
-    LogCaptureSupport judgeLogs
-
     def setup() {
         roundLogs = LogCaptureSupport.attach(RoundScratchDirectory, Level.DEBUG)
-        judgeLogs = LogCaptureSupport.attach(JudgeCannotVerify, Level.DEBUG)
     }
 
     def cleanup() {
         roundLogs.detach()
-        judgeLogs.detach()
     }
 
     private Path stderrFile() {
@@ -72,20 +66,14 @@ class RoundStderrTailSpec extends Specification {
         }
         def equipment = new AgentRoundEquipment(new FactoryProperties('factory-01', 'claude', null, null),
                 new VirtualClock(), { event -> }, new AgentRoundResultExtractor(), ChildEnvAllowlist.none(), scratchParent)
-        if (role == 'executor') {
-            return ExecutorRoundExecution.run(equipment,
-                    StageExecutorRequests.request(workspaceDir), 'prompt',
-                    new StandInRound(environment, workspaceDir.resolve('decision.json')))
-        }
-        JudgeRoundExecution.run(equipment, new JudgeVerdictExtractor(),
-                new VerifyCheck.Judge('criteria.md', 'claude-fake-judge-1', [:], 1), environment, 'prompt')
+        ExecutorRoundExecution.run(equipment,
+                StageExecutorRequests.request(workspaceDir), 'prompt',
+                new StandInRound(environment, workspaceDir.resolve('decision.json')))
     }
 
-    /** What the failure carries as its detail: the executor's reason, the judge's details. */
+    /** What the failure carries as its detail: the executor's reason. */
     private static String detailOf(Object outcome) {
-        outcome instanceof ExecutionResult
-                ? InfrastructureResults.of(outcome).reason().forLog()
-                : (outcome.verdict() as Verdict.CannotVerify).details().forLog()
+        InfrastructureResults.of(outcome).reason().forLog()
     }
 
     private ExecHandle handle(String stdout, ExecHandle.Wait wait) {
@@ -101,13 +89,10 @@ class RoundStderrTailSpec extends Specification {
         def outcome = execute(role, launch.curry(this))
 
         then: 'the failure carries the tail, as untrusted text'
-        outcome instanceof ExecutionResult || outcome.verdict() instanceof Verdict.CannotVerify
+        outcome instanceof ExecutionResult
         detailOf(outcome).contains(STDERR)
 
-        and: 'the judge says so in its one WARN, and nothing logs the tail at DEBUG beside it'
-        role == 'executor' || judgeLogs.list.count {
-            it.level == Level.WARN && it.formattedMessage.contains(STDERR)
-        } == 1
+        and: 'nothing logs the tail at DEBUG beside it'
         roundLogs.list.isEmpty()
 
         and: 'the tail was read before the directory left'
@@ -115,7 +100,7 @@ class RoundStderrTailSpec extends Specification {
 
         where:
         [role, ending, launch] << [
-            ['executor', 'judge'],
+            ['executor'],
             [
                 [
                     'failed to start',
@@ -168,7 +153,7 @@ class RoundStderrTailSpec extends Specification {
         !detailOf(outcome).contains('stderr')
 
         where:
-        role << ['executor', 'judge']
+        role << ['executor']
     }
 
     // FR20: on success the tail is one DEBUG line, and no failure detail exists to carry it
@@ -180,13 +165,12 @@ class RoundStderrTailSpec extends Specification {
         }
 
         then:
-        role == 'executor' ? outcome.status() instanceof ExecutionResult.Completed : outcome.verdict() instanceof Verdict.Pass
+        outcome.status() instanceof ExecutionResult.Completed
         roundLogs.list.size() == 1
         roundLogs.list[0].level == Level.DEBUG
         roundLogs.list[0].formattedMessage.contains(STDERR)
-        judgeLogs.list.isEmpty()
 
         where:
-        role << ['executor', 'judge']
+        role << ['executor']
     }
 }

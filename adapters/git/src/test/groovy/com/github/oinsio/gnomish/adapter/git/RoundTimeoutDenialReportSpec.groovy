@@ -24,7 +24,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
@@ -136,7 +135,7 @@ class RoundTimeoutDenialReportSpec extends Specification implements BareGitRepoF
         def executor = new ScriptedExecutor([reported])
         def clock = new VirtualClock()
         def ports = new EnginePorts(
-                CheckRouting.of(executor, new ScriptedCheckRounds(), new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), new RecordingEventListener(),
+                CheckRouting.of(executor, new ScriptedCheckRounds(), new ScriptedCheckRounds(), new ScriptedCheckRounds()), new RecordingEventListener(),
                 new InMemoryAttemptPersistence(), VirtualTimeEquipment.on(clock), RoundIdentity.inPlace())
         new Engine().run(
                 pipeline(), context, TaskState.atStageStart('build'), new FakeWorkspace(), ports) as TaskOutcome

@@ -14,15 +14,20 @@ import java.util.Set;
  * executor the round's record names but that never ran it. No process is spawned and no describe is asked: the law
  * is bound before any execution environment exists.
  *
- * <p>Problems are located {@link ConfigError}s naming the stage manifest and the
- * {@code executor.name} field; an unknown name is quoted with the declared set. Nothing is thrown
- * (design D3 of load-pipeline-config). Error order is deterministic: stages in pipeline order.
+ * <p>The rule is the one rule over an executor block's reference wherever the block is declared
+ * (design D12 of extract-agent-round-runner): a stage's own block, and each {@code judge} check's —
+ * a judge's {@code program} block names the declared executor that judges, and a judge's block of
+ * another type names none.
  *
- * <p>Implements FR9, FR10 of define-executor-contract.
+ * <p>Problems are located {@link ConfigError}s naming the stage manifest and the block's
+ * {@code executor.name} field ({@code verify[<i>].executor.name} for a judge's); an unknown name is
+ * quoted with the declared set. Nothing is thrown (design D3 of load-pipeline-config). Error order
+ * is deterministic: stages in pipeline order, within a stage its own block first, then its judge
+ * checks' in check order.
+ *
+ * <p>Implements FR9, FR10 of define-executor-contract; FR13, UX1 of extract-agent-round-runner.
  */
 public final class ExecutorReferenceRule {
-
-    private static final String FIELD = "executor.name";
 
     private ExecutorReferenceRule() {}
 
@@ -42,29 +47,52 @@ public final class ExecutorReferenceRule {
         List<ConfigError> errors = new ArrayList<>();
         for (StageDefinition stage : model.stages()) {
             String manifest = "stages/%s/stage.yaml".formatted(stage.name());
-            String name = stage.executor().name();
-            if (name == null) {
-                if (stage.executor().type() == ExecutorType.PROGRAM) {
-                    errors.add(
-                            new ConfigError(
-                                    manifest,
-                                    FIELD,
-                                    "missing required field 'executor.name'; a program stage names the executor declaration it runs"));
+            validateBlock(manifest, MechanismFieldErrors.STAGE_BLOCK, "stage", stage.executor(), declared, errors);
+            List<VerifyCheck> checks = stage.verify();
+            for (int index = 0; index < checks.size(); index++) {
+                if (checks.get(index) instanceof VerifyCheck.Judge judge) {
+                    validateBlock(
+                            manifest,
+                            "verify[%d].executor".formatted(index),
+                            "judge check",
+                            judge.executor(),
+                            declared,
+                            errors);
                 }
-            } else if (!declared.contains(name)) {
-                errors.add(new ConfigError(manifest, FIELD, unknown(name, declared)));
-            } else if (stage.executor().type() != ExecutorType.PROGRAM) {
-                // Task 7.3: the run's dispatch keys every other stage by its type, so a name on one
-                // would pin and report an executor that never ran its rounds (design D8).
-                errors.add(new ConfigError(
-                        manifest,
-                        FIELD,
-                        ("executor '%s' is a declared executor, which only a program stage runs;"
-                                        + " declare executor.type program or drop executor.name")
-                                .formatted(name)));
             }
         }
         return List.copyOf(errors);
+    }
+
+    private static void validateBlock(
+            String manifest,
+            String where,
+            String useSite,
+            StageDefinition.Executor executor,
+            Set<String> declared,
+            List<ConfigError> errors) {
+        String field = where + ".name";
+        String name = executor.name();
+        if (name == null) {
+            if (executor.type() == ExecutorType.PROGRAM) {
+                errors.add(new ConfigError(
+                        manifest,
+                        field,
+                        "missing required field '%s'; a program %s names the executor declaration it runs"
+                                .formatted(field, useSite)));
+            }
+        } else if (!declared.contains(name)) {
+            errors.add(new ConfigError(manifest, field, unknown(name, declared)));
+        } else if (executor.type() != ExecutorType.PROGRAM) {
+            // Task 7.3: the run's dispatch keys every other block by its type, so a name on one
+            // would pin and report an executor that never ran its rounds (design D8).
+            errors.add(new ConfigError(
+                    manifest,
+                    field,
+                    ("executor '%s' is a declared executor, which only a program %s runs;"
+                                    + " declare executor.type program or drop executor.name")
+                            .formatted(name, useSite)));
+        }
     }
 
     private static String unknown(String name, Set<String> declared) {

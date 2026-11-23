@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.domain.engine
 import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
@@ -35,7 +34,7 @@ class EnginePendingWriteStateSpec extends PendingPollSpecBase {
     def listener = new RecordingEventListener()
 
     TaskOutcome run(ScriptedExecutor executor, PipelineDefinition definition, TaskState state) {
-        def ports = new EnginePorts(executor, new ScriptedJudgeVoter(), listener, persistence,
+        def ports = new EnginePorts(executor, listener, persistence,
                 VirtualTimeEquipment.on(clock, sleeper), {
                     Optional.of(TOKEN)
                 } as RoundIdentity)

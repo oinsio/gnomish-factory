@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.agent.runner
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
+import com.github.oinsio.gnomish.executorcontract.Capability
 import com.github.oinsio.gnomish.executorcontract.Describe
 import com.github.oinsio.gnomish.executorcontract.EnforcementLevel
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest
@@ -34,6 +35,13 @@ final class FakeDialect implements AgentDialect<FakeEvent> {
     /** The credential names its describe declares. */
     List<String> credentials = []
 
+    /**
+     * The capabilities its describe declares: {@code streams_progress} by default, as the vendor's
+     * dialect does, so a round is held to all three bounds; a spec of a dialect that declares no
+     * liveness sets none (FR16 of extract-agent-round-runner).
+     */
+    List<Capability> capabilities = [Capability.STREAMS_PROGRESS]
+
     /** The wall time its usage reports, or null for none. */
     Long wallMillis
 
@@ -49,7 +57,7 @@ final class FakeDialect implements AgentDialect<FakeEvent> {
             Role.TRANSFORM,
             Role.VERDICT,
             Role.DECISION
-        ], [],
+        ], capabilities,
         JsonNodeFactory.instance.objectNode(), credentials, [], null, [], EnforcementLevel.PROMPT_ONLY, true, false)
     }
 

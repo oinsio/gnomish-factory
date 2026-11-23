@@ -17,9 +17,9 @@ import java.util.TreeMap;
  * naming the stage manifest and {@code executor.settings.<key>}, reported before any stage runs
  * (UX2).
  *
- * <p>The schema of the other executor types is not judged here: {@code agent-cli} executors and
- * every {@code judge} check — a command stage's included — belong to {@link
- * AgentSettingsValidator}. The {@code roundTimeout} shapes are judged by their one owner, {@link
+ * <p>The schema of the other executor types is not judged here: every {@code agent-cli} executor
+ * block, a {@code judge} check's included, belongs to {@link AgentSettingsValidator}; a judge's
+ * {@code command} block is refused at load for its role (no settings of it run). The {@code roundTimeout} shapes are judged by their one owner, {@link
  * RoundTimeout}, which the Claude dialect's settings judge calls too (design D6 of
  * extract-agent-round-runner), never by a copy here.
  *

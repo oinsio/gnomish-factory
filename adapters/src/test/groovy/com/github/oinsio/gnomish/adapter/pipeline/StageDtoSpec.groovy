@@ -53,10 +53,11 @@ class StageDtoSpec extends Specification {
             timeout: 15m
           - type: judge
             criteriaFile: stages/implement/acceptance.md
-            model: claude-sonnet-4-5
-            settings:
-              temperature: 0
-            votes: 3
+            executor:
+              type: agent-cli
+              model: claude-sonnet-4-5
+              settings:
+                temperature: 0
         autonomy:
           attemptLimit: 5
         advancement: manual
@@ -151,15 +152,14 @@ class StageDtoSpec extends Specification {
         external.params() == null
     }
 
-    def "the judge check carries criteria, model, settings and votes"() {
+    // FR13 of extract-agent-round-runner: the judge's executor block binds the stage's block DTO
+    def "the judge check carries criteria and its executor block"() {
         when: 'the stage is read'
         def judge = yaml.readValue(FULL_STAGE, StageDto).verify()[3] as VerifyCheckDto.Judge
 
-        then: 'the four judge fields are exposed, settings as a plain JDK map'
+        then: 'the criteria and the block are exposed, settings as a plain JDK map'
         judge.criteriaFile() == 'stages/implement/acceptance.md'
-        judge.model() == 'claude-sonnet-4-5'
-        judge.settings() == [temperature: 0]
-        judge.votes() == 3
+        judge.executor() == new ExecutorDto('agent-cli', 'claude-sonnet-4-5', [temperature: 0])
     }
 
     def "a stage without an autonomy override leaves the override null"() {

@@ -17,33 +17,35 @@ import org.jspecify.annotations.Nullable;
  * so one fault is one error with one sentence whichever layer saw it. A blank {@code command} on a
  * {@code command} stage maps to no command and is the domain's missing-command error; a non-blank
  * field reaches the domain and is its to judge. An unknown or missing {@code type} is
- * {@link StructuralValidation}'s error, and nothing is checked against it.
+ * {@link ExecutorBlockShape}'s error, and nothing is checked against it.
  *
- * <p>Implements FR1, FR2, UX2 of add-command-executor.
+ * <p>A block is judged wherever it is declared — a stage's own, or a {@code judge} check's at
+ * {@code verify[<i>].executor} (design D12 of extract-agent-round-runner). The {@code model} read
+ * here asks only whether the key was declared blank, which the mapping erases; the value itself is
+ * read by the one block mapping alone ({@code ExecutorBlockOwnerSpec}).
+ *
+ * <p>Implements FR1, FR2, UX2 of add-command-executor; FR13 of extract-agent-round-runner.
  */
 final class BlankMechanismFields {
 
     private static final String COMMAND = "command";
     /** Every known executor token but {@code command}, from the structural allowlist, never a second list. */
-    private static final List<String> OTHER_TYPES = StructuralValidation.EXECUTOR_TYPES.stream()
+    private static final List<String> OTHER_TYPES = ExecutorBlockShape.EXECUTOR_TYPES.stream()
             .filter(type -> !COMMAND.equals(type))
             .toList();
 
     private BlankMechanismFields() {}
 
-    static void check(List<ConfigError> errors, String file, @Nullable ExecutorDto executor) {
-        if (executor == null) {
-            return;
-        }
+    static void check(List<ConfigError> errors, String file, String where, ExecutorDto executor) {
         String type = executor.type();
         if (type == null) {
             return;
         }
         if (COMMAND.equals(type) && declaredBlank(executor.model())) {
-            errors.add(MechanismFieldErrors.modelOnCommandStage(file));
+            errors.add(MechanismFieldErrors.modelOnCommandStage(file, where));
         }
         if (OTHER_TYPES.contains(type) && declaredBlank(executor.command())) {
-            errors.add(MechanismFieldErrors.commandOnStage(file, type));
+            errors.add(MechanismFieldErrors.commandOnStage(file, where, type));
         }
     }
 

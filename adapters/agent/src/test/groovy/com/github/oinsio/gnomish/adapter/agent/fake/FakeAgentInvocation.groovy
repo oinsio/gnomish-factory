@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit
  * code, and any workspace files the scenario wrote.
  *
  * <p>This class only drives the fake; it is not itself a production
- * {@code StageExecutor}/{@code JudgeVoter} adapter. It exists so this task's
+ * {@code StageExecutor} adapter. It exists so this task's
  * own specs — and later groups' specs — exercise the same real
  * ProcessBuilder/pipes/exit-code path the CLI adapters will use (D11's "one
  * suite, real machinery" scenario).

@@ -28,9 +28,9 @@ class ClaudeSettingsLoadSpec extends Specification {
     def "FR7: a judge check's settings typo fails the load with an error naming the stage, the check and the key"() {
         given: 'a valid law except the build stage\'s judge check settings carry allowedTols'
         law('agent-cli', '', '''\
-    settings:
-      allowedTols:
-        - Read
+      settings:
+        allowedTols:
+          - Read
 ''')
 
         when:
@@ -41,7 +41,7 @@ class ClaudeSettingsLoadSpec extends Specification {
         def errors = (outcome as LoadOutcome.Invalid).errors()
         errors.size() == 1
         errors[0].file() == 'stages/build/stage.yaml'
-        errors[0].where() == 'verify[0].settings.allowedTols'
+        errors[0].where() == 'verify[0].executor.settings.allowedTols'
     }
 
     // Scenario: pipeline/pipeline-config / Agent settings are checked against the executor's schema
@@ -63,8 +63,8 @@ class ClaudeSettingsLoadSpec extends Specification {
     def "FR7: a judge check's malformed maxTurns fails the load even under a command stage"() {
         given:
         law('command', '', '''\
-    settings:
-      maxTurns: "five"
+      settings:
+        maxTurns: "five"
 ''')
 
         expect:
@@ -73,7 +73,7 @@ class ClaudeSettingsLoadSpec extends Specification {
         } == [
             [
                 'stages/build/stage.yaml',
-                'verify[0].settings.maxTurns'
+                'verify[0].executor.settings.maxTurns'
             ]
         ]
     }
@@ -85,8 +85,8 @@ class ClaudeSettingsLoadSpec extends Specification {
     allowedTools: [Read]
     roundTimeout: PT10M
 ''', '''\
-    settings:
-      maxTurns: 3
+      settings:
+        maxTurns: 3
 ''')
 
         expect:
@@ -113,8 +113,9 @@ ${model}${executorSettings}instructions: stages/build/instructions.md
 verify:
   - type: judge
     criteriaFile: stages/build/accept.md
-    model: judge-model
-    votes: 1
+    executor:
+      type: agent-cli
+      model: judge-model
 ${judgeSettings}advancement: auto
 """)
     }

@@ -12,9 +12,8 @@ import org.jspecify.annotations.Nullable;
 /**
  * The tolerant read of the one JSON object an agent's final text carries (design D5 of
  * add-agent-executor; FR3 of extract-agent-round-runner): a markdown code fence stripped if present,
- * then the first balanced {@code {...}} span parsed. The one owner of that read, for the judge
- * round's final message and for the Claude dialect's fallback when the CLI reported no structured
- * output.
+ * then the first balanced {@code {...}} span parsed. The one owner of that read: the Claude dialect's
+ * fallback when the CLI reported no structured output ({@link ClaudeAnswer}).
  *
  * <p>The scan is a bracket match, not a JSON tokenizer: a brace inside a string literal
  * desynchronizes it, and the span then fails to parse — treated as no answer, never engineered
@@ -26,7 +25,7 @@ import org.jspecify.annotations.Nullable;
  * <p>Implements FR8, D5 of add-agent-executor; FR3 of extract-agent-round-runner.
  */
 @UntrustedParser
-public final class FinalTextObject {
+final class FinalTextObject {
 
     private static final Pattern FENCE = Pattern.compile("```(?:json)?\\s*\\n?(.*?)\\n?```", Pattern.DOTALL);
 
@@ -40,7 +39,7 @@ public final class FinalTextObject {
      * @param finalText the agent's final text; never null
      * @return the object, or why there is none; never null
      */
-    public static Reading of(UntrustedText finalText) {
+    static Reading of(UntrustedText finalText) {
         String text = finalText.forParsing();
         Matcher fence = FENCE.matcher(text);
         String span = firstObject(fence.find() ? fence.group(1) : text);

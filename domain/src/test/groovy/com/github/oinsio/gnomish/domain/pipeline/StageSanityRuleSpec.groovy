@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.domain.pipeline
 
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 
 import java.time.Duration
 import spock.lang.Specification
@@ -16,8 +17,9 @@ import spock.lang.Specification
  * of add-command-executor); the resolved attempt limit
  * must be at least 1; an `external` check must have a positive interval, a
  * positive timeout, interval <= timeout, and a non-blank checkId; a `judge`
- * check must pin a non-blank model (same reproducibility rationale as the
- * executor model) and declare votes that are >= 1 and odd. Builtin and Command
+ * check's executor block is judged by the same mechanism rule as a stage's, at
+ * verify[i].executor.*, and must resolve to an executor serving role verdict
+ * (JudgeRoleRule; D12 of extract-agent-round-runner). Builtin and Command
  * checks carry no FR11 sanity rule and are never flagged (no validation creep).
  * Executor and judge settings are an opaque pass-through map, accepted without
  * inspecting keys, values, or ranges (Q1/D5a); whether a model is real, or a
@@ -27,7 +29,7 @@ import spock.lang.Specification
  * stage the model error, then the command error, then the attempt-limit error, then verify-check
  * errors in check-list order and (within a check) field order.
  * Implements FR11 (and the FR7 attempt-limit clause) of load-pipeline-config;
- * FR2, UX2 of add-command-executor.
+ * FR2, UX2 of add-command-executor; FR13, UX1 of extract-agent-round-runner.
  */
 class StageSanityRuleSpec extends Specification {
 
@@ -94,8 +96,13 @@ class StageSanityRuleSpec extends Specification {
                 "invalid pin path '$path'; a pin path must be a normalized relative path with no absolute prefix and no '.'/'..' segments" as String)
     }
 
-    private static VerifyCheck judge(String model, int votes) {
-        new VerifyCheck.Judge('criteria.md', model, [:], votes)
+    private static VerifyCheck judge(String model) {
+        JudgeChecks.agent('criteria.md', model)
+    }
+
+    private static VerifyCheck judgeBlock(ExecutorType type, String model, String name = null, String command = null) {
+        new VerifyCheck.Judge('criteria.md', new StageDefinition.Executor(type, model, [:], Sandbox.none(), name,
+        command == null ? null : new CommandLine(command)))
     }
 
     private static ConfigError missingModel(String stage) {
@@ -129,13 +136,14 @@ class StageSanityRuleSpec extends Specification {
     }
 
     private static ConfigError missingJudgeModel(String stage, int index) {
-        new ConfigError("stages/$stage/stage.yaml", "verify[$index].model" as String,
-                'missing required judge model; the model must be pinned in the manifest for reproducibility')
+        new ConfigError("stages/$stage/stage.yaml", "verify[$index].executor.model" as String,
+                'missing required executor model; the model must be pinned in the manifest for every agent executor type (api, agent-cli)')
     }
 
-    private static ConfigError badVotes(String stage, int index, int votes) {
-        new ConfigError("stages/$stage/stage.yaml", "verify[$index].votes" as String,
-                "invalid judge vote count $votes; votes must be at least 1 and odd" as String)
+    private static ConfigError unservedRole(String stage, int index, String reason) {
+        new ConfigError("stages/$stage/stage.yaml", "verify[$index].executor.type" as String,
+                reason + "; a judge check needs an executor that serves role 'verdict'"
+                + " (type agent-cli, or a program whose describe lists 'verdict')")
     }
 
     // FR11/FR7: a pinned non-blank model and a resolved limit >= 1 are sane
@@ -442,44 +450,27 @@ class StageSanityRuleSpec extends Specification {
         ]
     }
 
-    // FR11 judge clause: votes >= 1 and odd (1 and 3 valid); a non-blank pinned
-    // model is required (reproducibility, same rationale as the executor model)
-    def "a sane judge check with votes #votes produces no errors"() {
+    // FR13 of extract-agent-round-runner: a judge's agent-cli block with a model, and a program
+    //     block (which may omit the model), are sane
+    def "a sane judge block (#label) produces no errors"() {
         expect: 'validating the stage yields an empty error list'
         StageSanityRule.validate([
-            stage('review', ExecutorType.API, 'claude-sonnet-4-5', [:], 3, [
-                judge('claude-opus-4-1', votes as int)
-            ])
+            stage('review', ExecutorType.API, 'claude-sonnet-4-5', [:], 3, [check])
         ]) == []
 
         where:
-        votes << [1, 3, 5]
+        label | check
+        'agent-cli with a model' | judge('claude-opus-4-1')
+        'program without a model' | judgeBlock(ExecutorType.PROGRAM, '', 'acme')
     }
 
-    // FR11 judge clause: votes < 1 or even is a located error; boundaries
-    // 0 (invalid), 2 (invalid even), -1 (invalid) are all covered
-    // Scenario: pipeline/pipeline-config / Judge vote count must be positive and odd
-    def "a judge vote count of #votes is a located error"() {
-        expect: 'exactly one error locating the judge votes'
+    // FR13, UX1 of extract-agent-round-runner: the judge block is judged by the stage's own rule,
+    //     so a blank model gets the stage's error, located at the block
+    def "a blank judge block model (#label) is the stage's located missing-model error"() {
+        expect: 'exactly one error locating the judge block model'
         StageSanityRule.validate([
             stage('review', ExecutorType.API, 'claude-sonnet-4-5', [:], 3, [
-                judge('claude-opus-4-1', votes as int)
-            ])
-        ]) == [
-            badVotes('review', 0, votes as int)
-        ]
-
-        where:
-        votes << [0, 2, -1, -2]
-    }
-
-    // FR11 judge clause: a blank judge model is a located error, mirroring the
-    // executor-model rule — the judge model is pinned for reproducibility
-    def "a blank judge model (#label) is a located error"() {
-        expect: 'exactly one error locating the judge model'
-        StageSanityRule.validate([
-            stage('review', ExecutorType.API, 'claude-sonnet-4-5', [:], 3, [
-                judge(model, 3)
+                judge(model)
             ])
         ]) == [
             missingJudgeModel('review', 0)
@@ -491,16 +482,34 @@ class StageSanityRuleSpec extends Specification {
         'whitespace-only' | '   '
     }
 
-    // FR11 judge clause: model fault before votes fault within one judge check
-    def "multiple faults in one judge check are ordered model, votes"() {
-        expect: 'both located errors in field order'
+    // FR13, UX1 of extract-agent-round-runner: a command or api block resolves to no verdict server
+    def "a judge block of type #type resolves to no executor serving verdict, a located error"() {
+        expect:
         StageSanityRule.validate([
-            stage('review', ExecutorType.API, 'claude-sonnet-4-5', [:], 3, [
-                judge('', 2)
+            stage('review', ExecutorType.AGENT_CLI, 'claude-sonnet-4-5', [:], 3, [check])
+        ]) == [
+            unservedRole('review', 0, reason)
+        ]
+
+        where:
+        type | check || reason
+        ExecutorType.COMMAND | judgeBlock(ExecutorType.COMMAND, '', null, 'make check') || "executor type 'command' resolves to the built-in executor 'command', which serves only role 'transform'"
+        ExecutorType.API | judgeBlock(ExecutorType.API, 'claude-opus-4-1') || "executor type 'api' resolves to no executor"
+    }
+
+    // FR13 of extract-agent-round-runner: the mechanism errors precede the role error of one block
+    def "a judge block's mechanism errors come before its role error"() {
+        expect:
+        StageSanityRule.validate([
+            stage('review', ExecutorType.AGENT_CLI, 'claude-sonnet-4-5', [:], 3, [
+                judgeBlock(ExecutorType.COMMAND, 'm', null, null)
             ])
         ]) == [
-            missingJudgeModel('review', 0),
-            badVotes('review', 0, 2),
+            new ConfigError('stages/review/stage.yaml', 'verify[0].executor.model',
+            'executor model is not allowed on a command stage; a command stage runs its declared command, not a model'),
+            new ConfigError('stages/review/stage.yaml', 'verify[0].executor.command',
+            'missing required executor command; a command stage must declare the command it runs'),
+            unservedRole('review', 0, "executor type 'command' resolves to the built-in executor 'command', which serves only role 'transform'"),
         ]
     }
 
@@ -514,14 +523,14 @@ class StageSanityRuleSpec extends Specification {
                 VerifyChecks.command('./gradlew check'),
                 ext('', Duration.ofSeconds(30), Duration.ofMinutes(1)),
                 VerifyChecks.builtin('files_exist', [:]),
-                judge('claude-opus-4-1', 2),
+                judge(''),
             ])
         ]
 
         expect: 'errors name index 1 (external) then index 3 (judge)'
         StageSanityRule.validate(stages) == [
             blankCheckId('review', 1),
-            badVotes('review', 3, 2),
+            missingJudgeModel('review', 3),
         ]
     }
 
@@ -536,7 +545,7 @@ class StageSanityRuleSpec extends Specification {
             ]),
             stage('implement', ExecutorType.AGENT_CLI, 'claude-sonnet-4-5', [:], 3),
             stage('review', ExecutorType.AGENT_CLI, '', [:], -2, [
-                judge('', 2)
+                judge('')
             ]),
         ]
 
@@ -549,7 +558,6 @@ class StageSanityRuleSpec extends Specification {
             missingModel('review'),
             nonPositiveAttempts('review', -2),
             missingJudgeModel('review', 0),
-            badVotes('review', 0, 2),
         ]
     }
 }

@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
@@ -25,11 +24,11 @@ class RoundExecutionPendingHandoffSpec extends PendingPollSpecBase {
             passed()
         ])
         def time = VirtualTimeEquipment.on(clock, sleeper)
-        def ports = new EnginePorts(executor, new ScriptedJudgeVoter(), new RecordingEventListener(), persistence, time,
+        def ports = new EnginePorts(executor, new RecordingEventListener(), persistence, time,
                 { Optional.of(TOKEN) } as RoundIdentity)
         def listener = new RecordingEventListener()
         def chain = new VerifyOrchestrator(new PendingPoll(executor, persistence, AttemptDelivery.assumedDelivered(), time,
-                listener), new JudgeVoting(new ScriptedJudgeVoter()), clock, listener)
+                listener), clock, listener)
 
         when:
         def outcome = new RoundExecution(ports, chain).execute(CONTEXT, STATE, WORKSPACE, VerifyingStages.of([ci]), clock.instant())

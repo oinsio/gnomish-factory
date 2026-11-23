@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.domain.engine;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
-import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter;
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
@@ -15,11 +14,11 @@ import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
  * factory once and reuse it across runs; the engine reads each field but never stores
  * it in shared state, so the same {@code EnginePorts} can back concurrent runs (NFR-R1).
  *
- * <p>Two execution/verification ports do the real work — {@link StageExecutor} runs a stage round
- * and every executor check's rounds (design D18 of migrate-verify-to-executor-contract: a check
- * round names its check as the request's subject), and {@link JudgeVoter} casts the judge's votes;
- * the three former check ports are gone (task 5.2 of that change), so a check reaches its executor
- * only through the {@link StageExecutor} port.
+ * <p>One execution port does the real work — {@link StageExecutor} runs a stage round and every
+ * check's rounds (design D18 of migrate-verify-to-executor-contract: a check round names its check
+ * as the request's subject); the three former check ports are gone (task 5.2 of that change), and so
+ * is the judge's voter (design D2 of extract-agent-round-runner, M3): a judge check is one {@code
+ * verdict} request on the same port, so every check reaches its executor only through it.
  * The remaining four are cross-cutting seams: {@link EngineEventListener} observes the
  * event stream (D7), {@link AttemptPersistence} durably records each round (D7), the
  * environment ports — the {@link TimeEquipment}, the current instant and waiting as one value
@@ -33,10 +32,10 @@ import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
  *
  * <p>Implements FR1 of add-stage-engine; FR21 of add-sandbox-core; FR17 of
  * supervise-daemon-loops-and-embed-dashboard (the instant-source environment port); FR22 of
- * supervise-daemon-loops-and-embed-dashboard (the time equipment as the environment ports).
+ * supervise-daemon-loops-and-embed-dashboard (the time equipment as the environment ports); M3 of
+ * extract-agent-round-runner (one executor port).
  *
  * @param executor the port that runs one round of a stage's work; never null
- * @param judgeVoter the port that casts one judge vote; never null
  * @param listener the observer the engine emits its event stream to; never null
  * @param persistence the port that durably records each executed round; never null
  * @param time the environment ports: the instant source for timestamps and poll deadlines and the
@@ -52,7 +51,6 @@ import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
  */
 public record EnginePorts(
         StageExecutor executor,
-        JudgeVoter judgeVoter,
         EngineEventListener listener,
         AttemptPersistence persistence,
         TimeEquipment time,
@@ -70,14 +68,12 @@ public record EnginePorts(
      */
     public EnginePorts(
             StageExecutor executor,
-            JudgeVoter judgeVoter,
             EngineEventListener listener,
             AttemptPersistence persistence,
             TimeEquipment time,
             RoundIdentity roundIdentity) {
         this(
                 executor,
-                judgeVoter,
                 listener,
                 persistence,
                 time,

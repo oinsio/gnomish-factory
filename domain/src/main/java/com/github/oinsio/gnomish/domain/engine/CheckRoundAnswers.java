@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.domain.engine;
 
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -62,7 +63,9 @@ final class CheckRoundAnswers {
     }
 
     /**
-     * The polled check of a round that ended: its answer and the outcome naming its status.
+     * The polled check of a round that ended: its answer, the outcome naming its status, and the
+     * usage the round reported, which a judge check's participant entry carries (FR4 of
+     * extract-agent-round-runner).
      *
      * @param check the executor check; never null
      * @param result the round's result, completed or failed; never null
@@ -70,11 +73,15 @@ final class CheckRoundAnswers {
      * @return the polled check; never null
      */
     static PolledCheck polled(VerifyCheck.Executor check, ExecutionResult result, @Nullable UntrustedText resumedKey) {
-        return new PolledCheck(of(result), new CheckOutcome(check.executorName(), result.status(), resumedKey));
+        return new PolledCheck(
+                of(result),
+                new CheckOutcome(check.executorName(), result.status(), resumedKey),
+                result.usage().byModel());
     }
 
     /**
-     * The polled check the engine resolved to {@code failed}: a timeout, an undelivered attempt.
+     * The polled check the engine resolved to {@code failed}: a timeout, an undelivered attempt. No
+     * round reported it, so it carries no usage.
      *
      * @param check the executor check; never null
      * @param failed the failure the engine resolved the check to; never null
@@ -83,6 +90,6 @@ final class CheckRoundAnswers {
      */
     static PolledCheck polled(
             VerifyCheck.Executor check, ExecutionResult.Failed failed, @Nullable UntrustedText resumedKey) {
-        return new PolledCheck(of(failed), new CheckOutcome(check.executorName(), failed, resumedKey));
+        return new PolledCheck(of(failed), new CheckOutcome(check.executorName(), failed, resumedKey), Map.of());
     }
 }

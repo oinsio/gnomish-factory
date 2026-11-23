@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.executorcontract.Role
 import com.github.oinsio.gnomish.executorcontract.WireDocument
 import com.github.oinsio.gnomish.executorcontract.WireSchemas
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
+import com.github.oinsio.gnomish.sandbox.ChildEnvValues
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
@@ -89,6 +90,31 @@ class ClaudeDialectDescribeSpec extends Specification {
 
         and: 'the written describe is one the contract\'s describe schema accepts'
         WireSchemas.judge(WireDocument.DESCRIBE, written).isEmpty()
+    }
+
+    // FR14 of extract-agent-round-runner (task 4.0a): run assembly builds the dialect for every run, so
+    //     building it reads no secret; the base URL is read, and a host-less one refused, at describe
+    def "FR7, FR14: building the dialect reads no secret; each describe reads the base URL, refusing one with no host"() {
+        given:
+        def read = []
+        def values = { String name ->
+            read << name
+            Optional.of('not a url')
+        } as ChildEnvValues
+
+        when:
+        def dialect = ClaudeDialect.of('claude', UntrustedText.subprocess('2.1.0'), ChildEnvAllowlist.of([], [], values))
+
+        then:
+        read.isEmpty()
+
+        when:
+        dialect.describe()
+
+        then:
+        def refused = thrown(IllegalArgumentException)
+        refused.message.startsWith('ANTHROPIC_BASE_URL names no host')
+        read == ['ANTHROPIC_BASE_URL']
     }
 
     private static Describe over(Map<String, String> values) {

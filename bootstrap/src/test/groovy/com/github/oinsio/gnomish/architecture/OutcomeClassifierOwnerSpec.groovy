@@ -32,7 +32,6 @@ class OutcomeClassifierOwnerSpec extends Specification {
 
     private static final String ENGINE = 'domain/src/main/java/com/github/oinsio/gnomish/domain/engine/'
     private static final String STATE = 'adapters/git/src/main/java/com/github/oinsio/gnomish/adapter/git/state/'
-    private static final String AGENT = 'adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/'
     private static final String CLASSIFIER = ENGINE + 'ExecutorOutcomeClassifier.java'
 
     /**
@@ -51,10 +50,7 @@ class OutcomeClassifierOwnerSpec extends Specification {
     static final List<String> PICKUPS = [
         'dto: ',
         'record: ',
-        'extract-agent-round-runner: ',
     ]
-
-    private static final String JUDGE = 'extract-agent-round-runner: the judge builds its own verdict (D9, NG1)'
 
     static final List<Map> RULES = [
         [name: 'escalation the classifier decides',
@@ -89,11 +85,10 @@ class OutcomeClassifierOwnerSpec extends Specification {
             bare: /\bnew\s+CannotVerify\s*\(/,
             // Task 2.2 of migrate-verify-to-executor-contract routed ShellCommandCheckRunner,
             //     FilesExistCheckRunner, the poll loop of the time (deleted by task 4.2f) and VerifyOrchestrator through the owner.
+            // The judge's sites left with tasks 4.1 and 4.3 of extract-agent-round-runner: a judge
+            //     check is a check round whose verdict derives through the owner (D2).
             allowed: [
                 (DERIVATION) : 'the owner',
-                (AGENT + 'JudgeVerdictExtractor.java') : JUDGE,
-                (AGENT + 'JudgeCriteriaPreflight.java') : JUDGE,
-                (AGENT + 'JudgeCannotVerify.java') : JUDGE,
                 (STATE + 'StateJsonMapper.java') : 'dto: a recorded check verdict rebuilt from state.json',
             ]],
         [name: 'thrown executor failure',

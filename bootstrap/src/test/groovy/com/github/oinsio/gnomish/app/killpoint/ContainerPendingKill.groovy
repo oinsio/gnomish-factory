@@ -4,7 +4,6 @@ import static com.github.oinsio.gnomish.app.HostVerificationKill.registerRef
 import static com.github.oinsio.gnomish.app.HostVerificationKill.stateAt
 import static com.github.oinsio.gnomish.app.killpoint.PendingVerificationKill.commitOf
 
-import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.agent.ResumeVerificationStageExecutor
 import com.github.oinsio.gnomish.adapter.git.BestEffortClosingPush
@@ -17,11 +16,11 @@ import com.github.oinsio.gnomish.adapter.git.SandboxRoundEnvironmentSource
 import com.github.oinsio.gnomish.adapter.git.SnapshotTipCheck
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.BuiltInEntriesFixture
+import com.github.oinsio.gnomish.app.ClaudeStageFixture
 import com.github.oinsio.gnomish.app.HandAssembledCheckDispatch
 import com.github.oinsio.gnomish.app.KillPointTakeRoutes
 import com.github.oinsio.gnomish.app.TaskGitFixture
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
-import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
 import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.git.LocalTaskBranch
@@ -131,9 +130,7 @@ final class ContainerPendingKill {
             lease.environmentFor((recorded.position() as Position.AtStage).name())
         }
         def source = new SandboxRoundEnvironmentSource(lease, runner, world.repoDir, world.taskId, cell, new VirtualClock())
-        def agent = new CliStageExecutor(FakeAgentSupport.propertiesFor('plain-round'),
-                new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)), { e -> } as AgentProgressListener,
-                ChildEnvAllowlist.none(), LAW, source)
+        def agent = ClaudeStageFixture.executor(FakeAgentSupport.propertiesFor('plain-round'), new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)), ChildEnvAllowlist.none(), LAW, source)
         def counted = { StageExecutor.Request request ->
             agentRounds++
             agent.execute(request)
@@ -146,7 +143,7 @@ final class ContainerPendingKill {
         // A program's fresh box reads the attempt commit off the run's cell, as the container run's workspace does.
         def workspace = programs != null ? new RecordedAttemptCommitWorkspace(cell)
                 : new DirectoryWorkspace(Files.createTempDirectory(root, 'workspace'))
-        def ports = new EnginePorts(port, new ScriptedJudgeVoter(), new RecordingEventListener(), persistence(box, cell), VirtualTimeEquipment.on(clock),
+        def ports = new EnginePorts(port, new RecordingEventListener(), persistence(box, cell), VirtualTimeEquipment.on(clock),
                 source.identity())
         new Engine().run(world.definition, new TaskContext(world.taskId, UntrustedText.tracker('title'),
                 UntrustedText.tracker('body'), []), recorded, workspace, ports)

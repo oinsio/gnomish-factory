@@ -21,7 +21,7 @@ class PipelineMapperSettingsSpec extends Specification implements PipelineMapper
         def stage = new StageDto('p', [new ArtifactInputDto.Source()], [new ArtifactOutputDto('o')],
         new ExecutorDto('api', 'm', settings), 'i.md',
         [
-            new VerifyCheckDto.Judge('c.md', 'jm', settings, 1)
+            new VerifyCheckDto.Judge('c.md', new ExecutorDto('agent-cli', 'jm', settings))
         ], null, 'auto')
 
         when:
@@ -30,7 +30,7 @@ class PipelineMapperSettingsSpec extends Specification implements PipelineMapper
         then: 'the domain carries an equal map, not a Jackson node'
         def executor = definition.stages()[0].executor()
         executor.settings() == [temperature: 0.2d, nested: [flags: [true, false]]]
-        (definition.stages()[0].verify()[0] as VerifyCheck.Judge).settings() == settings
+        (definition.stages()[0].verify()[0] as VerifyCheck.Judge).executor().settings() == settings
 
         when: 'the source map is mutated after mapping'
         settings.put('mutated', 'after')

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.pipeline
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import spock.lang.Specification
 
 /**
@@ -117,5 +118,41 @@ class ExecutorReferenceRuleSpec extends Specification {
             stage('lint', ExecutorType.PROGRAM, 'acme')
         ], []))
         .any { it.where() == 'executor.name' }
+    }
+
+    private static StageDefinition judging(VerifyCheck... checks) {
+        new StageDefinition('review', 'Purpose of review', [new ArtifactInput.Source()], [],
+        new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'm', [:]),
+        'stages/review/instructions.md', checks.toList(), new AutonomyLimits(2), AdvancementMode.AUTO)
+    }
+
+    private static VerifyCheck.Judge judge(ExecutorType type, String executorName) {
+        new VerifyCheck.Judge('criteria.md', new StageDefinition.Executor(type, '', [:], Sandbox.none(), executorName))
+    }
+
+    // FR13 of extract-agent-round-runner: a judge's block is the same block, judged by the same rule,
+    //     located at the check; the stage's own block first, then its judges in check order
+    def "a judge check's block reference is judged as a stage's: #label"() {
+        expect:
+        ExecutorReferenceRule.validate(pipeline([
+            judging(VerifyChecks.command('true'), check)
+        ], [declared('acme')])) == expected
+
+        where:
+        label | check || expected
+        'a program naming a declared executor' | judge(ExecutorType.PROGRAM, 'acme') || []
+        'an agent block naming nothing' | judge(ExecutorType.AGENT_CLI, null) || []
+        'a program naming nothing' | judge(ExecutorType.PROGRAM, null) || [
+            new ConfigError('stages/review/stage.yaml', 'verify[1].executor.name',
+            "missing required field 'verify[1].executor.name'; a program judge check names the executor declaration it runs")
+        ]
+        'a program naming an undeclared executor' | judge(ExecutorType.PROGRAM, 'ghost') || [
+            new ConfigError('stages/review/stage.yaml', 'verify[1].executor.name',
+            "unknown executor 'ghost'; declared executors are acme")
+        ]
+        'an agent block naming a declared executor' | judge(ExecutorType.AGENT_CLI, 'acme') || [
+            new ConfigError('stages/review/stage.yaml', 'verify[1].executor.name',
+            "executor 'acme' is a declared executor, which only a program judge check runs; declare executor.type program or drop executor.name")
+        ]
     }
 }

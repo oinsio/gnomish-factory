@@ -68,7 +68,7 @@
   whichever is reached first; tasks 4.0, 4.0a and 4.2 do not wait for it. Done 2026-11-22 in a
   decision review: 30.0 s on Linux (main agent and subagent) and on macOS (subagent), recorded
   in D6 with the conditions
-- [ ] 2.3c The silence bound follows the dialect's declaration (FR16, D6 "The silence bound
+- [x] 2.3c The silence bound follows the dialect's declaration (FR16, D6 "The silence bound
   follows the dialect's declaration", D8 row). TDD on virtual time. One predicate beside
   `ProgramBounds` (`:application`, `app/describe`) answers, from a describe's capabilities,
   whether the bounds on a quiet stdout apply. Consumers, each shown to take the answer from it:
@@ -87,7 +87,7 @@
   "The bounds on a quiet stdout follow the dialect's declaration" of `agent-round-runner`.
   Update the `ProgramBounds` and `RoundBounds` javadoc, which say "always". Must land before
   4.1
-- [ ] 2.3d The liveness measurement as a spec of the paid smoke layer (FR17, D6 "A declared
+- [x] 2.3d The liveness measurement as a spec of the paid smoke layer (FR17, D6 "A declared
   liveness is tested, per dialect"). `PaidSmokeLivenessSpec` in
   `bootstrap/src/test/groovy/…/e2e/paidsmoke/`, run by `paidSmokeTest` only (the layer is
   already excluded from `test` and from PIT). A data table: one row per dialect whose describe
@@ -202,7 +202,7 @@ numbers: 4.0, 4.0a, 4.2, then — only once 2.3b is ticked (done 2026-11-22) and
 numbers 4.1, 4.2 and 5.1 are kept because earlier tasks and code comments cite them. If you
 reach 4.1 while 2.3c is still open, stop and report that; do not switch a consumer.
 
-- [ ] 4.0 One owner of the guard probe (FR15, D13, M6). **Do this first; nothing else in
+- [x] 4.0 One owner of the guard probe (FR15, D13, M6). **Do this first; nothing else in
   sections 4 and 5 starts before it is done.** A decorator over the contract's `Executor`, in
   `adapters/agent`, that calls `environment.probeGuard()` before `start` and `poll` and after
   each returns, and answers `failed/infrastructure` naming the guard when the probe throws
@@ -224,7 +224,7 @@ reach 4.1 while 2.3c is still open, stop and report that; do not switch a consum
   replaced); a `program` verdict check bound in a fresh box with a dead guard is cannot-verify
   and burns no attempt. Scenario markers for the two scenarios added to "Guard outage is an
   infrastructure failure" (`sandbox/sandbox-egress`)
-- [ ] 4.0a The `claude` registry entry, with no consumer (FR14, D12). Reserve the name: `claude`
+- [x] 4.0a The `claude` registry entry, with no consumer (FR14, D12). Reserve the name: `claude`
   joins `BuiltInExecutors`, so a law declaring an executor of that name is refused at load by
   the existing rule. Build the entry in `ExecutorRegistry` in the shape of
   `RegistryEntry.program`: describe from `ClaudeDialect`; a stage half — a
@@ -239,7 +239,7 @@ reach 4.1 while 2.3c is still open, stop and report that; do not switch a consum
   naming an executor `claude` is a located load error; both halves bind and answer through the
   fake dialect. Scenario marker for "An agent block resolves to the reserved executor name"
   (`pipeline/pipeline-config`)
-- [ ] 4.2 The `judge` check declares the stage's executor block (FR4, FR13, UX1, D12).
+- [x] 4.2 The `judge` check declares the stage's executor block (FR4, FR13, UX1, D12).
   Consumers of the block, each visited: `StageDefinition.Executor` (a stage), `VerifyCheck.Judge`
   (the check now carries `criteriaFile` and that same executor type, and no `model`,
   `settings` or `votes` of its own), the DTO and mapper of both (`VerifyCheckDto`,
@@ -262,7 +262,7 @@ reach 4.1 while 2.3c is still open, stop and report that; do not switch a consum
   "A judge check declares the stage's executor block" (`pipeline/pipeline-config`); the marker
   of "Judge vote count must be positive and odd" stays on a feature that now asserts any
   `votes` is refused
-- [ ] 4.1 The judge runs as a check round; the judge path is deleted (FR4, M3, M7, D2). **Gate:
+- [x] 4.1 The judge runs as a check round; the judge path is deleted (FR4, M3, M7, D2). **Gate:
   2.3b is ticked and 2.3c has landed.** The engine's verify loop hands a `judge` check to the check-round path it
   already uses for an executor check (`checkRounds.answer` in `VerifyOrchestrator`), and
   `CheckRoundRoute` → `CheckDispatch` → the registry entry's check half → `CheckRound` →
@@ -293,7 +293,7 @@ reach 4.1 while 2.3c is still open, stop and report that; do not switch a consum
   (`observability/status-report`) on a round with two judge checks. The markers of the four
   scenarios of the removed "Judge majority voting" go with `JudgeVotingSpec` and
   `JudgeVotingCannotVerifySpec`
-- [ ] 4.3 Judge exemptions and the judge participant (carried from D10 of
+- [x] 4.3 Judge exemptions and the judge participant (carried from D10 of
   `define-executor-contract` and task 2.4 of `migrate-verify-to-executor-contract`):
   `OutcomeClassifierOwnerSpec` (`:bootstrap`) allowlists the judge's `new Verdict.CannotVerify(`
   sites (`JudgeVerdictExtractor`, `JudgeCriteriaPreflight`, `JudgeCannotVerify`) under this

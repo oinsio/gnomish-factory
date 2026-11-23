@@ -1,15 +1,13 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
-import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-import java.nio.file.Path
 import spock.lang.Specification
-import spock.lang.TempDir
 
 /**
  * The judge prompt renders a decision with the question it answers through the one decisions
@@ -20,8 +18,6 @@ import spock.lang.TempDir
  */
 class JudgePromptDecisionQuestionSpec extends Specification {
 
-    @TempDir
-    Path workspaceRoot
 
     // FR9: the judge grades against the reply in the light of the question it answered
     def "the judge prompt carries a decision's question, options and reply"() {
@@ -36,8 +32,7 @@ class JudgePromptDecisionQuestionSpec extends Specification {
                 ])
 
         when:
-        def prompt = new JudgePromptBuilder(PipelineLaw.ofContent(['criteria.md': 'criteria'])).build(
-        new VerifyCheck.Judge('criteria.md', 'claude-opus', [:], 1), context, new DirectoryWorkspace(workspaceRoot))
+        def prompt = new JudgePromptBuilder(PipelineLaw.ofContent(['criteria.md': 'criteria'])).verdictInput(JudgeChecks.agent('criteria.md', 'claude-opus').criteriaFile(), context)
 
         then:
         prompt.contains('''\

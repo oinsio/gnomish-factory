@@ -11,7 +11,6 @@ import java.time.Duration;
 import java.time.InstantSource;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,10 +21,11 @@ import org.slf4j.LoggerFactory;
  * non-{@link Verdict.Pass} check so later checks never run (FR2 — cheap deterministic
  * checks are ordered first, so a fast failure short-circuits the expensive ones). Each
  * verdict is dispatched by an exhaustive switch over the sealed {@link VerifyCheck}
- * (design D3): a new variant fails to compile. A thin chain driver: every executor check is a
- * check round on the engine's one {@code StageExecutor} port, driven by {@link PendingPoll} — a
- * {@code start}, and while the executor answers {@code pending} its persisted key and its polls —
- * and the judge majority loop lives in {@link JudgeVoting}. The check round's answer is a {@link
+ * (design D3): a new variant fails to compile. A thin chain driver: every check is a check round
+ * on the engine's one {@code StageExecutor} port, driven by {@link PendingPoll} — a {@code start},
+ * and while the executor answers {@code pending} its persisted key and its polls — a judge check
+ * as its {@link VerifyCheck.Judge#asExecutorCheck() check-round view}, one {@code verdict} request
+ * to the executor its block declares (design D2 of extract-agent-round-runner). The check round's answer is a {@link
  * VerdictAnswer}, and the verdict is derived from it by {@link VerdictDerivation} against the
  * check's threshold — the one place a check's verdict is decided (design D5, D9, D18 of
  * migrate-verify-to-executor-contract). A {@code failed/infrastructure} round keeps its details on
@@ -35,31 +35,28 @@ import org.slf4j.LoggerFactory;
  * and no mutable state, so one instance drives concurrent verifications safely (NFR-R1).
  *
  * <p>Implements FR2, FR3, FR4, FR7, NFR-R3, NFR-O1 of add-stage-engine; FR5 of split-logtext-leaves;
- * FR1, FR2, FR7, NFR-O1, UX3 of migrate-verify-to-executor-contract.
+ * FR1, FR2, FR7, NFR-O1, UX3 of migrate-verify-to-executor-contract; FR4, M3 of
+ * extract-agent-round-runner.
  */
 final class VerifyOrchestrator {
 
     private static final Logger log = LoggerFactory.getLogger(VerifyOrchestrator.class);
 
     private final PendingPoll checkRounds;
-    private final JudgeVoting judgeVoting;
     private final InstantSource clock;
     private final EngineEventListener listener;
 
     /**
-     * Wires the collaborators the verify chain drives: the {@link PendingPoll} every executor check's
-     * rounds go through, the {@link JudgeVoting} majority loop, the injected {@link InstantSource} it
-     * times against, and the {@link EngineEventListener} it emits to. All immutable (NFR-R1).
+     * Wires the collaborators the verify chain drives: the {@link PendingPoll} every check's rounds
+     * go through, the injected {@link InstantSource} it times against, and the {@link
+     * EngineEventListener} it emits to. All immutable (NFR-R1).
      *
-     * @param checkRounds the owner of an executor check's rounds on the engine's port; never null
-     * @param judgeVoting the majority-vote loop judge checks delegate to; never null
+     * @param checkRounds the owner of a check's rounds on the engine's port; never null
      * @param clock the injected time source timing each check; never null
      * @param listener the observer the per-check events are emitted to; never null
      */
-    VerifyOrchestrator(
-            PendingPoll checkRounds, JudgeVoting judgeVoting, InstantSource clock, EngineEventListener listener) {
+    VerifyOrchestrator(PendingPoll checkRounds, InstantSource clock, EngineEventListener listener) {
         this.checkRounds = checkRounds;
-        this.judgeVoting = judgeVoting;
         this.clock = clock;
         this.listener = listener;
     }
@@ -75,12 +72,15 @@ final class VerifyOrchestrator {
      * <p>Implements FR2 of add-stage-engine.
      *
      * @param stage the stage whose ordered verify list runs; the list may be empty
-     * @param context the task context threaded through to judge checks (task 4.4)
+     * @param context the task context every check round's request carries
      * @param workspace the opaque working copy the checks operate on
      * @param key the {@code (taskId, stage, attempt)} key the per-check events carry
      * @param state the round's last persisted state, its pending entries' carrier ({@link PendingRound}, D21)
      * @param token the token {@link RoundExecution} took for the round; {@code null} in the in-place run
-     * @return the results of the checks that ran plus the judge votes' participant entries
+     * @return the results of the checks that ran plus one {@code verdict} participant entry per
+     *     judge check that was requested, named by the registry entry its block resolved to and
+     *     its {@code vote} the request's 0-based ordinal among them (task 4.3 of
+     *     extract-agent-round-runner)
      */
     VerificationResult verify(
             StageDefinition stage,
@@ -92,13 +92,13 @@ final class VerifyOrchestrator {
         var checks = stage.verify();
         var round = new PendingRound(stage, context, workspace, key, state, token);
         var results = new ArrayList<CheckResult>();
-        var judgePerVote = new ArrayList<Map<String, ModelUsage>>();
+        var votes = new ArrayList<ParticipantUsage>();
         for (int i = 0; i < checks.size(); i++) {
             var check = checks.get(i);
             var ref = CheckRef.of(i, check);
             Events.emit(listener, new EngineEvent.CheckStarted(key, ref));
             var start = clock.instant();
-            var ran = runCheck(check, ref, context, round, judgePerVote);
+            var ran = runCheck(check, ref, round, votes);
             var duration = Duration.between(start, clock.instant());
             var result = new CheckResult(ref, ran.verdict(), duration);
             results.add(result);
@@ -107,56 +107,52 @@ final class VerifyOrchestrator {
                 break;
             }
         }
-        var votes = new ArrayList<ParticipantUsage>();
-        for (int vote = 0; vote < judgePerVote.size(); vote++) {
-            votes.add(Participants.verdict(Participants.JUDGE_EXECUTOR, vote, judgePerVote.get(vote)));
-        }
         return new VerificationResult(results, votes);
     }
 
     /**
      * Dispatches one check by an exhaustive switch over the sealed {@link VerifyCheck}
-     * (design D3): an executor check by its executor name (see {@link #runExecutorCheck}), and
-     * {@link VerifyCheck.Judge} to the {@link JudgeVoting} majority loop — whose per-vote
-     * token usage is appended to {@code judgePerVote}, from which the run's {@code verdict}
-     * participant entries are built (NFR-C1; FR15 of define-executor-contract). The whole dispatch is wrapped so any {@link RuntimeException} a check
-     * adapter throws is caught, logged at ERROR at the point of capture, and turned into a
-     * {@link VerdictAnswer.InfrastructureFailure} carrying the full stack trace in its details,
-     * which the derivation reads as {@link Verdict.CannotVerify} (FR4,
-     * NFR-O1) — a check that could not run is an infrastructure failure, not a quality
-     * one. No {@code default} arm, so a new variant fails to compile. An executor check's {@link
-     * CheckOutcome} rides beside the verdict, a thrown adapter's as {@code failed/infrastructure}.
+     * (design D3): an executor check as it is, and a {@link VerifyCheck.Judge} as its {@link
+     * VerifyCheck.Judge#asExecutorCheck() check-round view} — one {@code verdict} request through
+     * the same check rounds (design D2 of extract-agent-round-runner), whose reported token usage is
+     * appended to {@code votes} as the round's next {@code verdict} participant entry, named by the
+     * executor the check's block resolved to ({@link VerifyCheck.Executor#executorName()}) and
+     * numbered by its 0-based ordinal among the round's judge requests (NFR-C1; FR15 of
+     * define-executor-contract; FR4 of extract-agent-round-runner). The whole dispatch is wrapped so any {@link
+     * RuntimeException} a check adapter throws is caught, logged at ERROR at the point of capture,
+     * and turned into a {@link VerdictAnswer.InfrastructureFailure} carrying the full stack trace in
+     * its details, which the derivation reads as {@link Verdict.CannotVerify} (FR4, NFR-O1) — a
+     * check that could not run is an infrastructure failure, not a quality one. No {@code default}
+     * arm, so a new variant fails to compile. The check's {@link CheckOutcome} rides beside the
+     * verdict, a thrown adapter's as {@code failed/infrastructure}.
      *
      * @param check the check to run
      * @param ref the check's identity, named in the ERROR log on an adapter throw
-     * @param context the task context threaded through to judge checks (FR7)
-     * @param round the open round the check verifies, its working copy included
-     * @param judgePerVote the run's accumulator of per-vote judge token usage
+     * @param round the open round the check verifies, its working copy and task context included
+     * @param votes the run's accumulator of judge {@code verdict} participant entries
      * @return the verdict the runner reached, or a {@code CannotVerify} on an adapter throw, with
-     *     an executor check's outcome
+     *     the check's outcome
      */
-    private Ran runCheck(
-            VerifyCheck check,
-            CheckRef ref,
-            TaskContext context,
-            PendingRound round,
-            List<Map<String, ModelUsage>> judgePerVote) {
+    private Ran runCheck(VerifyCheck check, CheckRef ref, PendingRound round, List<ParticipantUsage> votes) {
+        var executorCheck =
+                switch (check) {
+                    case VerifyCheck.Executor e -> e;
+                    case VerifyCheck.Judge j -> j.asExecutorCheck();
+                };
         try {
-            return switch (check) {
-                case VerifyCheck.Executor e -> runExecutorCheck(e, ref, round);
-                case VerifyCheck.Judge j -> {
-                    var result = judgeVoting.vote(j, context, round.workspace());
-                    judgePerVote.addAll(result.perVote());
-                    yield new Ran(result.verdict(), null);
-                }
-            };
+            var polled = checkRounds.answer(executorCheck, ref, round);
+            var verdict = VerdictDerivation.derive(polled.answer(), executorCheck.threshold());
+            if (check instanceof VerifyCheck.Judge) {
+                votes.add(Participants.verdict(executorCheck.executorName(), votes.size(), polled.byModel()));
+                warnIfCannotVerify(ref, verdict);
+            }
+            return new Ran(verdict, polled.outcome());
         } catch (RuntimeException ex) {
             log.error(OperatorEvent.CHECK_ADAPTER_THREW.head() + "check adapter threw for {}", ref, ex);
             // The trace quotes whatever the failing adapter captured — a command's stderr, a
             // daemon's refusal — so `StackTraces.render` hands it over carried (design D4); the
             // factory-authored reason beside it is minted here to match the field's type.
-            // A failed status has no levels to judge, so the threshold plays no role: the default
-            // stands in for a judge check, which declares none.
+            // A failed status has no levels to judge, so the threshold plays no role.
             var failed = new ExecutionResult.Failed(
                     ExecutionResult.FailureClass.INFRASTRUCTURE,
                     UntrustedText.factory("check adapter threw"),
@@ -164,22 +160,26 @@ final class VerifyOrchestrator {
                     StackTraces.render(ex));
             return new Ran(
                     VerdictDerivation.derive(CheckRoundAnswers.of(failed), Threshold.DEFAULT),
-                    check instanceof VerifyCheck.Executor e ? new CheckOutcome(e.executorName(), failed, null) : null);
+                    new CheckOutcome(executorCheck.executorName(), failed, null));
         }
     }
 
     /**
-     * Runs an executor check as check rounds on the engine's port through {@link PendingPoll} — every
-     * executor alike, the registry behind the port resolving the check's executor (design D18) — and
-     * judges the answer against the check's threshold by {@link VerdictDerivation} (D5).
-     *
-     * <p>Implements FR1, FR2, FR7, UX2 of migrate-verify-to-executor-contract.
+     * The operator's line for a judge check that cannot verify (factory-logging, "No silent
+     * degradation"): the reason and details its round's answer was derived to. One line for one
+     * fault, at the decision: neither the criteria preflight nor the round logs it, and a thrown
+     * adapter has its ERROR instead.
      */
-    private Ran runExecutorCheck(VerifyCheck.Executor check, CheckRef ref, PendingRound round) {
-        var polled = checkRounds.answer(check, ref, round);
-        return new Ran(VerdictDerivation.derive(polled.answer(), check.threshold()), polled.outcome());
+    private static void warnIfCannotVerify(CheckRef ref, Verdict verdict) {
+        if (verdict instanceof Verdict.CannotVerify cannotVerify) {
+            log.warn(
+                    OperatorEvent.JUDGE_CANNOT_VERIFY_BY_DECISION.head() + "judge check {} cannot verify: {} ({})",
+                    ref.label().forLog(),
+                    cannotVerify.reason().forLog(),
+                    cannotVerify.details().forLog());
+        }
     }
 
-    /** A check's verdict and, for an executor check, its outcome. */
-    private record Ran(Verdict verdict, @Nullable CheckOutcome outcome) {}
+    /** A check's verdict and its outcome. */
+    private record Ran(Verdict verdict, CheckOutcome outcome) {}
 }

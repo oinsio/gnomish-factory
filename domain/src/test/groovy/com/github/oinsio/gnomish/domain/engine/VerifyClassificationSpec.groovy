@@ -1,8 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
-import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyingStages
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -27,7 +25,7 @@ class VerifyClassificationSpec extends VerifyOrchestratorSpecBase {
     // Scenario: pipeline/stage-engine / A judge check classifies by its votes
     def "classifies each normative table row as its table class: #situation"() {
         given: 'the orchestrator built over the scripted fakes for this row'
-        def orchestrator = orchestrator(builtinRunner, commandRunner, externalClient, judgeVoter)
+        def orchestrator = orchestrator(builtinRunner, commandRunner, externalClient, judges)
 
         when: 'the single-check verify list for this row is verified'
         def result = orchestrator.verify(VerifyingStages.of([check] as List<VerifyCheck>), CONTEXT, WORKSPACE, KEY, TaskState.atStageStart('build'), null)
@@ -37,52 +35,45 @@ class VerifyClassificationSpec extends VerifyOrchestratorSpecBase {
         expectedClass.isInstance(verdict)
 
         where: 'one row per line of the normative Fail/CannotVerify table (M4)'
-        situation | check | builtinRunner | commandRunner | externalClient | judgeVoter || expectedClass
+        situation | check | builtinRunner | commandRunner | externalClient | judges || expectedClass
         // M4 row 1 — command exit code != 0 -> Fail (quality)
         'command exit code != 0' | command('./gradlew test') | new ScriptedCheckRounds() | new ScriptedCheckRounds([
             new Verdict.Fail([
                 new Finding('exit 1', null, null)
             ])
-        ]) | new ScriptedCheckRounds() | new ScriptedJudgeVoter() || Verdict.Fail
+        ]) | new ScriptedCheckRounds() | new ScriptedCheckRounds() || Verdict.Fail
         // M4 row 2 — command binary not found / cannot start -> CannotVerify
         'command binary not found' | command('missing-bin') | new ScriptedCheckRounds() | new ScriptedCheckRounds([
             new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('no such file'))
-        ]) | new ScriptedCheckRounds() | new ScriptedJudgeVoter() || Verdict.CannotVerify
+        ]) | new ScriptedCheckRounds() | new ScriptedCheckRounds() || Verdict.CannotVerify
         // M4 row 3 — external check's executor answers failure -> Fail (quality)
         'external poll returns failure' | external('ci/gate', SEC, TIMEOUT) | new ScriptedCheckRounds() | new ScriptedCheckRounds() | new ScriptedCheckRounds([
             new Verdict.Fail([
                 new Finding('gate red', null, null)
             ])
-        ]) | new ScriptedJudgeVoter() || Verdict.Fail
+        ]) | new ScriptedCheckRounds() || Verdict.Fail
         // M4 row 4 — external check still pending at its timeout -> Fail (quality, the default class)
         'external poll timeout elapsed' | external('ci/slow', SEC, TIMEOUT) | new ScriptedCheckRounds() | new ScriptedCheckRounds() | new ScriptedCheckRounds([
             RUNNING,
             RUNNING,
             RUNNING,
             RUNNING
-        ]) | new ScriptedJudgeVoter() || Verdict.Fail
+        ]) | new ScriptedCheckRounds() || Verdict.Fail
         // M4 row 5 — external check id unknown to the service -> CannotVerify
         'external check id unknown' | external('ci/missing', SEC, TIMEOUT) | new ScriptedCheckRounds() | new ScriptedCheckRounds() | new ScriptedCheckRounds([
             new Verdict.CannotVerify(UntrustedText.tracker('check id unknown'), UntrustedText.tracker('no such check'))
-        ]) | new ScriptedJudgeVoter() || Verdict.CannotVerify
-        // M4 row 6 — judge majority of votes negative -> Fail (quality)
-        'judge majority negative' | judge(3) | new ScriptedCheckRounds() | new ScriptedCheckRounds() | new ScriptedCheckRounds() | new ScriptedJudgeVoter([
-            failVote(),
-            passVote(),
-            failVote()
+        ]) | new ScriptedCheckRounds() || Verdict.CannotVerify
+        // M4 row 6 — judge verdict negative -> Fail (quality); the judge's one verdict request
+        //     answers a failing SARIF verdict (design D2 of extract-agent-round-runner)
+        'judge verdict negative' | judge() | new ScriptedCheckRounds() | new ScriptedCheckRounds() | new ScriptedCheckRounds() | new ScriptedCheckRounds([
+            failingVerdict()
         ]) || Verdict.Fail
-        // M4 row 7 — judge model reply unparseable as verdict -> CannotVerify
-        'judge reply unparseable' | judge(3) | new ScriptedCheckRounds() | new ScriptedCheckRounds() | new ScriptedCheckRounds() | new ScriptedJudgeVoter([
-            new JudgeVoter.Vote(new Verdict.CannotVerify(UntrustedText.subprocess('unparseable verdict'), UntrustedText.subprocess('not JSON')), [:])
-        ]) || Verdict.CannotVerify
-        // M4 row 8 — judge any single vote CannotVerify -> CannotVerify (whole check)
-        'judge any single vote CannotVerify' | judge(3) | new ScriptedCheckRounds() | new ScriptedCheckRounds() | new ScriptedCheckRounds() | new ScriptedJudgeVoter([
-            passVote(),
-            new JudgeVoter.Vote(new Verdict.CannotVerify(UntrustedText.subprocess('service down'), UntrustedText.subprocess('timeout')), [:]),
-            passVote()
+        // M4 row 7 — judge model reply unparseable as verdict -> CannotVerify: the answer is no verdict
+        'judge reply unparseable' | judge() | new ScriptedCheckRounds() | new ScriptedCheckRounds() | new ScriptedCheckRounds() | new ScriptedCheckRounds([
+            new VerdictAnswer.Malformed(UntrustedText.agent('not JSON'))
         ]) || Verdict.CannotVerify
         // M4 row 9 — any check adapter throws -> CannotVerify (caught, stack trace kept)
-        'check adapter throws' | command('./gradlew test') | new ScriptedCheckRounds() | throwingCommandRunner() | new ScriptedCheckRounds() | new ScriptedJudgeVoter() || Verdict.CannotVerify
+        'check adapter throws' | command('./gradlew test') | new ScriptedCheckRounds() | throwingCommandRunner() | new ScriptedCheckRounds() | new ScriptedCheckRounds() || Verdict.CannotVerify
     }
 
     // --- fixtures -----------------------------------------------------------------
@@ -91,12 +82,10 @@ class VerifyClassificationSpec extends VerifyOrchestratorSpecBase {
     static final Duration TIMEOUT = Duration.ofSeconds(3)
     static final ExecutionResult.Pending RUNNING = ScriptedCheckRounds.pending()
 
-    static JudgeVoter.Vote passVote() {
-        new JudgeVoter.Vote(new Verdict.Pass(null, []), [:])
-    }
-
-    static JudgeVoter.Vote failVote() {
-        new JudgeVoter.Vote(new Verdict.Fail([]), [:])
+    static VerdictAnswer failingVerdict() {
+        new VerdictAnswer.Sarif([
+            new VerdictAnswer.Result(ResultLevel.ERROR, new Finding('criteria not met', null, null))
+        ], null)
     }
 
     static ScriptedCheckRounds throwingCommandRunner() {

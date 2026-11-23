@@ -47,8 +47,6 @@ class ClaudeVocabularyBoundarySpec extends Specification {
 
     /** The old round path: each class with the task that deletes it. */
     static final Map<String, String> OLD_ROUND = [
-        CliJudgeVoter : 'task 4.1 deletes it',
-        JudgeRoundExecution : 'task 4.1 deletes it',
         CliStageExecutor : 'task 5.1 deletes it',
         ExecutorRoundExecution: 'task 5.1 deletes it',
     ]
@@ -58,16 +56,13 @@ class ClaudeVocabularyBoundarySpec extends Specification {
      * old round class is gone (asserted below).
      */
     static final Map<String, String> KEPT_BY_OLD_ROUND = [
-        StreamDrain : 'the stream-json drain of ExecutorRoundExecution and JudgeRoundExecution; dead once 4.1 and 5.1 delete them (the runner drains through Drain)',
+        StreamDrain : 'the stream-json drain of ExecutorRoundExecution; dead once 5.1 deletes it (the runner drains through Drain)',
         MissingResultEventException: 'thrown by the old path\'s AgentRoundResultExtractor.extract, caught by the old round classes only; dead with them',
         AgentRoundEquipment : 'the old round classes\' equipment, holding the dialect\'s result extractor; dead with them',
-        JudgeVerdictExtractor : 'its extract(), over FinalTextObject, serves JudgeRoundExecution only; task 4.1 removes the arm, sarif() stays dialect-neutral',
     ]
 
     /** Text-scan exemptions: the files outside the dialect that still spell its vocabulary. */
     static final Map<String, String> VOCABULARY_TRANSITIONAL = [
-        CliJudgeVoter : OLD_ROUND.CliJudgeVoter,
-        JudgeRoundExecution : OLD_ROUND.JudgeRoundExecution,
         CliStageExecutor : OLD_ROUND.CliStageExecutor,
         ExecutorRoundExecution : OLD_ROUND.ExecutorRoundExecution,
         StreamDrain : KEPT_BY_OLD_ROUND.StreamDrain,
@@ -78,6 +73,7 @@ class ClaudeVocabularyBoundarySpec extends Specification {
     static final Map<String, String> WIRING = [
         'com.github.oinsio.gnomish.app.ManualRunConfiguration' : 'the composition root binds the dialect\'s settings judge (ClaudeSettings::validate)',
         'com.github.oinsio.gnomish.adapter.agent.AgentCredentials': 'the doctor\'s agent-credential check reads the dialect\'s credential set (ClaudeEnvironment.SECRETS), which the dialect alone spells',
+        'com.github.oinsio.gnomish.app.ClaudeEntry' : 'the claude registry entry builds the dialect over the run\'s binary and allowlist (ClaudeDialect.of; task 4.0a)',
     ]
 
     /**

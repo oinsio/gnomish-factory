@@ -17,9 +17,10 @@ import spock.lang.TempDir
 
 /**
  * FR1, FR2, FR3 of fix-operator-blockers: the argv each role actually launches carries its
- * permission mode and the MCP exclusion. The command is captured at the environment port, as
- * the two production consumers ({@link ExecutorRoundExecution}, {@link JudgeRoundExecution})
- * hand it over, so the spec observes the launched argv rather than a renderer in isolation.
+ * permission mode and the MCP exclusion. The stage round's command is captured at the environment
+ * port, as {@link ExecutorRoundExecution} hands it over, so the spec observes the launched argv
+ * rather than a renderer in isolation; a judge's verdict request is the agent round runner's, its
+ * argv the readOnly policy's (task 4.1 of extract-agent-round-runner).
  * The round itself ends at once on an interrupted wait; only the captured command matters.
  */
 class AgentCommandLineSpec extends Specification {
@@ -57,15 +58,9 @@ class AgentCommandLineSpec extends Specification {
         launched.first().command()
     }
 
-    private List<String> judgeArgv() {
-        JudgeRoundExecution.run(
-                equipment(),
-                new JudgeVerdictExtractor(),
-                new VerifyCheck.Judge('criteria.md', 'claude-fake-judge-1', [:], 1),
-                recordingEnvironment(),
-                'prompt')
-        assert launched.size() == 1
-        launched.first().command()
+    /** The argv of a judge's verdict request: the readOnly policy every check round sends (CheckRound). */
+    private static List<String> judgeArgv() {
+        AgentCommandLine.of('claude', 'claude-fake-judge-1', [:], new Policy.ReadOnly(), Bounds.none())
     }
 
     private static boolean carriesPair(List<String> argv, String flag, String value) {
@@ -86,9 +81,10 @@ class AgentCommandLineSpec extends Specification {
         carriesPair(argv, '--allowedTools', "Write(${workspaceDir.resolve('decision.json')})".toString())
     }
 
-    // FR2, FR3: the judge vote denies anything outside its read-only set and loads no MCP server
+    // FR2, FR3: a judge's verdict request denies anything outside its read-only set and loads no
+    //     MCP server (the request's readOnly policy, design D2 and D5 of extract-agent-round-runner)
     // Scenario: executor/agent-executor / Judge never auto-approves an edit
-    def "FR2, FR3: a judge vote launches with --permission-mode dontAsk and --strict-mcp-config"() {
+    def "FR2, FR3: a judge's verdict request launches with --permission-mode dontAsk and --strict-mcp-config"() {
         when:
         def argv = judgeArgv()
 
@@ -98,7 +94,7 @@ class AgentCommandLineSpec extends Specification {
         !argv.contains('acceptEdits')
         !argv.contains('bypassPermissions')
 
-        and: 'the transitional judge vote is the readOnly policy: the whole read-only set'
+        and: 'the readOnly policy is the whole read-only set'
         carriesPair(argv, '--allowedTools', 'Read,Grep,Glob')
     }
 
@@ -144,7 +140,6 @@ class AgentCommandLineSpec extends Specification {
 
         when:
         def executor = executorArgv()
-        launched.clear()
         def judge = judgeArgv()
 
         then:

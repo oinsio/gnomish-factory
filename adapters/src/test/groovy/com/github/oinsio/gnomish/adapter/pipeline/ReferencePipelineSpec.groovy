@@ -178,12 +178,12 @@ class ReferencePipelineSpec extends Specification {
         external.executorName() == 'github-actions'
         external.settings() == [:]
 
-        and: 'judge: criteria file, pinned model, opaque settings, odd vote count >= 1'
+        and: 'judge: criteria file and its executor block — type, pinned model, opaque settings'
         def judge = verify[3] as VerifyCheck.Judge
         judge.criteriaFile() == 'stages/implement/acceptance.md'
-        judge.model() == 'judge-model'
-        judge.settings() == [maxTurns: 3]
-        judge.votes() == 3
+        judge.executor().type() == ExecutorType.AGENT_CLI
+        judge.executor().model() == 'judge-model'
+        judge.executor().settings() == [maxTurns: 3]
     }
 
     // Scenario: pipeline/pipeline-config / Internal input resolves to an earlier output

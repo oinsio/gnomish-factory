@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.agent;
 import com.github.oinsio.gnomish.adapter.briefing.BriefingSections;
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw;
 import com.github.oinsio.gnomish.adapter.law.UnreadableLawFileException;
+import com.github.oinsio.gnomish.app.describe.ProgramChannel;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import java.util.List;
@@ -32,14 +33,15 @@ import java.util.List;
  */
 public record ExecutorPromptBuilder(PipelineLaw law) {
 
+    /** The variable is named by its one owner, {@link ProgramChannel}, so the prompt cannot drift from the wire. */
     private static final String ANSWER_FILE_INSTRUCTION = """
             === Asking a human ===
             If you need a human decision before you can proceed, write a JSON \
             object of the form {"kind": "decision-request", "question": "...", \
-            "options": ["...", "..."]} to the path in the $GNOMISH_ANSWER_FILE \
+            "options": ["...", "..."]} to the path in the $%s \
             environment variable and finish your turn. Leave that file untouched \
             if you do not need to ask anything.
-            """;
+            """.formatted(ProgramChannel.ANSWER_FILE_VARIABLE);
 
     private static final String REWORK_PREAMBLE = """
             === Rework, not restart ===
@@ -105,12 +107,13 @@ public record ExecutorPromptBuilder(PipelineLaw law) {
             case COMMAND -> "command: " + check.checkId();
             case EXTERNAL -> "external: " + check.checkId();
             case EXECUTOR -> "executor " + check.executorName() + ": " + check.checkId();
+            case JUDGE -> "judge: " + check.checkId();
         };
     }
 
     private String describeJudge(VerifyCheck.Judge judge) {
         String criteria = law.controlFile(judge.criteriaFile());
-        return "judge: " + judge.criteriaFile() + " (model " + judge.model() + ")\n  Acceptance criteria:\n  "
-                + criteria.replace("\n", "\n  ");
+        return "judge: " + judge.criteriaFile() + " (model " + judge.executor().model()
+                + ")\n  Acceptance criteria:\n  " + criteria.replace("\n", "\n  ");
     }
 }

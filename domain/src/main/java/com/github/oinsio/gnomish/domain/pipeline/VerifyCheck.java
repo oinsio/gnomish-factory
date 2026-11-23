@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.domain.pipeline;
 
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -91,21 +92,25 @@ public sealed interface VerifyCheck {
          * migrate-verify-to-executor-contract).
          */
         public boolean polled() {
-            return token == Token.EXTERNAL || !(executorName.equals(FILES_EXIST) || executorName.equals(SHELL));
+            return token == Token.EXTERNAL
+                    || (token != Token.JUDGE && !(executorName.equals(FILES_EXIST) || executorName.equals(SHELL)));
         }
     }
 
     /**
      * The manifest form an {@link Executor} check was declared with: one of the three
-     * sugar tokens, or the explicit {@code executor:} form.
+     * sugar tokens, the explicit {@code executor:} form, or a {@code judge} check as its
+     * check round sees it ({@link Judge#asExecutorCheck()}).
      *
-     * <p>Implements FR1, UX2 of migrate-verify-to-executor-contract.
+     * <p>Implements FR1, UX2 of migrate-verify-to-executor-contract; FR4 of
+     * extract-agent-round-runner.
      */
     enum Token {
         BUILTIN,
         COMMAND,
         EXTERNAL,
-        EXECUTOR
+        EXECUTOR,
+        JUDGE
     }
 
     /**
@@ -135,24 +140,53 @@ public sealed interface VerifyCheck {
     }
 
     /**
-     * An LLM-as-judge verification via the executor port: acceptance criteria plus
-     * pinned model settings, yielding a structured verdict. The {@code votes} rule
-     * (&ge; 1 and odd) is a validator concern, carried here unvalidated.
+     * An LLM-as-judge verification: acceptance criteria plus the executor block that does the
+     * judging — the very {@link StageDefinition.Executor} a stage's {@code executor:} declares,
+     * mapped by the one block mapper and judged by the same rules (design D12 of
+     * extract-agent-round-runner). The check has no {@code model}, {@code settings} or {@code
+     * votes} of its own: who judges, with which model and settings, is the block's, and a second
+     * opinion is a second {@code judge} check (design D2).
      *
-     * <p>Implements FR2 and carries the FR11 fields of load-pipeline-config.
+     * <p>Implements FR2 of load-pipeline-config; FR4, FR13, UX1 of extract-agent-round-runner.
      *
      * @param criteriaFile path of the acceptance-criteria file, relative to the
      *     {@code .gnomish/} root (a plain string — the domain never touches the
      *     filesystem, D1; existence is checked by the adapter, FR6)
-     * @param model the judge model, pinned for reproducibility (FR11)
-     * @param settings opaque model settings as plain JDK types (D5a), possibly
-     *     empty; immutable
-     * @param votes how many judge votes to collect (majority verdict)
+     * @param executor the check's executor block: its type, pinned model, settings and, for a
+     *     {@code program}, the declaration it names; never null
      */
-    record Judge(String criteriaFile, String model, Map<String, Object> settings, int votes) implements VerifyCheck {
+    record Judge(String criteriaFile, StageDefinition.Executor executor) implements VerifyCheck {
 
-        public Judge {
-            settings = Map.copyOf(settings);
+        /**
+         * The judge as the check-round chain reads every check (design D2 of
+         * extract-agent-round-runner): one {@code verdict} request to the executor its block
+         * resolves to ({@link StageDefinition.Executor#registryName()}), with the block's settings
+         * and its pinned model under {@link ExecutorSettings#MODEL_KEY} when it names one, the
+         * criteria file as the check's identifier — the text the request's role input is rendered
+         * from — the default threshold, no pin paths, no poll timing and a fresh box. One type for
+         * both check kinds, so the chain has no judge arm of its own.
+         *
+         * <p>Implements FR4, M3 of extract-agent-round-runner.
+         *
+         * @return the check round's view of this judge; never null
+         */
+        public Executor asExecutorCheck() {
+            Map<String, Object> settings = new LinkedHashMap<>(executor.settings());
+            if (!executor.model().isBlank()) {
+                settings.put(ExecutorSettings.MODEL_KEY, executor.model());
+            }
+            return new Executor(
+                    Token.JUDGE,
+                    executor.registryName(),
+                    criteriaFile,
+                    settings,
+                    Duration.ZERO,
+                    Duration.ZERO,
+                    TimeoutClass.QUALITY,
+                    List.of(),
+                    VerifyIn.FRESH_BOX,
+                    Threshold.DEFAULT,
+                    List.of());
         }
     }
 }

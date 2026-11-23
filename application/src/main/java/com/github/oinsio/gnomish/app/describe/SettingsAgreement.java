@@ -36,13 +36,20 @@ import org.jspecify.annotations.Nullable;
  * — the check's own, alone ({@link #checkErrors}; FR1 of migrate-verify-to-executor-contract,
  * pipeline-config "Explicit executor form") — each violation located at the check's {@code
  * verify[<i>].settings[.<path>]}, or {@code verify[<i>].params[.<path>]} for the {@code external}
- * form. Pure.
+ * form. A {@code judge} check whose executor block names the executor is judged exactly as a stage
+ * naming it is — the same merge over the block, which is the same block a stage declares ({@link
+ * #judgeErrors}; design D12 of extract-agent-round-runner) — each violation located under the
+ * check's {@code verify[<i>].executor}. Pure.
  *
- * <p>Implements FR9, UX1 of define-executor-contract; FR1 of migrate-verify-to-executor-contract.
+ * <p>Implements FR9, UX1 of define-executor-contract; FR1 of migrate-verify-to-executor-contract;
+ * FR13, UX1 of extract-agent-round-runner.
  */
 final class SettingsAgreement {
 
     private static final String CONFIG = "config.yaml";
+
+    /** The location of a stage's own executor block. */
+    private static final String STAGE_BLOCK = "executor";
 
     private SettingsAgreement() {}
 
@@ -63,12 +70,39 @@ final class SettingsAgreement {
                 .toList();
         Set<ConfigError> errors = new LinkedHashSet<>();
         if (stages.isEmpty()) {
-            errors.addAll(judged(name, null, ExecutorSettings.of(declaration), describe));
+            errors.addAll(judged(name, null, STAGE_BLOCK, ExecutorSettings.of(declaration), describe));
         }
         for (StageDefinition stage : stages) {
-            errors.addAll(judged(name, stage, ExecutorSettings.of(declaration, stage.executor()), describe));
+            errors.addAll(
+                    judged(name, stage, STAGE_BLOCK, ExecutorSettings.of(declaration, stage.executor()), describe));
         }
         return List.copyOf(errors);
+    }
+
+    /**
+     * The located errors of the settings {@code judge}'s executor block sends {@code declaration}'s
+     * executor: the merge a stage's block gets, over the judge's block (design D12 of
+     * extract-agent-round-runner), each violation located under {@code verify[<index>].executor}.
+     *
+     * @param stage the stage whose verify list holds the judge; never null
+     * @param index the judge's position in that list
+     * @param judge the judge check, whose block names {@code declaration}; never null
+     * @param declaration the law's declaration the block names; never null
+     * @param describe that executor's describe answer, in the protocol this factory speaks; never null
+     * @return every located error, in the validator's order; immutable, possibly empty
+     */
+    static List<ConfigError> judgeErrors(
+            StageDefinition stage,
+            int index,
+            VerifyCheck.Judge judge,
+            ExecutorDeclaration declaration,
+            Describe describe) {
+        return judged(
+                declaration.name(),
+                stage,
+                "verify[%d].executor".formatted(index),
+                ExecutorSettings.of(declaration, judge.executor()),
+                describe);
     }
 
     /**
@@ -102,13 +136,13 @@ final class SettingsAgreement {
     }
 
     private static List<ConfigError> judged(
-            String name, @Nullable StageDefinition stage, ExecutorSettings settings, Describe describe) {
+            String name, @Nullable StageDefinition stage, String where, ExecutorSettings settings, Describe describe) {
         return switch (SettingsSchema.judge(describe.settingsSchema(), settings.values())) {
             case SettingsJudgement.Accepted ignored -> List.of();
             case SettingsJudgement.Rejected rejected -> {
                 List<ConfigError> located = new ArrayList<>();
                 for (SettingsViolation violation : rejected.violations()) {
-                    located.add(located(name, stage, settings, violation));
+                    located.add(located(name, stage, where, settings, violation));
                 }
                 yield located;
             }
@@ -122,19 +156,23 @@ final class SettingsAgreement {
     }
 
     private static ConfigError located(
-            String name, @Nullable StageDefinition stage, ExecutorSettings settings, SettingsViolation violation) {
+            String name,
+            @Nullable StageDefinition stage,
+            String where,
+            ExecutorSettings settings,
+            SettingsViolation violation) {
         String path = violation.path();
         String message = message(name, violation);
         ExecutorSettings.Origin origin = settings.originOf(path);
         if (stage == null || origin == ExecutorSettings.Origin.DECLARATION) {
-            String where = "executors." + name + ".settings";
-            return new ConfigError(CONFIG, path.isEmpty() ? where : where + "." + path, message);
+            String declared = "executors." + name + ".settings";
+            return new ConfigError(CONFIG, path.isEmpty() ? declared : declared + "." + path, message);
         }
         String manifest = "stages/%s/stage.yaml".formatted(stage.name());
         if (origin == ExecutorSettings.Origin.MODEL) {
-            return new ConfigError(manifest, "executor.model", message);
+            return new ConfigError(manifest, where + ".model", message);
         }
-        return new ConfigError(manifest, "executor.settings." + path, message);
+        return new ConfigError(manifest, where + ".settings." + path, message);
     }
 
     private static String message(String name, SettingsViolation violation) {

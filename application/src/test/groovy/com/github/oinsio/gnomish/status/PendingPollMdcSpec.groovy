@@ -17,7 +17,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
@@ -63,7 +62,6 @@ class PendingPollMdcSpec extends Specification {
             result(new ExecutionResult.Completed(), null)
         ])
         def ports = new EnginePorts(CheckRouting.of(stages, new ScriptedCheckRounds(), new ScriptedCheckRounds(), checks),
-                new ScriptedJudgeVoter(),
                 new CompositeEngineEventListener([
                     new MdcEventListener(),
                     new LoggingEventListener()

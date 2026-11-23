@@ -3,9 +3,7 @@ package com.github.oinsio.gnomish.adapter.agent
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.claude.AgentRoundResultExtractor
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
-import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
@@ -67,31 +65,6 @@ class RoundInterruptedWaitSpec extends Specification {
         and: 'the cancellation is not swallowed, and the round was discarded'
         stillInterrupted
         round.discarded
-    }
-
-    // FR11: the judge's side — the never-throw contract holds, and the reason names the interruption
-    def "FR11: an interrupted wait yields CannotVerify naming the interruption, not the timeout"() {
-        given:
-        def environment = Stub(TaskExecutionEnvironment) {
-            exec(_ as ExecCommand) >> new InterruptedWaitExecHandle()
-        }
-
-        when:
-        def vote = JudgeRoundExecution.run(
-                new AgentRoundEquipment(
-                        new FactoryProperties('factory-01', 'claude', null, null),
-                        new VirtualClock(),
-                        { event -> },
-                        new AgentRoundResultExtractor(), ChildEnvAllowlist.none(), RoundScratchDirectory.HOST_TEMP),
-                new JudgeVerdictExtractor(),
-                new VerifyCheck.Judge('criteria.md', 'claude-fake-judge-1', [:], 1),
-                environment,
-                'prompt')
-
-        then:
-        def verdict = vote.verdict() as Verdict.CannotVerify
-        verdict.reason().forLog().contains('interrupted')
-        !verdict.reason().forLog().contains('exceeded')
     }
 }
 

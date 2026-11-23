@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
@@ -110,7 +111,7 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'model-x', [:]),
                 'instructions.md',
                 (List<VerifyCheck>) [
-                    new VerifyCheck.Judge('acceptance.md', JUDGE_MODEL, [:], 1)
+                    JudgeChecks.agent('acceptance.md', JUDGE_MODEL)
                 ],
                 new AutonomyLimits(1), AdvancementMode.AUTO)
     }

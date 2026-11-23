@@ -7,7 +7,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
@@ -52,7 +51,7 @@ class ExecutorOutcomeTableSpec extends Specification {
         'instructions.md', [
             VerifyChecks.builtin('files_exist', [:])
         ], new AutonomyLimits(1), AdvancementMode.AUTO)
-        def ports = new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), listener, persistence, VirtualTimeEquipment.on(new VirtualClock()), RoundIdentity.inPlace())
+        def ports = new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), listener, persistence, VirtualTimeEquipment.on(new VirtualClock()), RoundIdentity.inPlace())
         new Engine().run(new PipelineDefinition('1', new AutonomyLimits(5), [stage]), CONTEXT,
         TaskState.atStageStart('build'), new FakeWorkspace(), ports)
     }

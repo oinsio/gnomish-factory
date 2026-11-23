@@ -59,10 +59,43 @@ class ClaudeDialectFinalTextAnswerSpec extends Specification {
         then:
         (answer as DialectAnswer.Malformed).reason().forLog().contains(words)
 
+        and: 'the reason quotes the final text it could not read'
+        (answer as DialectAnswer.Malformed).reason().forLog().contains('the final text was: ' + text)
+
         where:
         what | text || words
         'with no JSON object' | 'all good' || 'no JSON object'
         'whose object is not JSON' | '{"passed": tru}' || 'not valid JSON'
+        'whose object never closes' | '{"passed": true' || 'no JSON object'
+    }
+
+    // D5 of add-agent-executor: the final text is free text, so the answer is its first JSON object
+    //     — a fence stripped, prose around it ignored, braces nested inside it balanced, and a later
+    //     object never overriding it (moved from the judge-round extractor's specs, task 4.3)
+    def "FR3: the answer is the first JSON object of a final text with #shape"() {
+        when:
+        DialectAnswer answer = null
+        LogCaptureSupport.capture(ClaudeAnswer, Level.INFO) {
+            answer = dialect.answer(ClaudeDialectAnswerSpec.VERDICT, ClaudeDialectAnswerSpec.events(dialect, ClaudeDialectAnswerSpec.finalText(text)), answerFile)
+        }
+
+        then:
+        answer instanceof DialectAnswer.Written
+        def results = JSON.readTree(answerFile.toFile()).sarif.runs[0].results
+        results*.message*.text*.asText() == messages
+        results*.level*.asText().every {
+            it == (messages.isEmpty() ? 'none' : 'error')
+        }
+
+        where:
+        shape | text || messages
+        'nothing around it' | '{"passed": true}' || []
+        'a plain code fence' | '```\n{"passed": true}\n```' || []
+        'prose around it' | 'I reviewed the code carefully. {"passed": true} Thanks for reading.' || []
+        'nested braces' | '{"passed": true, "meta": {"nested": "value"}}' || []
+        'prose around a failing object' | 'I checked it. {"passed": false, "findings": ["no tests"]} Done.' || ['no tests']
+        'a pass, then a fail' | '{"passed": true} Actually, on reflection: {"passed": false, "findings": ["x"]}' || []
+        'a fail, then a pass' | 'Draft: {"passed": false, "findings": ["x"]} Final: {"passed": true}' || ['x']
     }
 
     def "FR3: a JSON null structured output is no structured output, so the final text is read"() {

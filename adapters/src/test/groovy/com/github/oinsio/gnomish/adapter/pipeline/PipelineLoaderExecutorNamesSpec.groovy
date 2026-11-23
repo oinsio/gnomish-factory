@@ -44,6 +44,24 @@ executors:
         }
     }
 
+    // FR14, D12 of extract-agent-round-runner: 'claude' is the reserved name of the agent entry
+    // Scenario: pipeline/pipeline-config / An agent block resolves to the reserved executor name
+    def "FR14: a law that declares an executor named claude is a located load error naming the built-in"() {
+        given:
+        writeValidTree()
+        write('config.yaml', DECLARED.formatted('claude'))
+
+        when:
+        def outcome = loadTree()
+
+        then:
+        outcome instanceof LoadOutcome.Invalid
+        (outcome as LoadOutcome.Invalid).errors().any {
+            it.file() == 'config.yaml' && it.where() == 'executors.claude' &&
+            it.message().contains("'claude' is a built-in's name")
+        }
+    }
+
     // Scenario: pipeline/pipeline-config / Unknown provider is a located load error
     def "an external check naming an executor of neither the built-ins nor the law is a located error listing their union"() {
         given:

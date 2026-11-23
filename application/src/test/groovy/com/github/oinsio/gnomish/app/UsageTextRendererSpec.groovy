@@ -128,7 +128,7 @@ class UsageTextRendererSpec extends Specification {
         def row = new UsageRow(attempt(0, 'passed', [
             Participants.transform(AttemptRecords.EXECUTOR,
             new ExecutorUsage(Duration.ofMillis(700), [], Unpriced.of(['m': new TokenUsage(1, 2, 3, 4)]))),
-            Participants.verdict(Participants.JUDGE_EXECUTOR, 0, Unpriced.of(['j': new TokenUsage(10, 20, 30, 40)]))
+            Participants.verdict('claude', 0, Unpriced.of(['j': new TokenUsage(10, 20, 30, 40)]))
         ], 'review'))
 
         when:
@@ -150,7 +150,7 @@ class UsageTextRendererSpec extends Specification {
     def "FR17: a row whose only entry is a judge vote shows no wall time"() {
         given:
         def row = new UsageRow(attempt(0, 'passed', [
-            Participants.verdict(Participants.JUDGE_EXECUTOR, 0, ['j': new com.github.oinsio.gnomish.domain.engine.ModelUsage(
+            Participants.verdict('claude', 0, ['j': new com.github.oinsio.gnomish.domain.engine.ModelUsage(
                         new TokenUsage(1, 1, 1, 1), new BigDecimal('0.5'))])
         ], 'review'))
 

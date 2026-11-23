@@ -22,7 +22,7 @@ import java.time.InstantSource
  * this class proves login the only way available: a trivial, cheap {@code claude -p} round (prompt
  * on stdin — FR24, D18 of add-sandbox-core) with a short timeout that must produce a real
  * stream-json {@code result} event. The round runs through the {@code TaskExecutionEnvironment}
- * port, the same seam {@code CliStageExecutor}/{@code CliJudgeVoter} use. Any of "binary not on
+ * port, the same seam {@code CliStageExecutor} and the agent round runner use. Any of "binary not on
  * PATH", "process fails to start", "round times out" (typically an interactive login prompt
  * blocking on stdin), or "no result event parsed" is treated as "not logged in" and reported with a
  * specific, actionable reason — never a hang, never a bare stack trace.

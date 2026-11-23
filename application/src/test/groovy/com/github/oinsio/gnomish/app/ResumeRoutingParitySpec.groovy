@@ -152,7 +152,7 @@ class ResumeRoutingParitySpec extends Specification implements RunChainFakes {
             taskRepository() >> Stub(TaskLifecycleStore)
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
             pendingVerification() >> Optional.empty()
         }
         def git = new TaskGit(Stub(TaskStoreGit), branches(), Stub(TaskWorktreeGit), HostGitRounds.NONE,

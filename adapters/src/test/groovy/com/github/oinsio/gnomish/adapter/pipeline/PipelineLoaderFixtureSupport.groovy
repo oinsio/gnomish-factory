@@ -90,8 +90,9 @@ verify:
     command: echo ok
   - type: judge
     criteriaFile: stages/plan/accept.md
-    model: judge-model
-    votes: 1
+    executor:
+      type: agent-cli
+      model: judge-model
 advancement: auto
 '''
     }

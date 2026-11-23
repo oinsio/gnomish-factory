@@ -6,7 +6,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.Snapshots
 import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
@@ -48,7 +47,7 @@ class EngineRunContractSpec extends Specification {
     private TaskOutcome run(List<VerifyCheck> verify, int attemptLimit = 3, TaskState state = TaskState.atStageStart('build')) {
         def stage = new StageDefinition('build', 'purpose', [], [], new StageDefinition.Executor(ExecutorType.API, 'model', [:]),
         'instructions.md', verify, new AutonomyLimits(attemptLimit), AdvancementMode.AUTO)
-        def ports = new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), externalClient), new ScriptedJudgeVoter(), new RecordingEventListener(), persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
+        def ports = new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), externalClient), new RecordingEventListener(), persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
         new Engine().run(new PipelineDefinition('1', new AutonomyLimits(attemptLimit), [stage]), CONTEXT, state, new FakeWorkspace(), ports)
     }
 

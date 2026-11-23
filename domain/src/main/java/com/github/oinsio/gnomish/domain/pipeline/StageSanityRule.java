@@ -18,14 +18,16 @@ import java.util.List;
  *       {@code interval <= timeout} (equal is valid) (FR11); and each of its
  *       pin paths must be a normalized relative path — no absolute prefix, no
  *       {@code .}/{@code ..} segment (FR16 of add-sandbox-core);</li>
- *   <li>each {@code judge} check must pin a non-blank {@code model} — the same
- *       reproducibility rationale as the executor model — and declare
- *       {@code votes} that are &ge; 1 and odd (FR11).</li>
+ *   <li>each {@code judge} check's executor block is judged by the same {@link
+ *       StageMechanismRule} as the stage's, located at {@code verify[<i>].executor.*}, and must
+ *       resolve to an executor that serves role {@code verdict} ({@link JudgeRoleRule}; design D12
+ *       of extract-agent-round-runner). The judge has no model or vote rule of its own: it has
+ *       neither field.</li>
  * </ol>
  *
  * <p>Restraint (no validation creep): {@code files-exist} and {@code shell}
  * checks carry no FR11 sanity rule and are never flagged — FR11 lists only
- * polled checks and {@code judge}. Executor and judge {@code settings} are
+ * polled checks and {@code judge}. Executor block {@code settings} are
  * an opaque pass-through map (Q1/D5a), accepted without inspecting keys,
  * values, or ranges. The {@code judge} {@code criteriaFile} existence is an
  * I/O-bound adapter concern (FR6, task 6.3), not checked here. Target liveness
@@ -43,7 +45,8 @@ import java.util.List;
  * FR16 of add-sandbox-core (the external-check pin-path form rule); FR10 of
  * define-executor-contract (the model rule's agent-type scope); FR2, UX2 of
  * add-command-executor (the command stage's mechanism rules); FR1 of
- * migrate-verify-to-executor-contract (the executor check).
+ * migrate-verify-to-executor-contract (the executor check); FR13, UX1 of extract-agent-round-runner
+ * (the judge's executor block).
  */
 public final class StageSanityRule {
 
@@ -70,7 +73,7 @@ public final class StageSanityRule {
 
     private static void validateStage(StageDefinition stage, List<ConfigError> errors) {
         String manifest = "stages/%s/stage.yaml".formatted(stage.name());
-        StageMechanismRule.validate(manifest, stage.executor(), errors);
+        StageMechanismRule.validate(manifest, MechanismFieldErrors.STAGE_BLOCK, stage.executor(), errors);
         int attemptLimit = stage.limits().attemptLimit();
         if (attemptLimit < 1) {
             errors.add(new ConfigError(
@@ -88,7 +91,7 @@ public final class StageSanityRule {
     private static void validateCheck(String manifest, int index, VerifyCheck check, List<ConfigError> errors) {
         switch (check) {
             case VerifyCheck.Executor executor -> validateExecutor(manifest, index, executor, errors);
-            case VerifyCheck.Judge judge -> validateJudge(manifest, index, judge, errors);
+            case VerifyCheck.Judge judge -> judgeBlock(manifest, index, judge, errors);
         }
     }
 
@@ -182,19 +185,9 @@ public final class StageSanityRule {
         return true;
     }
 
-    private static void validateJudge(String manifest, int index, VerifyCheck.Judge judge, List<ConfigError> errors) {
-        if (judge.model().isBlank()) {
-            errors.add(new ConfigError(
-                    manifest,
-                    "verify[%d].model".formatted(index),
-                    "missing required judge model; the model must be pinned in the manifest for reproducibility"));
-        }
-        int votes = judge.votes();
-        if (votes < 1 || votes % 2 == 0) {
-            errors.add(new ConfigError(
-                    manifest,
-                    "verify[%d].votes".formatted(index),
-                    "invalid judge vote count %d; votes must be at least 1 and odd".formatted(votes)));
-        }
+    private static void judgeBlock(String manifest, int index, VerifyCheck.Judge judge, List<ConfigError> errors) {
+        String where = "verify[%d].executor".formatted(index);
+        StageMechanismRule.validate(manifest, where, judge.executor(), errors);
+        JudgeRoleRule.validate(manifest, where, judge.executor(), errors);
     }
 }

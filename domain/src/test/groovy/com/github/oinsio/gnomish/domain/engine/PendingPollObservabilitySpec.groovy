@@ -2,11 +2,11 @@ package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyingStages
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 
@@ -176,7 +176,7 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         def throwing = new ScriptedExecutor()
         throwing.toThrow = new IllegalStateException('adapter broke')
         def chain = new VerifyOrchestrator(new PendingPoll(throwing, persistence, AttemptDelivery.assumedDelivered(),
-                VirtualTimeEquipment.on(clock, sleeper), listener), new JudgeVoting(new ScriptedJudgeVoter()), clock, listener)
+                VirtualTimeEquipment.on(clock, sleeper), listener), clock, listener)
 
         when:
         chain.verify(VerifyingStages.of([ci]), CONTEXT, WORKSPACE, KEY, STATE, TOKEN)
@@ -191,12 +191,13 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         finished.result().verdict() instanceof Verdict.CannotVerify
     }
 
-    // NFR-O1: a judge runs no executor rounds, so its finish event carries no outcome
-    def "NFR-O1: a judge check's finish event carries no outcome, even when its voter throws"() {
+    // NFR-O1; FR4 of extract-agent-round-runner: a judge check is a check round, so its finish event
+    //     carries its round's outcome under the entry its block resolved to — a throw's as failed/infrastructure
+    def "NFR-O1: a judge check's finish event carries its round's outcome, a throw's as failed/infrastructure"() {
         given:
         def listener = new RecordingEventListener()
-        def judge = new VerifyCheck.Judge('criteria.md', 'model', [:], 1)
-        def chain = new VerifyOrchestrator(poll(new ScriptedExecutor()), new JudgeVoting(new ScriptedJudgeVoter()), clock, listener)
+        def judge = JudgeChecks.agent('criteria.md', 'model')
+        def chain = new VerifyOrchestrator(poll(new ScriptedExecutor()), clock, listener)
 
         when:
         chain.verify(VerifyingStages.of([judge]), CONTEXT, WORKSPACE, KEY, STATE, TOKEN)
@@ -205,7 +206,8 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         def finished = listener.events.find {
             it instanceof EngineEvent.CheckFinished
         } as EngineEvent.CheckFinished
-        finished.outcome() == null
+        finished.outcome().executor() == 'claude'
+        (finished.outcome().status() as ExecutionResult.Failed).failureClass() == ExecutionResult.FailureClass.INFRASTRUCTURE
         finished.result().verdict() instanceof Verdict.CannotVerify
     }
 }

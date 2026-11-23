@@ -95,7 +95,7 @@ public final class CommandStageExecutor implements Executor {
             return CommandRoundReport.refused("the command built-in runs transform rounds only, and was asked for a "
                     + request.role().wire() + " run");
         }
-        Duration timeout = RoundBounds.of(factoryBounds, request).overall();
+        Duration timeout = RoundBounds.overall(factoryBounds, request);
         return CommandRoundReport.of(command, timeout, run.run(environment, command, Map.of(), timeout));
     }
 

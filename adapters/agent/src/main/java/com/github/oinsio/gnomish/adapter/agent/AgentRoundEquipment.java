@@ -13,10 +13,10 @@ import java.time.InstantSource;
  * that shapes the round's essential result, and the child-environment allowlist the credentials the
  * Claude describe declares are resolved through ({@link
  * com.github.oinsio.gnomish.adapter.agent.claude.ClaudeEnvironment#variables}), and the host directory
- * each round's {@link RoundScratchDirectory} is created under. Built once in the constructor of each round's owner
- * ({@link CliStageExecutor}, {@link CliJudgeVoter}) and taken whole by the round executions
- * ({@link ExecutorRoundExecution#run}, {@link JudgeRoundExecution#run}), so the group is
- * assembled in one place per owner instead of held as four fields and re-listed at every call.
+ * each round's {@link RoundScratchDirectory} is created under. Built once in the constructor of the
+ * round's owner ({@link CliStageExecutor}) and taken whole by the round execution ({@link
+ * ExecutorRoundExecution#run}), so the group is assembled in one place instead of held as four
+ * fields and re-listed at every call.
  *
  * <p>Implements FR6 of add-parameter-count-gate (design D6); NFR-S3 of tighten-spec-contract; FR20
  * of fix-terminal-receipt-convergence.

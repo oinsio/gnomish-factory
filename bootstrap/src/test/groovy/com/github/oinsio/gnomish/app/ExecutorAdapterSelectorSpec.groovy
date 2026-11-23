@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.adapter.agent.CliJudgeVoter
 import com.github.oinsio.gnomish.adapter.agent.ResumeVerificationStageExecutor
 import com.github.oinsio.gnomish.adapter.check.PinCheck
 import com.github.oinsio.gnomish.adapter.check.http.HttpRunContext
@@ -63,7 +62,7 @@ class ExecutorAdapterSelectorSpec extends Specification implements AppAssemblyFi
                     }, identity: {
                         RoundIdentity.inPlace()
                     }] as RoundEnvironmentSource,
-                null, null, null, null, null,
+                null, null, null, null,
                 new CurrentRound(), null)
     }
 
@@ -209,16 +208,5 @@ class ExecutorAdapterSelectorSpec extends Specification implements AppAssemblyFi
         rounds.executor() instanceof ResumeVerificationStageExecutor
         def answer = (result.answer() as ExecutionResult.VerdictReply).answer() as VerdictAnswer.Sarif
         answer.results()*.finding()*.location() == ['absent.txt']
-    }
-
-    // FR2 of remove-interactive-console: the judge-voter twin of the same binding, host-mode.
-    def "judgeVoter binds the manifest-driven CLI judge in host mode"() {
-        when:
-        def voter = ExecutorAdapterSelector.judgeVoter(
-                testProperties(), new VirtualClock(), childEnv, law, null)
-
-        then:
-        voter != null
-        voter instanceof CliJudgeVoter
     }
 }

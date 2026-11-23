@@ -5,7 +5,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
@@ -82,7 +81,7 @@ abstract class PendingPollSpecBase extends Specification {
 
     /** The verify chain with {@code poll} as the owner of its executor checks' rounds. */
     VerifyOrchestrator orchestrator(PendingPoll poll) {
-        new VerifyOrchestrator(poll, new JudgeVoting(new ScriptedJudgeVoter()), clock, new RecordingEventListener())
+        new VerifyOrchestrator(poll, clock, new RecordingEventListener())
     }
 
     /** The turns the executor was asked with, in order: null for a start, else origin and key. */

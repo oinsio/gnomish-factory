@@ -87,7 +87,7 @@ class UntrustedTextGateSpec extends Specification {
      */
     private static final List<String> ANNOTATED_EXITS = [
         // JudgeVerdictExtractor left at task 2.4 of extract-agent-round-runner: its final-text read
-        //     moved to the parser FinalTextObject, and it reads no raw text of its own any more.
+        //     moved to the parser FinalTextObject; since task 4.3 it holds only the SARIF conversion.
         // Joined at task 7.1 of define-executor-contract: the program executor's result mapped onto
         //     the engine's shape — the executor's quality reason and denial texts become domain
         //     Findings, which hold plain text (the CheckFindings precedent).
@@ -238,8 +238,8 @@ class UntrustedTextGateSpec extends Specification {
         'com.github.oinsio.gnomish.sandbox.environment.SandboxLifecycleObjectReader':
         'docker listings and inspect lines into listed objects with their labels, and into the' +
         ' timing Instants the sweep decides on',
-        // FR3 of extract-agent-round-runner (task 2.4): the one read of a judge's final message and of
-        //     the Claude dialect's final-text fallback, moved out of JudgeVerdictExtractor.
+        // FR3 of extract-agent-round-runner (task 2.4): the one read of the Claude dialect's final-text
+        //     fallback, moved out of JudgeVerdictExtractor (whose own reader left at task 4.3).
         'com.github.oinsio.gnomish.adapter.agent.claude.FinalTextObject':
         'an agent\'s final text into the JSON tree of the one object it carries, whose texts its readers' +
         ' mint again in the agent family',

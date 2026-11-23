@@ -14,7 +14,6 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
@@ -79,7 +78,7 @@ class ProgramRoundLedgerSpec extends Specification {
                 CliStageExecutor.hostRounds(clock, TestChildEnvironment.hostAllowlist()))
         def versions = new DescribedExecutors(
                 new ExecutorVersions([acme: UntrustedText.subprocess('1')]), ExecutorCredentialNames.none())
-        def ports = new EnginePorts(CheckRouting.of(executor, new ScriptedCheckRounds(), new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), writer, new InMemoryAttemptPersistence(),
+        def ports = new EnginePorts(CheckRouting.of(executor, new ScriptedCheckRounds(), new ScriptedCheckRounds(), new ScriptedCheckRounds()), writer, new InMemoryAttemptPersistence(),
                 VirtualTimeEquipment.on(clock), AttemptDelivery.assumedDelivered(), versions,
                 CliStageExecutor.hostRounds(clock, TestChildEnvironment.hostAllowlist()).identity())
         new Engine().run(new PipelineDefinition('1', new AutonomyLimits(1), [ProgramFixtures.stage()]),

@@ -23,7 +23,7 @@ class RoundExecutorEventSpec extends EventEmissionSpecBase {
     static final UntrustedText V1 = UntrustedText.subprocess('1')
 
     EnginePorts ports(DescribedExecutors described) {
-        new EnginePorts(CheckRouting.of(executor, builtinRunner, commandRunner, externalClient), judgeVoter, listener, persistence,
+        new EnginePorts(CheckRouting.of(executor, builtinRunner, commandRunner, externalClient), listener, persistence,
                 VirtualTimeEquipment.on(clock, sleeper), AttemptDelivery.assumedDelivered(), described, RoundIdentity.inPlace())
     }
 

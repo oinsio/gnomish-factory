@@ -5,11 +5,7 @@ import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.describe.ProgramBounds
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.LastRegisteredCommit
-import com.github.oinsio.gnomish.domain.engine.AttemptKey
-import com.github.oinsio.gnomish.domain.engine.ExecutionResult
-import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.TaskContext
-import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
@@ -32,9 +28,11 @@ import spock.lang.Specification
  * FR9, FR10 of define-executor-contract (design D8): the run's one stage executor sends a {@code
  * program} stage to the executor its {@code executor.name} resolves to in the {@link ExecutorRegistry}
  * — which opens the round through the run's round source — a {@code command} stage to the built-in the
- * registry holds under its name (FR8 of add-command-executor, design D6), and every other stage to the
- * agent arm.
- * The program arm is observed by the round it opens, the agent arm by the request it receives.
+ * registry holds under its name (FR8 of add-command-executor, design D6), and an agent stage to the
+ * reserved {@code claude} entry (FR14 of extract-agent-round-runner, task 5.1a) — every arm by the
+ * round it opens through the run's round source, and by the entry the registry resolved: a name the
+ * run did not register is refused before any round opens. No stage reaches an executor beside the
+ * registry.
  */
 class ExecutorDispatchSpec extends Specification {
 
@@ -48,7 +46,6 @@ class ExecutorDispatchSpec extends Specification {
         }
     }
 
-    def agent = Mock(StageExecutor)
     def rounds = [openRound: { StageExecutor.Request request ->
             throw new Opened(request)
         }, identity: {
@@ -80,7 +77,7 @@ class ExecutorDispatchSpec extends Specification {
                 TestChildEnvironment.hostAllowlist().programGrant(), Path.of('/tmp'), LastRegisteredCommit.NONE)
         def described = new DescribedLaw(LawBinding.workingTree(Path.of('/tmp/law')), answers)
         new ExecutorDispatch(ExecutorRegistry.of(described, definition(declared), law, equipment,
-                BuiltInEntriesFixture.of(new VirtualClock()), null), rounds, agent)
+                BuiltInEntriesFixture.of(new VirtualClock()), null, AgentEntryFixture.idle(equipment, law)), rounds)
     }
 
     private static StageExecutor.Request request(StageDefinition stage) {
@@ -88,7 +85,7 @@ class ExecutorDispatchSpec extends Specification {
         stage, new Workspace() {}, 0, [])
     }
 
-    def "FR10: a program stage runs the executor its name resolves to, through the run's round source, and never the agent"() {
+    def "FR10: a program stage runs the executor its name resolves to, through the run's round source"() {
         given:
         def build = request(stage(ExecutorType.PROGRAM, 'acme'))
 
@@ -98,21 +95,20 @@ class ExecutorDispatchSpec extends Specification {
         then:
         def opened = thrown(Opened)
         opened.request.is(build)
-        0 * agent._
     }
 
-    def "FR9: a #type stage runs the agent arm, and no program round is opened"() {
+    // FR1, FR14 of extract-agent-round-runner (D12, task 5.1a): no type-keyed agent arm is left — the
+    //     agent stage resolves the reserved claude entry by name and opens its round like any other
+    def "FR14: a #type stage resolves the claude entry and opens its round through the run's round source"() {
         given:
         def build = request(stage(type, null))
-        def result = ExecutionResult.completed(ExecutorUsage.none(),
-                new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
 
         when:
-        def returned = dispatch([acme: ProgramInBox.describe()], 'acme').execute(build)
+        dispatch([acme: ProgramInBox.describe()], 'acme').execute(build)
 
         then:
-        1 * agent.execute(build) >> result
-        returned.is(result)
+        def opened = thrown(Opened)
+        opened.request.is(build)
 
         where:
         type << [
@@ -128,17 +124,16 @@ class ExecutorDispatchSpec extends Specification {
         then:
         def refused = thrown(IllegalStateException)
         refused.message == "no executor named 'lint' is registered for this run; registered: ${registered}"
-        0 * agent._
 
         where:
         answers || registered
-        [acme: ProgramInBox.describe()] || '[acme, command]'
-        [:] || '[command]'
+        [acme: ProgramInBox.describe()] || '[acme, claude, command]'
+        [:] || '[claude, command]'
     }
 
     // FR8 of add-command-executor (design D6): the COMMAND arm maps the stage type to the built-in's
-    //     registry name, so the round opens through the run's round source and never reaches the agent
-    def "FR8: a command stage runs the command built-in the registry resolves, through the run's round source, and never the agent"() {
+    //     registry name, so the round opens through the run's round source
+    def "FR8: a command stage runs the command built-in the registry resolves, through the run's round source"() {
         given:
         def build = request(commandStage('./gradlew build'))
 
@@ -148,6 +143,5 @@ class ExecutorDispatchSpec extends Specification {
         then:
         def opened = thrown(Opened)
         opened.request.is(build)
-        0 * agent._
     }
 }

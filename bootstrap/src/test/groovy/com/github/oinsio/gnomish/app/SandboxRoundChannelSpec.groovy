@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app
 
 import ch.qos.logback.classic.Level
-import com.github.oinsio.gnomish.adapter.agent.FreshJudgeEnvironments
 import com.github.oinsio.gnomish.adapter.check.SandboxCheckEnvironmentSource
 import com.github.oinsio.gnomish.app.port.agent.DecisionRequestRead
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
@@ -63,9 +62,14 @@ class SandboxRoundChannelSpec extends RoundFlowSpecBase {
         def lines = List.copyOf(logs.list)
         logs.detach()
 
-        then: 'the factory read it from the box and escalated the question'
+        // Task 5.1a of extract-agent-round-runner: the agent round runner reads the answer file through the
+        //     contract's one answer read, which refuses a malformed one (FR9, D3; the decision-file
+        //     protocol's tolerant read of a garbage file is REMOVED by that change's delta).
+        then: 'the factory read it from the box and refused it as a malformed answer, quoting a capped excerpt'
         outcome instanceof TaskOutcome.Escalated
-        (outcome as TaskOutcome.Escalated).report() instanceof EscalationReport.DecisionNeeded
+        def cause = ((outcome as TaskOutcome.Escalated).report() as EscalationReport.CannotExecute).cause()
+        cause.contains("agent executor 'claude': wrote a malformed answer file")
+        cause.length() < 1_000
 
         and: 'the log carries it as one excerpt: no line break, no escape, capped'
         lines.size() == 1
@@ -77,7 +81,7 @@ class SandboxRoundChannelSpec extends RoundFlowSpecBase {
     }
 
     // Scenario: sandbox/execution-environment / The materialize pin is chosen by the factory
-    def "FR1: a fresh judge box and a fresh-box check are pinned at the tip the factory resolved, not at the box's HEAD"() {
+    def "FR1: a judge request's fresh box and a fresh-box check are pinned at the tip the factory resolved, not at the box's HEAD"() {
         given: 'a round that ended in a failed check: its snapshot harvested into the factory clone, the state commit on top'
         def box = localBox()
         run(pipeline(1), box, 'plain-round', ScriptedCheckRounds.fixed(new Verdict.Fail([])))
@@ -91,7 +95,9 @@ class SandboxRoundChannelSpec extends RoundFlowSpecBase {
         gitOutput(workingCopy, 'commit', '-q', '-m', 'in-box only')
         Files.writeString(workingCopy.resolve('PIN'), gitOutput(workingCopy, 'rev-parse', 'HEAD'))
 
-        when: 'the fresh judge box and the fresh-box check source build their boxes'
+        // A judge request's box is a fresh box at the workspace's attempt commit (design D2 of
+        //     extract-agent-round-runner): its binding reads the commit as below.
+        when: 'a judge request\'s fresh box and the fresh-box check source build their boxes'
         def pins = []
         def recording = {
             ->
@@ -100,13 +106,13 @@ class SandboxRoundChannelSpec extends RoundFlowSpecBase {
                 }, dispose: { -> }] as TaskExecutionEnvironment
         }
         def workspace = new RecordedAttemptCommitWorkspace(rounds)
-        new FreshJudgeEnvironments(recording, BRANCH).environmentFor(workspace)
-        new SandboxCheckEnvironmentSource(new EnvironmentLease({
+        def source = new SandboxCheckEnvironmentSource(new EnvironmentLease({
             -> box
         }, BRANCH, []), recording, { List<String> grant ->
             recording()
         }, BRANCH)
-        .acquire(VerifyChecks.command('make check', VerifyCheck.VerifyIn.FRESH_BOX), workspace)
+        source.freshBox(workspace.attemptCommitSha(), [])
+        source.acquire(VerifyChecks.command('make check', VerifyCheck.VerifyIn.FRESH_BOX), workspace)
 
         then: 'both are pinned at the factory\'s resolution of the harvested tip'
         pins == [harvested, harvested]

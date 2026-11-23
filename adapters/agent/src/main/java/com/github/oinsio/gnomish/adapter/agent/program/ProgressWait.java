@@ -10,9 +10,12 @@ import org.jspecify.annotations.Nullable;
  * The wait of a run whose stdout is read live by {@link ProgressLines} (NFR-R2 of
  * define-executor-contract; wire-contract "Silence bound expires"; NFR-R1 of
  * extract-agent-round-runner), under up to three bounds: the overall bound from the start; when one is
- * given, the startup-read bound from the start until the first bytes arrive; and the silence bound from
- * the last bytes the reader saw — from the start too when no startup-read bound is given. A {@code
- * streams_progress} program waits without a startup-read bound, the agent round runner with one.
+ * given, the startup-read bound from the start until the first bytes arrive; and, when one is given, the
+ * silence bound from the last bytes the reader saw — from the start too when no startup-read bound is
+ * given. A {@code streams_progress} program waits without a startup-read bound, the agent round of a
+ * dialect that declares {@code streams_progress} with one, and the agent round of a dialect that does
+ * not under the overall bound alone (FR16 of extract-agent-round-runner): whether the bounds on a quiet
+ * stdout apply is the caller's answer from {@code QuietStdoutBounds}, never decided here.
  *
  * <p>The handle's own bounded wait kills on expiry, so it cannot be waited on in slices; this wait
  * instead watches the reader, which ends at the process's exit, and checks the deadlines on the run's
@@ -35,18 +38,20 @@ public final class ProgressWait {
     static final Duration TICK = Duration.ofMillis(100);
 
     private final @Nullable Duration startupRead;
-    private final Duration silence;
+    private final @Nullable Duration silence;
     private final Duration overall;
     private final TimeEquipment time;
 
     /**
      * @param startupRead how long the run may take to write its first bytes, or {@code null} to hold
      *     the start to the silence bound instead
-     * @param silence how long the run may go without writing; never null
+     * @param silence how long the run may go without writing, or {@code null} for no bound on a quiet
+     *     stdout after the startup read
      * @param overall how long the run may take at all; never null
      * @param time the run's time equipment, shared with the reader's clock; never null
      */
-    public ProgressWait(@Nullable Duration startupRead, Duration silence, Duration overall, TimeEquipment time) {
+    public ProgressWait(
+            @Nullable Duration startupRead, @Nullable Duration silence, Duration overall, TimeEquipment time) {
         this.startupRead = startupRead;
         this.silence = silence;
         this.overall = overall;
@@ -64,19 +69,15 @@ public final class ProgressWait {
         Instant start = time.clock().instant();
         Instant overallEnd = start.plus(overall);
         while (!lines.ended()) {
-            @Nullable Duration first = lines.anyRead() ? null : startupRead;
-            Instant quietUntil = first == null ? lines.lastActivity().plus(silence) : start.plus(first);
+            @Nullable QuietDeadline quiet = quiet(start, lines);
             if (time.remaining(overallEnd).isZero()) {
                 return killed(handle, new ProgramEnd.BoundExpired("overall", overall));
             }
-            if (time.remaining(quietUntil).isZero()) {
-                return killed(
-                        handle,
-                        first == null
-                                ? new ProgramEnd.BoundExpired("silence", silence)
-                                : new ProgramEnd.BoundExpired("startup-read", first));
+            if (quiet != null && time.remaining(quiet.until).isZero()) {
+                return killed(handle, new ProgramEnd.BoundExpired(quiet.bound, quiet.value));
             }
-            Instant next = earliest(time.clock().instant().plus(TICK), earliest(overallEnd, quietUntil));
+            Instant deadline = quiet == null ? overallEnd : earliest(overallEnd, quiet.until);
+            Instant next = earliest(time.clock().instant().plus(TICK), deadline);
             if (lines.endsWithin(time.remaining(next))) {
                 break;
             }
@@ -86,6 +87,34 @@ public final class ProgressWait {
             }
         }
         return ended(handle.waitForExitOrTimeout(time.remaining(overallEnd), time.clock()), handle);
+    }
+
+    /**
+     * The bound a quiet stdout is held to now: the startup-read bound from the start until the first
+     * bytes, else the silence bound from the last ones, else none.
+     */
+    private @Nullable QuietDeadline quiet(Instant start, ProgressLines lines) {
+        if (startupRead != null && !lines.anyRead()) {
+            return new QuietDeadline(start.plus(startupRead), "startup-read", startupRead);
+        }
+        if (silence != null) {
+            return new QuietDeadline(lines.lastActivity().plus(silence), "silence", silence);
+        }
+        return null;
+    }
+
+    /** When a quiet stdout expires, and the bound it names. */
+    private static final class QuietDeadline {
+
+        private final Instant until;
+        private final String bound;
+        private final Duration value;
+
+        private QuietDeadline(Instant until, String bound, Duration value) {
+            this.until = until;
+            this.bound = bound;
+            this.value = value;
+        }
     }
 
     /** Kills the tree now; a process that exited in the meantime is reported as the exit it was. */

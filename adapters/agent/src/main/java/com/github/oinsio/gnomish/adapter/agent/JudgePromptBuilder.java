@@ -5,28 +5,23 @@ import com.github.oinsio.gnomish.adapter.briefing.BriefingSections;
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw;
 import com.github.oinsio.gnomish.adapter.law.UnreadableLawFileException;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
-import com.github.oinsio.gnomish.domain.engine.port.Workspace;
-import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 
 /**
- * Composes the round prompt for the CLI {@link
- * com.github.oinsio.gnomish.domain.engine.port.JudgeVoter}: a narrower
- * section subset than {@link ExecutorPromptBuilder}'s — task goal, decisions,
- * acceptance-criteria content, and a structured-verdict instruction — with no
- * prior-attempt feedback, input-artifacts, or control-file section. A vote
- * grades the working copy's current state, not the process that produced it;
- * telling the judge "this failed last time" would bias the verdict (design
- * D8). The {@link com.github.oinsio.gnomish.domain.engine.port.JudgeVoter#vote}
- * signature itself carries no feedback parameter, so this class has nothing
- * to accidentally wire in.
+ * Composes the {@code verdict} role input of a {@code judge} check — the text the check round's
+ * request hands the executor its executor block resolves to (design D2 of
+ * extract-agent-round-runner): a narrower section subset than {@link ExecutorPromptBuilder}'s —
+ * task goal, decisions, acceptance-criteria content, and a structured-verdict instruction — with
+ * no prior-attempt feedback, input-artifacts, or control-file section. A judge grades the working
+ * copy's current state, not the process that produced it; telling the judge "this failed last
+ * time" would bias the verdict (design D8). {@link #verdictInput} takes no feedback parameter, so
+ * this class has nothing to accidentally wire in.
  *
  * <p>Acceptance-criteria content comes from the invocation's frozen {@link
  * PipelineLaw} (D14, FR19 of add-sandbox-core), not lazily from the
  * gnome-writable working copy: a stuck gnome cannot weaken the criteria it is
  * graded against. An unreadable criteria file is an infrastructure failure
- * before any process spawns (FR13); {@link UnreadableLawFileException} is left
- * uncaught here and is expected to propagate to {@code CliJudgeVoter.vote()},
- * which turns it into {@code CannotVerify} (task 7.3).
+ * before any process spawns (FR13): {@link JudgeCriteriaPreflight} refuses the request first, and
+ * an {@link UnreadableLawFileException} here is left uncaught.
  *
  * <p>Judge hardening (FR15, D9 of add-sandbox-core): the task context — title,
  * body, decisions — is the prompt's artifact-derived content, so it is wrapped
@@ -37,7 +32,7 @@ import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
  * instruction.
  *
  * <p>Implements FR8, D5, D8 of add-agent-executor; FR15, FR19, D9, D14 of
- * add-sandbox-core.
+ * add-sandbox-core; FR4 of extract-agent-round-runner.
  *
  * @param law the invocation's frozen pipeline law, the source of
  *     acceptance-criteria content (D14 of add-sandbox-core); never null
@@ -56,26 +51,26 @@ public record JudgePromptBuilder(PipelineLaw law) {
             """;
 
     /**
-     * Builds the judge round prompt for {@code check}.
+     * Renders the {@code verdict} role input for a judge check over {@code criteriaFile}: the briefing (task goal and
+     * decisions, as delimited data), the acceptance criteria from the frozen law, and the verdict
+     * instruction. It reads no working copy: criteria come from the frozen law (D14 of
+     * add-sandbox-core), and the copy under judgement is the request's, not the text's.
      *
-     * <p>Implements FR8, D5, D8 of add-agent-executor.
+     * <p>Implements FR8, D5, D8 of add-agent-executor; FR4 of extract-agent-round-runner.
      *
-     * @param check the judge check whose criteria file and model drive the vote
+     * @param criteriaFile the judge check's acceptance-criteria file, relative to the {@code
+     *     .gnomish/} root
      * @param context the task's identity, goal, and human decisions
-     * @param workspace the working copy being graded — retained in the signature
-     *     for symmetry with the port; criteria content now comes from the frozen
-     *     law, not this workspace (D14 of add-sandbox-core)
-     * @return the full judge prompt text; never null
-     * @throws UnreadableLawFileException if the check's acceptance-criteria file
+     * @return the full {@code verdict} role input text; never null
+     * @throws UnreadableLawFileException if the acceptance-criteria file
      *     was unreadable when the invocation's law was frozen — propagated
      *     uncaught (FR13, D14 of add-sandbox-core)
      */
-    @SuppressWarnings("unused") // workspace kept for port symmetry, see @param above
-    public String build(VerifyCheck.Judge check, TaskContext context, Workspace workspace) {
+    public String verdictInput(String criteriaFile, TaskContext context) {
         StringBuilder out = new StringBuilder();
 
         renderDelimitedTaskContext(out, context);
-        renderAcceptanceCriteria(out, check);
+        renderAcceptanceCriteria(out, criteriaFile);
         out.append(VERDICT_INSTRUCTION).append('\n');
 
         return out.toString();
@@ -146,8 +141,8 @@ public record JudgePromptBuilder(PipelineLaw law) {
         return delimiter.length() <= content.length();
     }
 
-    private void renderAcceptanceCriteria(StringBuilder out, VerifyCheck.Judge check) {
-        out.append("=== Acceptance criteria (").append(check.criteriaFile()).append(") ===\n");
-        out.append(law.controlFile(check.criteriaFile())).append('\n');
+    private void renderAcceptanceCriteria(StringBuilder out, String criteriaFile) {
+        out.append("=== Acceptance criteria (").append(criteriaFile).append(") ===\n");
+        out.append(law.controlFile(criteriaFile)).append('\n');
     }
 }

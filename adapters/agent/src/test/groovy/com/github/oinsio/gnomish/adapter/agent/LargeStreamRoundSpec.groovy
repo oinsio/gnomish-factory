@@ -4,7 +4,6 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
-import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
@@ -13,7 +12,6 @@ import com.github.oinsio.gnomish.domain.engine.ModelUsages
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
-import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
@@ -42,7 +40,6 @@ class LargeStreamRoundSpec extends Specification {
     def clock = new VirtualClock()
 
     private static final PipelineLaw EXECUTOR_LAW = PipelineLaw.ofContent(['instructions.md': 'Do the thing.'])
-    private static final PipelineLaw JUDGE_LAW = PipelineLaw.ofContent(['criteria.md': 'The output must be correct.'])
 
     def setup() {
         Files.writeString(workspaceDir.resolve('instructions.md'), 'Do the thing.')
@@ -61,19 +58,6 @@ class LargeStreamRoundSpec extends Specification {
         then:
         (result.status() instanceof ExecutionResult.Completed && result.answer() == null)
         !ModelUsages.tokensOf(result.usage().byModel()).isEmpty()
-    }
-
-    // M1, FR1: the judge half — a verbose vote is graded, not degraded to CannotVerify.
-    def "judge round with a megabyte of stream-json is graded"() {
-        given:
-        def voter = new CliJudgeVoter(
-                FakeAgentSupport.propertiesFor('judge-verdict-pass-megabyte'), clock, JUDGE_LAW)
-
-        when:
-        def vote = voter.vote(judgeCheck(), FakeAgentSupport.defaultTaskContext(), new DirectoryWorkspace(workspaceDir))
-
-        then:
-        vote.verdict() instanceof Verdict.Pass
     }
 
     // M2: a synchronous writer past the pipe buffer used to hang until the roundTimeout
@@ -150,9 +134,5 @@ class LargeStreamRoundSpec extends Specification {
         then: 'the process started and read the whole prompt, nothing cut'
         (result.status() instanceof ExecutionResult.Completed && result.answer() == null)
         Files.readString(capture) == prompt + '\n---\n'
-    }
-
-    private static VerifyCheck.Judge judgeCheck() {
-        new VerifyCheck.Judge('criteria.md', 'claude-fake-judge-1', [:], 1)
     }
 }

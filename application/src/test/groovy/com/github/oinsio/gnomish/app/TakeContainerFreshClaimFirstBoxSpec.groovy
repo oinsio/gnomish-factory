@@ -43,7 +43,7 @@ class TakeContainerFreshClaimFirstBoxSpec extends Specification implements RunCh
         support.taskRepository() >> repository
         support.persistence() >> new InMemoryAttemptPersistence()
         support.workspace() >> new FakeWorkspace()
-        support.pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
+        support.pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
         tracker.fetchTask(_) >> heldByUs()
         branches.locate(CLONE_DIR, 'PROJ-1') >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
         branches.adopt(CLONE_DIR, 'PROJ-1', _) >> new BranchAdoption.AlreadyLocal('PROJ-1')

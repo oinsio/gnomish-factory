@@ -38,7 +38,8 @@ public final class ProgramFailures {
             this.noun = noun;
         }
 
-        private String named(String executor) {
+        /** The head of a reason naming {@code executor}: the noun, the name and a colon. */
+        String named(String executor) {
             return noun + " '" + executor + "': ";
         }
     }

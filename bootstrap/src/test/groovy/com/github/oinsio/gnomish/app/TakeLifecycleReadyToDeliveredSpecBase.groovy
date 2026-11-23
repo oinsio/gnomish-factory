@@ -88,8 +88,9 @@ instructions: stages/build/instructions.md
 verify:
   - type: judge
     criteriaFile: stages/build/acceptance.md
-    model: ${JUDGE_MODEL}
-    votes: 1
+    executor:
+      type: agent-cli
+      model: ${JUDGE_MODEL}
 advancement: auto
 """)
         // tracker.type is 'github' purely to satisfy TrackerSeamValidator's registered-type

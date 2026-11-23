@@ -90,7 +90,7 @@ final class PendingKills {
             def dying = { Workspace workspace ->
                 throw die('after the snapshot, before its attempt delivery')
             } as AttemptDelivery
-            new SandboxRunPieces(pieces.executorRounds(), pieces.judgeEnvironments(), pieces.checkEnvironments(), pieces.freshBoxes(),
+            new SandboxRunPieces(pieces.executorRounds(), pieces.checkEnvironments(), pieces.freshBoxes(),
                     pieces.attemptReader(), dying, pieces.rounds(), pieces.pendingVerification())
         }
     }

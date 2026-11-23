@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import spock.lang.Specification
@@ -28,7 +29,8 @@ class CheckRefSpec extends Specification {
         0 | VerifyChecks.builtin('files_exist', [:]) || 'builtin:files_exist'
         1 | VerifyChecks.command('./gradlew test') || 'command:./gradlew test'
         2 | VerifyChecks.external('ci/build', 'github', Duration.ofSeconds(10), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY) || 'external:github:ci/build'
-        3 | new VerifyCheck.Judge('criteria/build.md', 'model-x', [:], 1) || 'judge:criteria/build.md'
+        3 | JudgeChecks.agent('criteria/build.md', 'model-x') || 'judge:criteria/build.md'
+        4 | JudgeChecks.agent('criteria/build.md', 'model-x').asExecutorCheck() || 'judge:criteria/build.md'
     }
 
     // FR8 (add-plugin-architecture): the identity findings correlate under is the

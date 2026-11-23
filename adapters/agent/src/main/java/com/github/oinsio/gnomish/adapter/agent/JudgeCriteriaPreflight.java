@@ -2,78 +2,66 @@ package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw;
 import com.github.oinsio.gnomish.adapter.law.UnreadableLawFileException;
-import com.github.oinsio.gnomish.domain.engine.Verdict;
-import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
-import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import com.github.oinsio.gnomish.executorcontract.ExecutorResult;
+import com.github.oinsio.gnomish.executorcontract.FailureClass;
+import com.github.oinsio.gnomish.executorcontract.Status;
+import com.github.oinsio.gnomish.executorcontract.Usage;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+import java.util.List;
 import java.util.Optional;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
- * The judge-side half of D8's control/criteria-file preflight (FR13, NFR-R1):
- * where {@link ExecutorPromptBuilder} lets its {@link UnreadableLawFileException}
- * propagate uncaught for the executor — whose caller ({@code RoundExecution})
- * catches any {@link RuntimeException} and shapes it into {@code
- * RoundOutcome.CannotExecute} without burning an attempt — the {@link
- * com.github.oinsio.gnomish.domain.engine.port.JudgeVoter} port has no such
- * exception channel: {@code vote()} never throws, since judge degradation is
- * inverted and a returned {@link Verdict.CannotVerify} is the only correct
- * shape for "no verdict obtainable" (NFR-R1).
+ * The criteria preflight of a {@code judge} check (FR13, NFR-R1 of add-agent-executor; design D2 of
+ * extract-agent-round-runner): ahead of the check round's request — before its box is materialized
+ * and before any prompt is built — the check's acceptance-criteria file must have been frozen
+ * readable in the invocation's {@link PipelineLaw} (D14 of add-sandbox-core: the criteria come from
+ * the gnome-unwritable law source, never the working copy). "Never a criteria-less vote."
  *
- * <p>{@link #checkReadable} inspects the invocation's frozen {@link PipelineLaw}
- * (D14 of add-sandbox-core) — the criteria come from the gnome-unwritable law
- * source, not the working copy — and stops short of building the rest of the
- * prompt: {@code CliJudgeVoter.vote()} calls this first and returns the mapped
- * {@link Verdict.CannotVerify} immediately on a present result, never reaching
- * {@link JudgePromptBuilder#build} or spawning a process. Building the full
- * prompt just to catch an exception was considered and rejected as wasteful and
- * less direct than a dedicated readability check.
+ * <p>An unreadable file is the request's answer, {@code failed/infrastructure} naming the file with
+ * the read failure as its details, which the engine derives to a cannot-verify through the one
+ * verdict derivation and reports once, at its decision; nothing is logged here (one failure, one
+ * log). Building the full prompt just to catch the exception was considered and rejected as
+ * wasteful and less direct than a dedicated readability check.
  *
- * <p>Implements FR13, NFR-R1, D8 of add-agent-executor; FR19, D14 of
- * add-sandbox-core; FR5 of harden-logging-observability.
+ * <p>Implements FR13, NFR-R1, D8 of add-agent-executor; FR19, D14 of add-sandbox-core; FR4 of
+ * extract-agent-round-runner.
  */
 public final class JudgeCriteriaPreflight {
-
-    private static final Logger log = LoggerFactory.getLogger(JudgeCriteriaPreflight.class);
 
     private JudgeCriteriaPreflight() {}
 
     /**
-     * Checks whether {@code check}'s acceptance-criteria file was frozen readable
-     * in {@code law}, without building any prompt content.
+     * The refusal of a judge check whose acceptance-criteria file was not frozen readable in {@code
+     * law}, without building any prompt content.
      *
-     * <p>Implements FR13, NFR-R1, D8 of add-agent-executor; FR19, D14 of
-     * add-sandbox-core.
+     * <p>Implements FR13, NFR-R1, D8 of add-agent-executor; FR4 of extract-agent-round-runner.
      *
-     * @param law the invocation's frozen pipeline law the criteria are read from
-     * @param check the judge check whose {@code criteriaFile} is checked
-     * @return {@link Optional#empty()} when the file is readable; otherwise a
-     *     {@link Verdict.CannotVerify} whose {@code reason} names the criteria
-     *     file and whose {@code details} carries the underlying cause message,
-     *     ready for {@code CliJudgeVoter.vote()} to return as a normal {@code
-     *     Vote} — never thrown
+     * @param law the invocation's frozen pipeline law the criteria are read from; never null
+     * @param criteriaFile the judge check's criteria file, relative to the {@code .gnomish/} root
+     * @return {@link Optional#empty()} when the file is readable; otherwise a {@code
+     *     failed/infrastructure} result whose reason names the criteria file and whose details carry
+     *     the underlying cause — never thrown
      */
-    public static Optional<Verdict.CannotVerify> checkReadable(PipelineLaw law, VerifyCheck.Judge check) {
+    public static Optional<ExecutorResult> refusal(PipelineLaw law, String criteriaFile) {
         try {
-            law.controlFile(check.criteriaFile());
+            law.controlFile(criteriaFile);
             return Optional.empty();
         } catch (UnreadableLawFileException e) {
-            String message =
-                    e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-            // The seventh cannot-verify exit of a judge check, and the only one outside
-            // JudgeRoundExecution: no process is spawned, so this is the sole trace the
-            // operator gets for a vote that was never cast (FR5 of
-            // harden-logging-observability).
-            log.warn(
-                    OperatorEvent.JUDGE_CRITERIA_UNREADABLE.head()
-                            + "judge vote cannot verify for criteria {}: unreadable criteria file",
-                    check.criteriaFile(),
-                    e);
+            // The exception always names the file and the read failure (its one constructor).
+            String message = String.valueOf(e.getMessage());
             // The criteria file is the target repository's own: a path its `.gnomish/` manifest
             // named, and whatever the read failure said about it (design D3's manifest family).
-            UntrustedText carried = UntrustedText.manifest(message);
-            return Optional.of(new Verdict.CannotVerify(carried, carried));
+            return Optional.of(new ExecutorResult(
+                    Status.FAILED,
+                    FailureClass.INFRASTRUCTURE,
+                    null,
+                    UntrustedText.manifest("the judge's acceptance criteria file '" + criteriaFile + "' is unreadable"),
+                    null,
+                    Usage.absent(),
+                    List.of(),
+                    null,
+                    null,
+                    UntrustedText.manifest(message)));
         }
     }
 }

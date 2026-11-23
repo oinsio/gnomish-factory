@@ -63,6 +63,23 @@ fails. `--pending-settings` names the settings under which your program answers
 registration and no row in the community plugin registry to be used; the rest
 of this guide is about tracker adapters.
 
+<!-- implements FR17 of extract-agent-round-runner -->
+
+**Declaring `streams_progress`.** Among the capabilities a `describe` answer
+lists, `streams_progress` is a promise the factory kills runs on: an executor
+that declares it is held to the factory's silence bound
+(`ProgramBounds.DEFAULTS.silence()`, 5 minutes) and is killed when its stdout
+stays quiet that long; one that does not declare it is held to the overall
+bound alone. So declare `streams_progress` only when the executor writes to
+stdout at least every fifth of the silence bound (60 s today) during its
+longest quiet step — a tool call or a subprocess that prints nothing itself.
+An agent dialect proves it with a green row of `PaidSmokeLivenessSpec`
+(`bootstrap`, run by `./gradlew :bootstrap:paidSmokeTest`) on both platforms,
+macOS on the host and Linux in a container of the image named by
+`-PpaidSmoke.linuxImage=<image>`, before the declaration is merged: a new dialect
+joins the spec's list of dialects, and every one whose describe declares the
+capability is a row that must be green.
+
 ## 1. The state dictionary and the three-level distinction
 
 The factory reasons about a task at three levels that must never be confused.

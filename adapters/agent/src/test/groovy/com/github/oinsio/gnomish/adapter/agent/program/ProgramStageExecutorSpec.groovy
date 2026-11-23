@@ -65,12 +65,14 @@ class ProgramStageExecutorSpec extends Specification {
         List<Denial> denials = []
         int probes
         RuntimeException probeFailure
+        /** The probe from which on the guard is dead: 1 for the first, before the request. */
+        int deadFrom = 1
         boolean disposed
 
         @Override
         void probeGuard() {
             probes++
-            if (probeFailure != null) {
+            if (probeFailure != null && probes >= deadFrom) {
                 throw probeFailure
             }
         }
@@ -192,6 +194,57 @@ class ProgramStageExecutorSpec extends Specification {
         def failed = result.status() as ExecutionResult.Failed
         failed.failureClass() == ExecutionResult.FailureClass.INFRASTRUCTURE
         failed.reason().contains('egress guard is not running')
+        result.denials() == [EGRESS]
+    }
+
+    // FR15 (design D13 of extract-agent-round-runner): a guard that died while the program ran replaces
+    // its answer through the one probe owner, and the round is discarded, nothing of it committed
+    def "FR15: a round whose guard died during the request is discarded, its completed answer replaced by failed/infrastructure"() {
+        given:
+        def environment = new GuardedEnvironment(delegate: host, denials: [EGRESS], deadFrom: 2,
+        probeFailure: new IllegalStateException('egress guard is not running'))
+        def round = round(environment)
+        def rounds = Stub(RoundEnvironmentSource) {
+            openRound(_) >> round
+        }
+
+        when:
+        def result = executor(StandIn.link(links.resolve('completed'), 'run-as'), rounds)
+                .execute(ProgramFixtures.round(workspace))
+
+        then:
+        1 * round.discard()
+        0 * round.closeRound(_)
+        environment.probes == 2
+        def failed = result.status() as ExecutionResult.Failed
+        failed.failureClass() == ExecutionResult.FailureClass.INFRASTRUCTURE
+        failed.reason().contains('was not running after the request: egress guard is not running')
+        result.denials() == [EGRESS]
+        result.usage().byModel().keySet() == ['acme-model-1'] as Set
+    }
+
+    // FR10, NFR-R1: a close that could not commit discards the round, which is failed/infrastructure with the drained denials
+    def "FR10: a round whose close failed is discarded and failed/infrastructure with the denials drained from it"() {
+        given:
+        def environment = new GuardedEnvironment(delegate: host, denials: [EGRESS])
+        def round = round(environment)
+        def rounds = Stub(RoundEnvironmentSource) {
+            openRound(_) >> round
+        }
+
+        when:
+        def result = executor(StandIn.link(links.resolve('completed'), 'run-as'), rounds)
+                .execute(ProgramFixtures.round(workspace))
+
+        then:
+        1 * round.closeRound(RoundClose.VERIFIABLE) >> {
+            throw new IllegalStateException('snapshot commit refused')
+        }
+        1 * round.discard()
+        def failed = result.status() as ExecutionResult.Failed
+        failed.failureClass() == ExecutionResult.FailureClass.INFRASTRUCTURE
+        failed.reason().contains('the round failed before its result was read')
+        failed.reason().contains('snapshot commit refused')
         result.denials() == [EGRESS]
     }
 

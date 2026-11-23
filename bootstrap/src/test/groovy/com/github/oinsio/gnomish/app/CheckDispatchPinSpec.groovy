@@ -59,7 +59,7 @@ class CheckDispatchPinSpec extends Specification implements GitObjectsFixture {
                 ], metadata()))
 
         and: 'the run registry over the operator\'s configured connection, and the run\'s pin-check'
-        def dispatch = new CheckDispatch(ScmBuiltInRegistry.assemble(), new PinCheck(objects, law))
+        def dispatch = new CheckDispatch(ScmBuiltInRegistry.assemble(), new PinCheck(objects, law), VerdictInput.IDENTIFIER_ONLY)
         def workspace = AttemptCommitWorkspaces.at(attempt.hex())
 
         when:

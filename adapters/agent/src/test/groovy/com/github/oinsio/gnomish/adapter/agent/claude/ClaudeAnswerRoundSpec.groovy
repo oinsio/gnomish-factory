@@ -4,6 +4,9 @@ import com.github.oinsio.gnomish.adapter.agent.program.ProgramResultMapping
 import com.github.oinsio.gnomish.adapter.agent.runner.RunnerFixture
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.CheckRoundAnswers
+import com.github.oinsio.gnomish.domain.engine.ModelUsage
+import com.github.oinsio.gnomish.domain.engine.Participants
+import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.VerdictDerivation
 import com.github.oinsio.gnomish.domain.pipeline.Threshold
@@ -76,6 +79,28 @@ class ClaudeAnswerRoundSpec extends Specification {
         result.status() == Status.FAILED
         result.reason().forLog().contains("does not match the answer's schema")
         derive(result) instanceof Verdict.CannotVerify
+    }
+
+    // FR22 of define-executor-contract; FR4 of extract-agent-round-runner: a judge's verdict request is
+    //     an agent round, so the cost its result event reports per model reaches the engine's result,
+    //     and with it the check's verdict participant entry (VerifyOrchestrator builds it from that map)
+    // Scenario: executor/agent-executor / Judge vote carries cost
+    def "FR22: a judge's verdict round carries the cost its result event reports, per model, into its verdict entry"() {
+        given:
+        def priced = '{"type":"system","subtype":"init","session_id":"s","model":"claude-x"}\n' +
+                '{"type":"result","subtype":"success","session_id":"s","result":"","structured_output":{"passed":true,"findings":[]},' +
+                '"modelUsage":{"claude-x":{"inputTokens":10,"outputTokens":20,"cacheCreationInputTokens":0,' +
+                '"cacheReadInputTokens":5,"costUSD":0.25},"claude-y":{"inputTokens":1,"outputTokens":2,' +
+                '"cacheCreationInputTokens":0,"cacheReadInputTokens":0}}}\n'
+
+        when:
+        def result = fixture.start(RunnerFixture.request(Role.VERDICT), RunnerFixture.exited(0, priced))
+        def engine = ProgramResultMapping.toEngine(RunnerFixture.NAME, Role.VERDICT, new AttemptKey('TASK-7', 'build', 0), result, [])
+        def entry = Participants.verdict('claude', 0, engine.usage().byModel())
+
+        then: 'the priced model carries its cost, the other none'
+        entry.byModel()['claude-x'] == new ModelUsage(new TokenUsage(10, 20, 0, 5), new BigDecimal('0.25'))
+        entry.byModel()['claude-y'] == new ModelUsage(new TokenUsage(1, 2, 0, 0), null)
     }
 
     private static Verdict derive(ExecutorResult result) {

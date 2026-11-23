@@ -25,7 +25,7 @@ import java.util.List;
  * (FR8). Post-parse shape checks (required fields, raw-string enums) are
  * {@link StructuralValidation}; DTO&rarr;domain mapping is task 5.3.
  *
- * <p>Implements FR5 of load-pipeline-config.
+ * <p>Implements FR5 of load-pipeline-config; UX1 of extract-agent-round-runner (an unknown field located by its path).
  */
 public final class StructuralParse {
 
@@ -73,8 +73,7 @@ public final class StructuralParse {
         } catch (InvalidTypeIdException e) {
             return failed(discriminatorError(file, e));
         } catch (UnrecognizedPropertyException e) {
-            return failed(
-                    new ConfigError(file, e.getPropertyName(), "unknown field '%s'".formatted(e.getPropertyName())));
+            return failed(unknownFieldError(file, e));
         } catch (MismatchedInputException e) {
             return failed(mismatchError(file, e));
         } catch (JsonProcessingException e) {
@@ -123,6 +122,17 @@ public final class StructuralParse {
             String base = e.getBaseType().toCanonical();
             return base.endsWith("VerifyCheckDto") ? VERIFY : INPUT;
         }
+    }
+
+    /**
+     * A field the DTO does not declare, located by its whole path — {@code verify[0].votes} for a
+     * key a {@code judge} check no longer has (design D2, D12 of extract-agent-round-runner), so
+     * the error names the check as well as the field (UX1 of that change). The message names the
+     * field alone, as it always has.
+     */
+    private static ConfigError unknownFieldError(String file, UnrecognizedPropertyException e) {
+        // Jackson's path of an unknown field always ends at the field itself, so it is never empty.
+        return new ConfigError(file, locate(file, e), "unknown field '%s'".formatted(e.getPropertyName()));
     }
 
     /** A type mismatch: a scalar where a list/object was expected, or similar. */

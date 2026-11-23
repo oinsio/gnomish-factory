@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 import spock.lang.Specification
 
 /**
@@ -65,7 +66,8 @@ class AgentSettingsValidatorSpec extends Specification {
         ]
     }
 
-    def "FR7: a judge check's settings reach the judge whatever its stage's executor type (#type)"() {
+    // FR13 of extract-agent-round-runner: a judge's settings are its agent-cli block's
+    def "FR7: a judge check's agent-cli block settings reach the judge whatever its stage's executor type (#type)"() {
         given:
         def stage = stage('plan', type, [:], [
             command(),
@@ -76,10 +78,10 @@ class AgentSettingsValidatorSpec extends Specification {
         def errors = AgentSettingsValidator.validate(pipeline(stage), judge)
 
         then: 'located at the check\'s own index; the command check is not the agent\'s'
-        errors.last() == new ConfigError('stages/plan/stage.yaml', 'verify[1].settings', 'judged')
+        errors.last() == new ConfigError('stages/plan/stage.yaml', 'verify[1].executor.settings', 'judged')
         judged.last() == [
             'stages/plan/stage.yaml',
-            'verify[1].settings',
+            'verify[1].executor.settings',
             [maxTurns: 3]
         ]
 
@@ -91,6 +93,18 @@ class AgentSettingsValidatorSpec extends Specification {
         ]
     }
 
+    // FR13 of extract-agent-round-runner: a judge block of another type is its own executor's to grade
+    def "a judge check's program block is not the agent's to grade"() {
+        given:
+        def stage = stage('plan', ExecutorType.PROGRAM, [:], [
+            JudgeChecks.program('accept.md', 'acme', [bogus: 1])
+        ])
+
+        expect:
+        AgentSettingsValidator.validate(pipeline(stage), judge) == []
+        judged.isEmpty()
+    }
+
     def "every problem is reported, in stage then check order"() {
         given:
         def first = stage('build', ExecutorType.AGENT_CLI, [:], [judgeCheck([:])])
@@ -99,7 +113,7 @@ class AgentSettingsValidatorSpec extends Specification {
         expect:
         AgentSettingsValidator.validate(pipeline(first, second), judge)*.where() == [
             'executor.settings',
-            'verify[0].settings',
+            'verify[0].executor.settings',
             'executor.settings'
         ]
         AgentSettingsValidator.validate(pipeline(first, second), judge)*.file() == [
@@ -127,7 +141,7 @@ class AgentSettingsValidatorSpec extends Specification {
     }
 
     private static VerifyCheck.Judge judgeCheck(Map<String, Object> settings) {
-        new VerifyCheck.Judge('accept.md', 'judge-model', settings, 1)
+        JudgeChecks.agent('accept.md', 'judge-model', settings)
     }
 
     private static VerifyCheck command() {

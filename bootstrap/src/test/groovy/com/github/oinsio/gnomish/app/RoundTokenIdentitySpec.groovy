@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.agent.ResumeVerificationStageExecutor
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
@@ -15,7 +14,6 @@ import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.TrackerWrite
-import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
@@ -47,8 +45,8 @@ import spock.lang.TempDir
  * component specs each prove one link (mint, subject, parse, restore, carve-out); only a flow over a
  * bare origin and the real adapters proves the round token is one value through all of them.
  *
- * <p>The gnome is the fake agent's {@code decision-needed} scenario under the real {@link
- * CliStageExecutor} and {@link SandboxRoundEnvironmentSource}; the box is {@link LocalBoxEnvironment}
+ * <p>The gnome is the fake agent's {@code decision-needed} scenario under the real the {@code claude} entry's stage half ({@link
+ * ClaudeStageFixture}) and {@link SandboxRoundEnvironmentSource}; the box is {@link LocalBoxEnvironment}
  * (real clone, in-box commits, harvest — no daemon). Every frozen state is pushed to origin first,
  * and the pickup is another instance's fresh clone of it.
  *
@@ -174,8 +172,7 @@ class RoundTokenIdentitySpec extends Specification implements BareGitRepoFixture
 
     private static StageExecutor agentOver(SandboxRoundEnvironmentSource source) {
         // Ahead of the fixed instant the local box stamps process starts with, so wall time is positive.
-        new CliStageExecutor(FakeAgentSupport.propertiesFor('decision-needed'), new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)),
-                { e -> } as AgentProgressListener, ChildEnvAllowlist.none(), LAW, source)
+        ClaudeStageFixture.executor(FakeAgentSupport.propertiesFor('decision-needed'), new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)), ChildEnvAllowlist.none(), LAW, source)
     }
 
     private void persistRound(LocalBoxEnvironment box, Path factoryClone, CurrentRound rounds) {

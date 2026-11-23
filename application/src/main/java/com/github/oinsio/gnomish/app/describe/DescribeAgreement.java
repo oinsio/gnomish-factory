@@ -23,13 +23,16 @@ import java.util.stream.Collectors;
  * migrate-verify-to-executor-contract); the law has no role field, the use site implies it. A
  * describe that lists only {@code effect} is refused with that role named as reserved (NG4). A verify
  * check's own settings are held to its executor's schema too ({@link SettingsAgreement#checkErrors}).
+ * A {@code judge} check's {@code program} block is a verify use site too: the executor it names must
+ * serve {@code verdict}, and the block's settings are held to that executor's schema as a stage's
+ * are (design D12 of extract-agent-round-runner — the role rule over the one executor block).
  * Only a described executor is judged: a check naming a built-in has no answer here — the {@code
  * http} and {@code github-actions} built-ins grade their check settings at load
  * ({@code ExternalCheckSeamValidator}). Each disagreement is a
  * located {@link ConfigError}, as a law error found at load is. Pure.
  *
  * <p>Implements FR1, FR4, FR9, FR13, NFR-S1, UX1, NG4 of define-executor-contract; FR1 of
- * migrate-verify-to-executor-contract.
+ * migrate-verify-to-executor-contract; FR13, UX1 of extract-agent-round-runner.
  */
 final class DescribeAgreement {
 
@@ -72,6 +75,7 @@ final class DescribeAgreement {
         for (StageDefinition stage : definition.stages()) {
             stageErrors(stage, answers, errors);
             checkErrors(stage, answers, errors);
+            judgeErrors(definition, stage, answers, errors);
         }
         return List.copyOf(errors);
     }
@@ -115,6 +119,47 @@ final class DescribeAgreement {
                 }
                 if (describe != null && describe.protocolVersion() == Describe.SPOKEN_PROTOCOL_VERSION) {
                     errors.addAll(SettingsAgreement.checkErrors(stage, index, check, describe));
+                }
+            }
+        }
+    }
+
+    /**
+     * The judge use site (design D12 of extract-agent-round-runner): each {@code judge} check of
+     * {@code stage} whose executor block names a described executor needs it to serve {@code
+     * verdict}, the error located at the block's {@code verify[<i>].executor.name}; and, in the
+     * protocol this factory speaks, the block's settings must satisfy its schema.
+     */
+    private static void judgeErrors(
+            PipelineDefinition definition,
+            StageDefinition stage,
+            Map<String, Describe> answers,
+            List<ConfigError> errors) {
+        List<VerifyCheck> checks = stage.verify();
+        for (int index = 0; index < checks.size(); index++) {
+            if (!(checks.get(index) instanceof VerifyCheck.Judge judge)) {
+                continue;
+            }
+            String name = judge.executor().name();
+            if (name == null || !answers.containsKey(name)) {
+                continue;
+            }
+            Describe describe = answers.get(name);
+            if (!describe.roles().contains(Role.VERDICT)) {
+                errors.add(new ConfigError(
+                        "stages/%s/stage.yaml".formatted(stage.name()),
+                        "verify[%d].executor.name".formatted(index),
+                        unserved(
+                                name,
+                                "judge check '%s' of stage '%s'".formatted(judge.criteriaFile(), stage.name()),
+                                Role.VERDICT,
+                                describe)));
+            }
+            if (describe.protocolVersion() == Describe.SPOKEN_PROTOCOL_VERSION) {
+                for (ExecutorDeclaration declaration : definition.executors()) {
+                    if (declaration.name().equals(name)) {
+                        errors.addAll(SettingsAgreement.judgeErrors(stage, index, judge, declaration, describe));
+                    }
                 }
             }
         }

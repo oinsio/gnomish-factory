@@ -44,7 +44,6 @@ class EnvironmentPreparationOwnerSpec extends Specification {
 
     /** The production files allowed to call {@code .materialize(}, each with why. */
     static final Map<String, String> MATERIALIZE_CALLERS = [
-        ('adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/FreshJudgeEnvironments.java'): 'the sandboxed judge box, pinned at the attempt commit',
         ('adapters/src/main/java/com/github/oinsio/gnomish/adapter/check/SandboxCheckEnvironmentSource.java'): 'fresh-box verification, pinned at the attempt commit',
         ('adapters/src/main/java/com/github/oinsio/gnomish/adapter/check/HostCheckEnvironmentSource.java') : 'the host check environment over the adopted workspace',
         (ENV + 'EnvironmentLease.java') : 'the round box — and the box a --discard-work resume rebuilds after its disposal',
@@ -53,6 +52,7 @@ class EnvironmentPreparationOwnerSpec extends Specification {
         ('bootstrap/src/main/java/com/github/oinsio/gnomish/app/conformance/ProgramCandidate.java'): 'the host environment over a conformance case\'s own scratch working copy (D19 of define-executor-contract), adopted as the host describe environment adopts its directory',
         ('sandbox/core/src/main/java/com/github/oinsio/gnomish/sandbox/LiveBox.java') : 'the live-box mechanism hands each build to its role\'s materializer',
         ('bootstrap/src/main/java/com/github/oinsio/gnomish/app/RunDescribe.java') : 'the host describe environment over the run\'s own directory (design D5 of define-executor-contract), adopted as the host check environment adopts it',
+        ('adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/runner/AgentCheckBinding.java') : 'the host environment of an agent check request over the adopted working copy in a run without boxes (D2, task 4.0a of extract-agent-round-runner), as the host check environment adopts it',
         ('adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/HostRoundEnvironmentSource.java') : 'the host round environment over the adopted workspace: its scratch area, where a program executor names its result files (task 7.1 of define-executor-contract), as the host check environment adopts it',
     ]
 

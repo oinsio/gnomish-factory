@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.e2e.paidsmoke
 
+import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.StderrPolicy
@@ -51,7 +52,20 @@ final class PaidSmokeAgentLauncher {
      * @return the launched process handle
      */
     static ExecHandle launch(List<String> command, Path workspaceRoot, InstantSource clock, String prompt) {
-        def environment = new HostTaskExecutionEnvironment(workspaceRoot, clock, TestChildEnvironment.hostAllowlist(), ProcessLaunch.grouped())
+        launch(command, workspaceRoot, clock, prompt, TestChildEnvironment.hostAllowlist())
+    }
+
+    /**
+     * @param command the full argv, binary first
+     * @param workspaceRoot an existing directory to run the round in
+     * @param clock the clock passed to the execution environment
+     * @param prompt the prompt delivered to the CLI on stdin
+     * @param allowlist what the child sees of the test JVM's environment, beside the host base set
+     * @return the launched process handle
+     */
+    static ExecHandle launch(List<String> command, Path workspaceRoot, InstantSource clock, String prompt,
+            ChildEnvAllowlist allowlist) {
+        def environment = new HostTaskExecutionEnvironment(workspaceRoot, clock, allowlist, ProcessLaunch.grouped())
         environment.exec(new ExecCommand(command, [:], prompt, StderrPolicy.PIPED))
     }
 }

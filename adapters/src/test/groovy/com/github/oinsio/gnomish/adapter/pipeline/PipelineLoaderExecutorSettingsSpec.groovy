@@ -98,8 +98,9 @@ ${executorSettings}instructions: stages/build/instructions.md
 verify:
   - type: judge
     criteriaFile: stages/build/accept.md
-    model: judge-model
-    votes: 1
+    executor:
+      type: agent-cli
+      model: judge-model
 ${judgeSettings}advancement: auto
 """)
 
@@ -116,7 +117,7 @@ ${judgeSettings}advancement: auto
         where | key | executorSettings | judgeSettings
         'executor.settings' | 'roundTimeout' | '  settings:\n    roundTimeout:\n' | ''
         'executor.settings' | 'maxTurns' | '  settings:\n    maxTurns:\n' | ''
-        'verify[0].settings' | 'roundTimeout' | '' | '    settings:\n      roundTimeout:\n'
+        'verify[0].executor.settings' | 'roundTimeout' | '' | '      settings:\n        roundTimeout:\n'
     }
 
     def "the aggregated error list is immutable"() {

@@ -45,7 +45,7 @@ class TakeContainerRevocationSpec extends Specification implements RunChainFakes
         def support = Mock(SandboxRunSupport) {
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
         }
         def execution = new TakeContainerEngineExecution(
                 assemblyRunning(new ScriptedExecutor([completedRound()])),
@@ -81,7 +81,7 @@ class TakeContainerRevocationSpec extends Specification implements RunChainFakes
         def support = Mock(SandboxRunSupport) {
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
         }
         def execution = new TakeContainerEngineExecution(
                 assemblyRunning(new ScriptedExecutor([completedRound()])),

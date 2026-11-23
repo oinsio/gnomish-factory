@@ -37,18 +37,17 @@ import org.jspecify.annotations.Nullable;
  * concurrently through a {@link StreamDrain}, waits for exit within {@code roundTimeout}, closes
  * the round, and reads the answer file. Extracted from {@link CliStageExecutor} for file size.
  *
- * <p>Kept in sync with {@link JudgeRoundExecution}: both launch one agent round from the same
- * {@link AgentRoundEquipment} — the CLI binary through the environment port with the factory-set
- * AI seam variables and the CLI's stderr sent to a {@link RoundScratchDirectory} that leaves with
- * the round, a {@link StreamDrain} started before the wait, the wait bounded by {@code
- * roundTimeout} with timeout and interrupt classified before the drain's events are consulted,
- * then the handle's {@link ExecHandle#postExitBound()} for the tail, never a bound of its own —
- * and each maps every failure of that launch sequence through one site that carries the stderr
- * tail of the round (here: {@link AgentRoundFailure}, a {@code failed/infrastructure} result;
- * there: {@link JudgeCannotVerify}), leaving it one DEBUG line on success. Neither throws a
- * failure of the round to its caller. Both
- * probe the environment's egress guard before the launch and again once the process has exited,
- * before anything is graded (D14 of tighten-spec-contract).
+ * <p>It launches the CLI binary through the environment port with the factory-set AI seam
+ * variables and the CLI's stderr sent to a {@link RoundScratchDirectory} that leaves with the round,
+ * starts a {@link StreamDrain} before the wait, bounds the wait by {@code roundTimeout} with timeout
+ * and interrupt classified before the drain's events are consulted, then takes the handle's {@link
+ * ExecHandle#postExitBound()} for the tail, never a bound of its own — and maps every failure of
+ * that launch sequence through {@link AgentRoundFailure}, a {@code failed/infrastructure} result
+ * carrying the stderr tail of the round, leaving it one DEBUG line on success. It throws no failure
+ * of the round to its caller, and probes the environment's egress guard before the launch and again
+ * once the process has exited, before anything is graded (D14 of tighten-spec-contract). Its judge
+ * twin was deleted when the judge became a check round (task 4.1 of extract-agent-round-runner),
+ * dissolving the pair.
  *
  * <p>Implements FR1, FR2, FR3, FR6, NFR-R1, NFR-R2 of fix-round-stdout-drain; FR1 of
  * fix-denial-attribution-durability; FR6 of add-parameter-count-gate (design D6, Sync surfaces);
@@ -118,8 +117,7 @@ final class ExecutorRoundExecution {
             try (StreamDrain drain =
                     StreamDrain.start(launched.output(), clock, listenerFor(equipment.progressListener(), round))) {
                 // FR7, D6 of extract-agent-round-runner: the one resolution, over the root's factory bounds.
-                Duration roundTimeout = RoundBounds.of(ProgramBounds.DEFAULTS, executor.settings())
-                        .overall();
+                Duration roundTimeout = RoundBounds.overall(ProgramBounds.DEFAULTS, executor.settings());
                 var wait = launched.waitForExitOrTimeout(roundTimeout, clock);
                 // Both early endings are classified before the drain's events are consulted
                 // (FR3): the kill ended the stream mid-line, and that secondary symptom must not

@@ -58,7 +58,7 @@ public record CheckRef(int index, UntrustedText label) {
         String label =
                 switch (check) {
                     case VerifyCheck.Executor executor -> executorLabel(executor);
-                    case VerifyCheck.Judge(String criteriaFile, var _, var _, var _) -> "judge:" + criteriaFile;
+                    case VerifyCheck.Judge(String criteriaFile, var _) -> "judge:" + criteriaFile;
                 };
         // The manifest mint (design D3): every discriminator in the label — a builtin's name, a
         // command line, a provider and check id, a criteria file — is text the target repository's
@@ -69,7 +69,8 @@ public record CheckRef(int index, UntrustedText label) {
     /**
      * The label of an executor check, prefixed by the token it was declared with, so a
      * legacy check keeps the label shape it had before the tokens became sugar (FR1, UX2
-     * of migrate-verify-to-executor-contract).
+     * of migrate-verify-to-executor-contract); a judge's check round keeps its judge's label (FR4
+     * of extract-agent-round-runner).
      */
     private static String executorLabel(VerifyCheck.Executor check) {
         return switch (check.token()) {
@@ -77,6 +78,7 @@ public record CheckRef(int index, UntrustedText label) {
             case COMMAND -> "command:" + check.checkId();
             case EXTERNAL -> "external:" + check.executorName() + ":" + check.checkId();
             case EXECUTOR -> "executor:" + check.executorName() + ":" + check.checkId();
+            case JUDGE -> "judge:" + check.checkId();
         };
     }
 

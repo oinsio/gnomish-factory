@@ -6,11 +6,9 @@ import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
-import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -19,6 +17,7 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
@@ -51,14 +50,13 @@ class DecisionCarryingResumeSpec extends Specification {
     def builtinRunner = new ScriptedCheckRounds()
     def commandRunner = new ScriptedCheckRounds()
     def externalClient = new ScriptedCheckRounds()
-    def judgeVoter = new ScriptedJudgeVoter()
     def persistence = new InMemoryAttemptPersistence()
     def listener = new RecordingEventListener()
     def clock = new VirtualClock()
     def sleeper = new VirtualSleeper(clock)
 
     EnginePorts ports() {
-        new EnginePorts(CheckRouting.of(executor, builtinRunner, commandRunner, externalClient), judgeVoter,
+        new EnginePorts(CheckRouting.of(executor, builtinRunner, commandRunner, externalClient),
                 listener, persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
     }
 
@@ -132,7 +130,7 @@ class DecisionCarryingResumeSpec extends Specification {
 
         when: 'a run enters at the limit — no caller reset — with its own fakes'
         def exhaustedExecutor = new ScriptedExecutor()
-        def exhaustedPorts = new EnginePorts(CheckRouting.of(exhaustedExecutor, new ScriptedCheckRounds(), new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(),
+        def exhaustedPorts = new EnginePorts(CheckRouting.of(exhaustedExecutor, new ScriptedCheckRounds(), new ScriptedCheckRounds(), new ScriptedCheckRounds()),
                 new RecordingEventListener(), new InMemoryAttemptPersistence(), VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
         def exhausted = new Engine().run(pipeline(stageDef), context,
                 new TaskState(new Position.AtStage('build'), 2, [], UsageSnapshot.EMPTY, ExecutorVersions.none()), WORKSPACE, exhaustedPorts)
@@ -161,20 +159,20 @@ class DecisionCarryingResumeSpec extends Specification {
         given: 'a context with a decision and a single-vote judge check that passes'
         def decision = new Decision('accept the tradeoff', 'review', 'carol', null)
         def context = new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [decision])
-        def judge = new VerifyCheck.Judge('criteria.md', 'judge-model', [:], 1)
+        def judge = JudgeChecks.agent('criteria.md', 'judge-model')
         def stageDef = stage('review', 5, [judge])
-        judgeVoter.scripted << new JudgeVoter.Vote(new Verdict.Pass(null, []), [:])
+        externalClient.scripted << new Verdict.Pass(null, [])
         executor.scripted << completed()
 
         when: 'the run resumes at the recorded stage'
         def outcome = new Engine().run(pipeline(stageDef), context, TaskState.atStageStart('review'), WORKSPACE, ports())
 
-        then: 'the run completed and cast exactly one vote'
+        then: 'the run completed and made exactly one judge request'
         outcome instanceof TaskOutcome.Completed
-        judgeVoter.voteCount == 1
+        externalClient.requests.size() == 1
 
-        and: 'the judge received the same decisions as the executor, byte-for-byte'
-        judgeVoter.contexts[0].decisions() == [decision]
-        judgeVoter.contexts[0].decisions() == executor.requests[0].context().decisions()
+        and: 'the judge request carried the same decisions as the executor, byte-for-byte'
+        externalClient.requests[0].context().decisions() == [decision]
+        externalClient.requests[0].context().decisions() == executor.requests[0].context().decisions()
     }
 }

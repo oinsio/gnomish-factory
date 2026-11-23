@@ -42,9 +42,11 @@ class CheckDispatchAssemblyBoundarySpec extends Specification {
         // Unit specs whose subject is the constructed class itself.
         (APP + 'CheckRoundRouteSpec.groovy'): 'subject: the route',
         (APP + 'CheckDispatchPinSpec.groovy'): 'subject: the dispatch behind a pin-check over a law commit',
+        (APP + 'JudgeDispatchSpecBase.groovy'): 'subject: a judge check through the dispatch to the claude entry\'s check half (task 4.1 of extract-agent-round-runner)',
         (APP + 'ExecutorDispatchSpec.groovy'): 'subject: the stage dispatch over a registry',
         (APP + 'ExecutorRegistryCommandSpec.groovy'): 'subject: the registry\'s command entry',
         (APP + 'ExecutorRegistryEntrySpec.groovy'): 'subject: the registry\'s entries',
+        (APP + 'ClaudeEntrySpec.groovy'): 'subject: the registry\'s claude entry (task 4.0a of extract-agent-round-runner)',
         // The SCM built-ins' entries over connections the production admission granted, against a
         //     scripted secrets port and a loopback platform the assembly's factory-home secrets cannot
         //     reach.

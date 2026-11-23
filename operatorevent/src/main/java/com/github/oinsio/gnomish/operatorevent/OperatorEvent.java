@@ -35,10 +35,14 @@ public enum OperatorEvent {
     ROUND_DENIALS_UNREADABLE_ON_FINISH("GF005"),
     ROUND_DENIALS_ORPHANED_ON_FAILURE("GF006"),
     ROUND_DENIALS_UNREADABLE_ON_FAILURE("GF007"),
-    JUDGE_CRITERIA_UNREADABLE("GF008"),
+    // GF008 and GF010 are retired (extract-agent-round-runner, task 4.1): a judge check is a check
+    // round, so its criteria preflight and its round's failures are its answer, and the engine's one
+    // line for a judge that cannot verify is GF009, written where the verdict is derived. A retired
+    // code stays retired — the gap is not filled.
     JUDGE_CANNOT_VERIFY_BY_DECISION("GF009"),
-    JUDGE_CANNOT_VERIFY_BY_THROWABLE("GF010"),
-    JUDGE_VERDICT_UNEXTRACTABLE("GF011"),
+    // GF011 is retired (extract-agent-round-runner, task 4.3): a judge's reply is the Claude
+    // dialect's schema-judged answer, a reply it cannot read is a malformed answer whose reason
+    // quotes the final text, and the operator's line for it is GF009. Retired, not refilled.
     TOKEN_USAGE_UNREPORTED("GF012"),
     // git adapter
     PUSH_SKIPPED_HEAD_OFF_BRANCH("GF013"),

@@ -10,7 +10,7 @@ import spock.lang.TempDir
 /**
  * The paid smoke task's substance (task 11.3, M4, D11's "(3b) Paid smoke"): drives real {@code
  * claude -p --output-format stream-json --verbose} rounds through the {@code
- * TaskExecutionEnvironment} port — the same seam {@code CliStageExecutor}/{@code CliJudgeVoter} use,
+ * TaskExecutionEnvironment} port — the same seam {@code CliStageExecutor} and the agent round runner use,
  * with the prompt delivered on stdin (FR24, D18 of add-sandbox-core) — and overwrites
  * the committed {@code stream-json-reference/*.reference.json} fixtures with the real transcripts
  * (sensitive data scrubbed via {@link ReferenceDumpScrubber}), refreshing the reference set task

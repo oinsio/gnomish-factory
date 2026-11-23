@@ -71,7 +71,7 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
             taskRepository() >> repository
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
         }
         tracker.fetchTask(_) >> heldByUs()
 
@@ -116,7 +116,7 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
             taskRepository() >> Mock(TaskLifecycleStore)
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
         }
         def executor = new ScriptedExecutor([completedRound()])
         tracker.fetchTask(_) >> heldByUs()
@@ -153,7 +153,7 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
             taskRepository() >> repository
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
         }
         tracker.fetchTask(_) >> heldByUs('PROJ-9')
 

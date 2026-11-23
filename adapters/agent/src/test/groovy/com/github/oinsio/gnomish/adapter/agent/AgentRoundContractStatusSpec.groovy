@@ -14,7 +14,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
@@ -53,7 +52,7 @@ class AgentRoundContractStatusSpec extends Specification {
         def executor = new CliStageExecutor(
                 FakeAgentSupport.propertiesFor('hangs-forever'), clock, PipelineLaw.ofContent(['instructions.md': 'Do the thing.']))
         def stage = FakeAgentSupport.requestFor(workspaceDir, [roundTimeout: 1]).stage()
-        def ports = new EnginePorts(CheckRouting.of(executor, new ScriptedCheckRounds(), new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), listener, persistence,
+        def ports = new EnginePorts(CheckRouting.of(executor, new ScriptedCheckRounds(), new ScriptedCheckRounds(), new ScriptedCheckRounds()), listener, persistence,
                 VirtualTimeEquipment.on(clock), RoundIdentity.inPlace())
         new Engine().run(new PipelineDefinition('1', new AutonomyLimits(3), [stage]),
         FakeAgentSupport.defaultTaskContext(), TaskState.atStageStart('build'), new DirectoryWorkspace(workspaceDir),

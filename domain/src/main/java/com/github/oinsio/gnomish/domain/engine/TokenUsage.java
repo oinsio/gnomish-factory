@@ -10,7 +10,7 @@ package com.github.oinsio.gnomish.domain.engine;
  *
  * <p>Whether tokens are known at all — for a whole model, or for the round as a
  * whole — is the concern of the containing type ({@link ExecutorUsage#byModel()},
- * a judge vote's map in {@link com.github.oinsio.gnomish.domain.engine.port.JudgeVoter.Vote}): an empty map means unreported, never a fabricated
+ * a judge check's {@code verdict} participant entry): an empty map means unreported, never a fabricated
  * zero. All four counts are non-negative — a token count cannot go below zero;
  * zero is accepted since a round may legitimately consume no tokens of a kind.
  * Inert value data compared by content. It carries no arithmetic: every sum of token counts is

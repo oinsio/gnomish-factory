@@ -68,7 +68,7 @@ public final class ClaudeDialect implements AgentDialect<AgentEvent> {
 
     private final String binary;
     private final UntrustedText version;
-    private final String egressHost;
+    private final EgressHost egressHost;
     private final TokenUsageMapper tokenUsageMapper = new TokenUsageMapper();
     private final AgentRoundResultExtractor extractor = new AgentRoundResultExtractor();
 
@@ -78,6 +78,10 @@ public final class ClaudeDialect implements AgentDialect<AgentEvent> {
      * @param egressHost the host the CLI reaches; never blank
      */
     ClaudeDialect(String binary, UntrustedText version, String egressHost) {
+        this(binary, version, () -> egressHost);
+    }
+
+    private ClaudeDialect(String binary, UntrustedText version, EgressHost egressHost) {
         this.binary = binary;
         this.version = version;
         this.egressHost = egressHost;
@@ -85,18 +89,26 @@ public final class ClaudeDialect implements AgentDialect<AgentEvent> {
 
     /**
      * The dialect of one run: its egress host is the host of the base URL the run's allowlist
-     * resolves — the secrets port, in production — or the provider's own host when none is set.
+     * resolves — the secrets port, in production — or the provider's own host when none is set. The
+     * base URL is read at each {@link #describe}, never here: building the dialect reads no secret,
+     * so run assembly, which builds it for every run (task 4.0a), resolves nothing for a run that
+     * starts no agent round, and a base URL naming no host is refused by the describe of the round
+     * that needs it.
      *
      * @param binary the CLI binary name or path; never null
      * @param version the CLI's version as it reported it; never blank
      * @param childEnv the run's child-environment allowlist; never null
      * @return the dialect; never null
-     * @throws IllegalArgumentException if the configured base URL names no host
      */
     public static ClaudeDialect of(String binary, UntrustedText version, ChildEnvAllowlist childEnv) {
-        return new ClaudeDialect(binary, version, ClaudeEnvironment.egressHost(childEnv));
+        return new ClaudeDialect(binary, version, () -> ClaudeEnvironment.egressHost(childEnv));
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @throws IllegalArgumentException if the configured base URL names no host
+     */
     @Override
     public Describe describe() {
         return new Describe(
@@ -106,7 +118,7 @@ public final class ClaudeDialect implements AgentDialect<AgentEvent> {
                 List.of(Capability.STREAMS_PROGRESS, Capability.CANCEL),
                 ClaudeSettings.schema(),
                 ClaudeEnvironment.CREDENTIALS,
-                List.of(egressHost),
+                List.of(egressHost.host()),
                 ClaudeEnvironment.CONFIG_DIR_VARIABLE,
                 ClaudeEnvironment.POLICY_DISABLING_FLAGS,
                 EnforcementLevel.TOOL_GATE,
@@ -173,5 +185,12 @@ public final class ClaudeDialect implements AgentDialect<AgentEvent> {
         return events.stamped().stream()
                 .map(stamped -> new TimestampedEvent(stamped.event(), stamped.at()))
                 .toList();
+    }
+
+    /** Where the describe's one egress host comes from: a fixed host, or the run's allowlist at each describe. */
+    @FunctionalInterface
+    private interface EgressHost {
+
+        String host();
     }
 }

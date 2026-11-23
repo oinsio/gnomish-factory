@@ -16,7 +16,7 @@ class BlankMechanismFieldsSpec extends Specification {
 
     List<ConfigError> check(ExecutorDto executor) {
         List<ConfigError> errors = []
-        BlankMechanismFields.check(errors, FILE, executor)
+        BlankMechanismFields.check(errors, FILE, 'executor', executor)
         errors
     }
 
@@ -28,7 +28,7 @@ class BlankMechanismFieldsSpec extends Specification {
     def "a command stage declaring a blank model (#model) is the forbidden-model error"() {
         expect:
         check(exec('command', model, 'make gen')) == [
-            MechanismFieldErrors.modelOnCommandStage(FILE)
+            MechanismFieldErrors.modelOnCommandStage(FILE, 'executor')
         ]
 
         where:
@@ -39,7 +39,7 @@ class BlankMechanismFieldsSpec extends Specification {
     def "a #type stage declaring a blank command (#command) is the forbidden-command error"() {
         expect:
         check(exec(type, 'm', command)) == [
-            MechanismFieldErrors.commandOnStage(FILE, type)
+            MechanismFieldErrors.commandOnStage(FILE, 'executor', type)
         ]
 
         where:
@@ -47,6 +47,21 @@ class BlankMechanismFieldsSpec extends Specification {
             ['api', 'agent-cli', 'program'],
             ['', '  ']
         ].combinations()
+    }
+
+    // FR13 of extract-agent-round-runner: a judge check's block is located at the check
+    def "a judge block's blank field is located under the block's own location"() {
+        given:
+        List<ConfigError> errors = []
+
+        when:
+        BlankMechanismFields.check(errors, FILE, 'verify[2].executor', exec('agent-cli', 'm', ' '))
+
+        then:
+        errors == [
+            MechanismFieldErrors.commandOnStage(FILE, 'verify[2].executor', 'agent-cli')
+        ]
+        errors[0].where() == 'verify[2].executor.command'
     }
 
     // FR2: what the domain rule sees is the domain rule's to report — never twice
@@ -64,6 +79,5 @@ class BlankMechanismFieldsSpec extends Specification {
         'an agent stage with a blank model' | exec('agent-cli', '', null)
         'an unknown type with blank fields' | exec('shell', '', '')
         'a missing type with blank fields' | exec(null, '', '')
-        'no executor at all' | null
     }
 }

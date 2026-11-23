@@ -17,8 +17,11 @@ import spock.lang.Specification
  * :domain} set. The engine's one port routes a check round to the check dispatch, which binds it and
  * puts it behind the run's pin-check (task 4.2f). A law's program binds its check only through its
  * entry's fresh-box binding, and the credential an {@code http} check names in its own settings is read
- * for the run's scrub set only by the built-ins' credential-names owner (task 5.3). The agent arm's own construction is pinned to the selector by {@link
- * ProgressListenerWiringSpec}. Since task 5.2 no check reaches its executor any other way: the
+ * for the run's scrub set only by the built-ins' credential-names owner (task 5.3). The {@code claude}
+ * entry is built once, by its one composition, which the selector alone calls, and it holds the one
+ * production construction of the agent round runner (task 4.0a of extract-agent-round-runner), which
+ * every agent stage round reaches through the stage dispatch since task 5.1a; the runner construction's
+ * listener is pinned by {@link ProgressListenerWiringSpec}. Since task 5.2 no check reaches its executor any other way: the
  * check-provider SPI is discovered by nobody, task 6.1 removed it and its client type from the
  * plugin api, so no production source names them, and {@code ServiceLoader} serves the tracker and the sandbox
  * bindings alone. A whole-tree text scan, comments stripped, that asserts it reached every
@@ -31,7 +34,7 @@ import spock.lang.Specification
  * CommandExecutorFactory.NAME} take from the set.
  *
  * <p>FR9, FR10 of define-executor-contract; FR8 of add-command-executor; FR1, FR2, FR3, FR13, FR16,
- * NFR-S1 of migrate-verify-to-executor-contract.
+ * NFR-S1 of migrate-verify-to-executor-contract; FR14 of extract-agent-round-runner.
  */
 class ExecutorRegistryOwnerSpec extends Specification {
 
@@ -46,6 +49,9 @@ class ExecutorRegistryOwnerSpec extends Specification {
     private static final String ASSEMBLER = APP + 'RunAssembler.java'
     private static final String CHECK_DISPATCH = APP + 'CheckDispatch.java'
     private static final String RUN_LAW = APP + 'RunLaw.java'
+    private static final String CLAUDE_ENTRY = APP + 'ClaudeEntry.java'
+    private static final String AGENT_RUNNERS =
+    'adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/runner/AgentRunners.java'
     private static final String PIN_CHECK = 'adapters/src/main/java/com/github/oinsio/gnomish/adapter/check/PinCheck.java'
     private static final String COMMAND_FACTORY =
     'adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/command/CommandExecutorFactory.java'
@@ -80,6 +86,8 @@ class ExecutorRegistryOwnerSpec extends Specification {
             ASSEMBLER,
             CHECK_DISPATCH,
             RUN_LAW,
+            CLAUDE_ENTRY,
+            AGENT_RUNNERS,
             PIN_CHECK,
             COMMAND_FACTORY,
             SCM_BUILT_INS,
@@ -121,6 +129,15 @@ class ExecutorRegistryOwnerSpec extends Specification {
         //     box per request, and its placement is judged only at run assembly.
         'new ProgramCheckBinding(' || [REGISTRY]
         'ProgramCheckPlacement.refusals(' || [RUN_DESCRIBE]
+        // Task 4.0a of extract-agent-round-runner (FR14, D12): the claude entry is composed once, by its
+        //     one composition the selector calls, and the agent round runner is built only by that
+        //     entry's runner construction.
+        'ClaudeEntry.of(' || [SELECTOR]
+        'RegistryEntry.agent(' || [CLAUDE_ENTRY]
+        'new AgentRunners<>(' || [CLAUDE_ENTRY]
+        'AgentCheckBinding.inFreshBoxes(' || [CLAUDE_ENTRY]
+        'AgentCheckBinding.onHost(' || [CLAUDE_ENTRY]
+        'new AgentRoundRunner<>(' || [AGENT_RUNNERS]
         // Task 5.2, D9 (ExecutorRegistry row): ServiceLoader discovers the tracker and the sandbox
         //     bindings only — no check is discovered.
         'ServiceLoader.load(' || [

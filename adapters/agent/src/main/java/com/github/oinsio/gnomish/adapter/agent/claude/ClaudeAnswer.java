@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.oinsio.gnomish.adapter.agent.JudgeVerdictExtractor;
 import com.github.oinsio.gnomish.adapter.agent.runner.DialectAnswer;
 import com.github.oinsio.gnomish.adapter.agent.runner.ParsedEvents;
+import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
 import com.github.oinsio.gnomish.executorcontract.Answer;
 import com.github.oinsio.gnomish.executorcontract.ExecutorContractJson;
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest;
@@ -16,7 +17,6 @@ import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,10 +34,14 @@ import org.slf4j.LoggerFactory;
  * — a verdict into the contract's SARIF verdict ({@link JudgeVerdictExtractor#sarif}), a decision
  * into its {@code select} — and written to the answer file through the contract's answer writer. A
  * reply that fails the schema, a final text with no object, and a round whose structured-output
- * retries ran out are a malformed answer, never a pass, and write no file.
+ * retries ran out are a malformed answer, never a pass, and write no file; an unreadable final text
+ * is quoted in the malformed answer's reason, through the log exit, so the one operator line of a
+ * judge that cannot verify shows what the model wrote on one line.
  *
  * <p>A {@code transform} round's answer is the file the agent wrote itself. The answer file is the
- * factory's own scratch file, so a failure to write it is the factory's, thrown.
+ * factory's own scratch file, written through the shared {@link AtomicFileWriter} so the result
+ * reader sees the whole answer or none (FR5 of harden-task-branch-contract); a failure to write it is
+ * the factory's, thrown.
  *
  * <p>Implements FR3, FR4 of extract-agent-round-runner.
  */
@@ -48,6 +52,14 @@ final class ClaudeAnswer {
 
     /** The name a verdict's SARIF run is attributed to. */
     static final String TOOL = "claude";
+
+    /**
+     * How much of an unreadable final text a malformed answer's reason quotes: the model's own words
+     * are what the operator needs to see why no answer could be read, and the reason leaves for the
+     * log through its exit, flattened to one line (factory-logging, "The judge-verdict warning is
+     * flattened by the choke point").
+     */
+    static final int FINAL_TEXT_QUOTE_CHARS = 256;
 
     private static final Logger log = LoggerFactory.getLogger(ClaudeAnswer.class);
 
@@ -77,12 +89,13 @@ final class ClaudeAnswer {
                             + "the agent CLI reported no structured output for the {} answer;"
                             + " reading it from the final text",
                     request.role().wire());
-            switch (FinalTextObject.of(result.result())) {
+            UntrustedText finalText = result.result();
+            switch (FinalTextObject.of(finalText)) {
                 case FinalTextObject.Reading.NoObject ignored -> {
-                    return malformed("its final text holds no JSON object");
+                    return malformed("its final text holds no JSON object", finalText);
                 }
                 case FinalTextObject.Reading.NotJson ignored -> {
-                    return malformed("its final text's object is not valid JSON");
+                    return malformed("its final text's object is not valid JSON", finalText);
                 }
                 case FinalTextObject.Reading.Parsed parsed -> reply = parsed.object();
             }
@@ -129,7 +142,7 @@ final class ClaudeAnswer {
 
     private static void write(Path answerFile, Answer answer) {
         try {
-            Files.writeString(answerFile, ExecutorContractJson.writer().writeValueAsString(answer));
+            AtomicFileWriter.write(answerFile, ExecutorContractJson.writer().writeValueAsString(answer));
         } catch (IOException failed) {
             throw new UncheckedIOException("could not write the round's answer file " + answerFile, failed);
         }
@@ -137,5 +150,10 @@ final class ClaudeAnswer {
 
     private static DialectAnswer malformed(String reason) {
         return new DialectAnswer.Malformed(UntrustedText.factory(reason));
+    }
+
+    /** A malformed answer whose reason quotes the final text it could not read, through the log exit. */
+    private static DialectAnswer malformed(String reason, UntrustedText finalText) {
+        return malformed(reason + "; the final text was: " + finalText.excerpt(FINAL_TEXT_QUOTE_CHARS));
     }
 }

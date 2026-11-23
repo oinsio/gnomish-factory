@@ -4,9 +4,7 @@ import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.claude.AgentRoundResultExtractor
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
-import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
@@ -22,7 +20,7 @@ import spock.lang.Specification
 import spock.lang.TempDir
 
 /**
- * Both round executions send the CLI's stderr to a file in the round scratch directory, read its
+ * The executor round sends the CLI's stderr to a file in the round scratch directory, read its
  * tail into the round's diagnostics after the exit — the failure's detail, or one DEBUG line on
  * success — and leave no file of the round on the host, however the round ended (design D18 of fix-terminal-receipt-convergence).
  *
@@ -62,13 +60,9 @@ class RoundStderrFileSpec extends Specification {
     }
 
     private Object execute(String role, TaskExecutionEnvironment environment, Path parent = scratchParent) {
-        if (role == 'executor') {
-            return ExecutorRoundExecution.run(equipment(parent),
-                    StageExecutorRequests.request(workspaceDir), 'prompt',
-                    new StandInRound(environment, workspaceDir.resolve('decision.json')))
-        }
-        JudgeRoundExecution.run(equipment(parent), new JudgeVerdictExtractor(),
-                new VerifyCheck.Judge('criteria.md', 'claude-fake-judge-1', [:], 1), environment, 'prompt')
+        ExecutorRoundExecution.run(equipment(parent),
+                StageExecutorRequests.request(workspaceDir), 'prompt',
+                new StandInRound(environment, workspaceDir.resolve('decision.json')))
     }
 
     private static ChildOutput stream(String text) {
@@ -93,7 +87,7 @@ class RoundStderrFileSpec extends Specification {
         stderrFile().parent.parent == scratchParent
 
         where:
-        role << ['executor', 'judge']
+        role << ['executor']
     }
 
     // FR20: no file of the round remains on the host after it ended, however it ended
@@ -116,7 +110,7 @@ class RoundStderrFileSpec extends Specification {
 
         where:
         [role, ending, content, wait] << [
-            ['executor', 'judge'],
+            ['executor'],
             [
                 [
                     'exited normally',
@@ -158,13 +152,13 @@ class RoundStderrFileSpec extends Specification {
         })
 
         then:
-        role == 'executor' ? (outcome.status() instanceof ExecutionResult.Completed && outcome.answer() == null) : outcome.verdict() instanceof Verdict.Pass
+        outcome.status() instanceof ExecutionResult.Completed && outcome.answer() == null
         logs.list*.formattedMessage.any {
             it.contains('the error at the end') && !it.contains('HEAD')
         }
 
         where:
-        role << ['executor', 'judge']
+        role << ['executor']
     }
 
     // FR20: a scratch directory that cannot be made is a round that cannot start, on each contract
@@ -176,18 +170,6 @@ class RoundStderrFileSpec extends Specification {
 
         then:
         InfrastructureResults.endedBy(outcome as ExecutionResult, UncheckedIOException)
-        seen == null
-    }
-
-    def "FR20: a judge round whose scratch directory cannot be made cannot verify, before any launch"() {
-        when:
-        def vote = execute('judge', environment {
-            throw new AssertionError('no launch expected')
-        }, scratchParent.resolve('missing'))
-
-        then:
-        vote.verdict() instanceof Verdict.CannotVerify
-        (vote.verdict() as Verdict.CannotVerify).reason().forLog().contains('scratch directory')
         seen == null
     }
 }

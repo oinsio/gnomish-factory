@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent.program;
 
 import com.github.oinsio.gnomish.app.describe.ProgramChannel;
+import com.github.oinsio.gnomish.app.describe.QuietStdoutBounds;
 import com.github.oinsio.gnomish.app.port.check.PendingAdoption;
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorDeclaration;
 import com.github.oinsio.gnomish.executorcontract.Capability;
@@ -65,12 +66,8 @@ public final class ProgramExecutor implements Executor, PendingAdoption {
         this.describe = describe;
         this.environment = environment;
         this.equipment = equipment;
-        this.spawn = new ProgramSpawn(
-                declaration,
-                describe.capabilities().contains(Capability.STREAMS_PROGRESS),
-                credentials,
-                environment,
-                equipment);
+        this.spawn =
+                new ProgramSpawn(declaration, QuietStdoutBounds.applyTo(describe), credentials, environment, equipment);
     }
 
     @Override

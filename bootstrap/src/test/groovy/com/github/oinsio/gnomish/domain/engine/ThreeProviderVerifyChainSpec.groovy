@@ -16,7 +16,6 @@ import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
@@ -186,7 +185,6 @@ class ThreeProviderVerifyChainSpec extends Specification {
         def orchestrator = new VerifyOrchestrator(
                 new PendingPoll(rounds, new InMemoryAttemptPersistence(), AttemptDelivery.assumedDelivered(), time,
                 listener),
-                new JudgeVoting(new ScriptedJudgeVoter()),
                 clock,
                 listener)
         def ref = ClosedRounds.at(sha)

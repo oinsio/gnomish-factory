@@ -20,7 +20,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
@@ -92,7 +91,7 @@ class RoundOutcomeLedgerWriterSpec extends Specification implements RotatingLedg
             VerifyChecks.builtin('files_exist', [:])
         ], new AutonomyLimits(3), AdvancementMode.AUTO)
         def clock = new VirtualClock(NOW)
-        def ports = new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), writer(), new InMemoryAttemptPersistence(), VirtualTimeEquipment.on(clock),
+        def ports = new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), writer(), new InMemoryAttemptPersistence(), VirtualTimeEquipment.on(clock),
                 AttemptDelivery.assumedDelivered(), described, RoundIdentity.inPlace())
         new Engine().run(new PipelineDefinition('1', new AutonomyLimits(5), [stage]), CONTEXT,
         TaskState.atStageStart('lint'), new FakeWorkspace(), ports)

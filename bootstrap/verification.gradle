@@ -180,6 +180,12 @@ tasks.register('paidSmokeTest', Test) {
     if (project.hasProperty('paidSmoke.claudeBinary')) {
         systemProperty 'paidSmoke.claudeBinary', project.property('paidSmoke.claudeBinary')
     }
+    // PaidSmokeLivenessSpec (task 2.3d of extract-agent-round-runner, FR17) runs its Linux rows in a
+    // container of the image `-PpaidSmoke.linuxImage=<image>` names, forwarded the same way; with
+    // no image named those rows fail with a message naming the property, never skip.
+    if (project.hasProperty('paidSmoke.linuxImage')) {
+        systemProperty 'paidSmoke.linuxImage', project.property('paidSmoke.linuxImage')
+    }
     testLogging {
         events 'passed', 'skipped', 'failed'
         // Unlike ollamaE2eTest's clean-skip convention, a login-preflight failure here must be

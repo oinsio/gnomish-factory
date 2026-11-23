@@ -7,13 +7,11 @@ import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
-import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
@@ -49,13 +47,13 @@ class EnginePreflightRecordedStopSpec extends Specification {
     def clock = new VirtualClock()
 
     EnginePorts livePorts() {
-        new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), new RecordingEventListener(), persistence, VirtualTimeEquipment.on(clock), RoundIdentity.inPlace())
+        new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), new RecordingEventListener(), persistence, VirtualTimeEquipment.on(clock), RoundIdentity.inPlace())
     }
 
     /** Ports whose every call throws, so any call the re-escalation makes surfaces at once. */
     EnginePorts throwingPorts(RecordingEventListener listener) {
         new EnginePorts(throwing(StageExecutor),
-                throwing(JudgeVoter), listener, throwing(AttemptPersistence),
+                listener, throwing(AttemptPersistence),
                 new TimeEquipment(throwing(InstantSource), throwing(Sleeper)), throwing(AttemptDelivery), DescribedExecutors.none(), RoundIdentity.inPlace())
     }
 

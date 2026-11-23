@@ -4,15 +4,12 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
-import com.github.oinsio.gnomish.app.port.agent.JudgeEnvironmentSource
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.project.FactoryHome
 import com.github.oinsio.gnomish.app.project.ProjectLayout
 import com.github.oinsio.gnomish.app.project.ProjectName
-import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
-import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ChildEnvValues
@@ -49,11 +46,11 @@ class AgentSecretsFolderRoundSpec extends Specification {
 
     final List<ExecCommand> launched = []
 
-    // NFR-S3 of tighten-spec-contract: the agent round and the judge vote take the token from the
-    //     port, for a project, for another project and for no project, and it is the value the
-    //     port hands any other consumer
+    // NFR-S3 of tighten-spec-contract: the agent round takes the token from the port, for a project,
+    //     for another project and for no project, and it is the value the port hands any other
+    //     consumer (a judge's request is the agent round runner's, ClaudeCredentialDeliverySpec)
     // Scenario: operator/secrets-provider / Shared agent token from the host folder
-    def "NFR-S3: a token only the host secrets folder holds reaches every project's agent round and judge vote"() {
+    def "NFR-S3: a token only the host secrets folder holds reaches every project's agent round"() {
         given: 'the host secrets folder holds the agent token, and no project folder does'
         def home = FactoryHome.at(tempDir.resolve('home'))
         hostSecret(home, 'shared-from-host-folder')
@@ -63,7 +60,7 @@ class AgentSecretsFolderRoundSpec extends Specification {
             null
         ]
 
-        when: 'each project runs one executor round and one judge vote over the port it resolves through'
+        when: 'each project runs one executor round over the port it resolves through'
         def resolved = projects.collect { ProjectLayout project ->
             def secrets = new EnvFileSecretsProvider(home, project)
             // The root's binding: the port's lookup is the allowlist's values
@@ -71,13 +68,12 @@ class AgentSecretsFolderRoundSpec extends Specification {
                 secrets.find(name)
             } as ChildEnvValues)
             executorRound(childEnv)
-            judgeVote(childEnv)
             secrets.find(TOKEN)
         }
 
         then: 'every launch carried the host folder token, the same value the port resolves for any consumer'
         resolved.every { it == Optional.of('shared-from-host-folder') }
-        launched.size() == 6
+        launched.size() == 3
         launched.every { it.env()[TOKEN] == 'shared-from-host-folder' }
     }
 
@@ -105,15 +101,5 @@ class AgentSecretsFolderRoundSpec extends Specification {
             }, identity: { RoundIdentity.inPlace() }] as RoundEnvironmentSource
         new CliStageExecutor(PROPERTIES, new VirtualClock(), { e -> } as AgentProgressListener, childEnv, LAW, rounds)
         .execute(FakeAgentSupport.requestFor(workspaceDir))
-    }
-
-    private void judgeVote(ChildEnvAllowlist childEnv) {
-        Path workspaceDir = Files.createTempDirectory(tempDir, 'vote')
-        JudgeEnvironmentSource judges = { Workspace ws ->
-            box('judge-verdict-pass')
-        }
-        new CliJudgeVoter(PROPERTIES, new VirtualClock(), { e -> } as AgentProgressListener, childEnv, LAW, judges)
-        .vote(new VerifyCheck.Judge('criteria.md', 'claude-fake-judge-1', [:], 1),
-        FakeAgentSupport.defaultTaskContext(), new DirectoryWorkspace(workspaceDir))
     }
 }

@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.Threshold
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 import java.time.Duration
 import spock.lang.Specification
 
@@ -60,5 +61,28 @@ class ProgramCheckPlacementSpec extends Specification {
         medium | boxes | verifyIn | why
         'a host run' | false | VerifyCheck.VerifyIn.FRESH_BOX | 'a host-mode run has no fresh box; run the stage in container mode'
         'a same-box check in a box' | true | VerifyCheck.VerifyIn.SAME_BOX | 'the check verifies same-box; declare verify-in: fresh-box'
+    }
+
+    // FR4 of extract-agent-round-runner (design D2): a judge whose block is a program is placed as its
+    //     check round is — a fresh box — so a host run refuses it alike; an agent judge is never this
+    //     owner's (its exemption: the host environment)
+    def "FR4: a program judge #outcome #medium, and an agent judge binds anywhere"() {
+        when:
+        def errors = ProgramCheckPlacement.refusals(law([
+            JudgeChecks.agent('agent.md', 'opus'),
+            JudgeChecks.program('review.md', 'acme')
+        ]), boxes)
+
+        then:
+        errors == expected
+
+        where:
+        medium | boxes || outcome | expected
+        'in a box' | true || 'binds' | []
+        'on the host' | false || 'is refused' | [
+            new ConfigError('stages/build/stage.yaml', 'verify[1]',
+            "check 'review.md' names program executor 'acme', which runs only in a fresh box: "
+            + 'a host-mode run has no fresh box; run the stage in container mode')
+        ]
     }
 }

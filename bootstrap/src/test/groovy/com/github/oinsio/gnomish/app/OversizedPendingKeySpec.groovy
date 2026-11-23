@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.workspace.fake.AttemptCommitWorkspaces
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
-import com.github.oinsio.gnomish.domain.engine.JudgeVoting
 import com.github.oinsio.gnomish.domain.engine.PendingPoll
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -11,7 +10,6 @@ import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.VerifyOrchestrator
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
@@ -79,8 +77,7 @@ class OversizedPendingKeySpec extends Specification {
         def persistence = new InMemoryAttemptPersistence()
         def listener = new RecordingEventListener()
         def chain = new VerifyOrchestrator(new PendingPoll(new CheckRound(bound, null, ci), persistence,
-                AttemptDelivery.assumedDelivered(), VirtualTimeEquipment.on(clock, sleeper), listener),
-                new JudgeVoting(new ScriptedJudgeVoter()), clock, listener)
+                AttemptDelivery.assumedDelivered(), VirtualTimeEquipment.on(clock, sleeper), listener), clock, listener)
 
         when:
         def result = chain.verify(VerifyingStages.of([ci]), new TaskContext('TASK-1', UntrustedText.tracker('t'),

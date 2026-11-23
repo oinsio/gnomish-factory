@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.Threshold
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import spock.lang.Specification
@@ -41,7 +42,7 @@ class ExecutorPromptBuilderSpec extends Specification {
         def stage = stageWith(
                 [
                     VerifyChecks.command('./gradlew test'),
-                    new VerifyCheck.Judge('criteria.md', 'claude-opus', [:], 1)
+                    JudgeChecks.agent('criteria.md', 'claude-opus')
                 ])
         def request = requestFor(stage, 0, [])
 
@@ -66,13 +67,16 @@ class ExecutorPromptBuilderSpec extends Specification {
             java.time.Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY),
             new VerifyCheck.Executor(VerifyCheck.Token.EXECUTOR, 'sonarqube', 'gate', [:], java.time.Duration.ZERO,
             java.time.Duration.ZERO, VerifyCheck.TimeoutClass.QUALITY, [], VerifyCheck.VerifyIn.SAME_BOX,
-            Threshold.ERROR, [])
+            Threshold.ERROR, []),
+            // a judge's check-round view (FR4 of extract-agent-round-runner) reads as its criteria file
+            JudgeChecks.agent('review.md', 'opus').asExecutorCheck()
         ])
 
         when:
         def prompt = builder.build(requestFor(stage, 0, []))
 
         then:
+        prompt.contains('- judge: review.md\n')
         prompt.contains('- builtin: files_exist {paths=[a]}\n')
         prompt.contains('- command: ./gradlew test\n')
         prompt.contains('- external: ci/build\n')
@@ -147,7 +151,7 @@ class ExecutorPromptBuilderSpec extends Specification {
         given:
         def builder = builderWith(['instructions.md': 'Do the thing.'])
         def stage = stageWith([
-            new VerifyCheck.Judge('missing-criteria.md', 'claude-opus', [:], 1)
+            JudgeChecks.agent('missing-criteria.md', 'claude-opus')
         ])
 
         when:

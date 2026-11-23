@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.adapter.law.PipelineLawReader
-import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
@@ -10,6 +9,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
@@ -37,7 +37,7 @@ class JudgeCriteriaLawSourceSpec extends Specification {
         given: 'the law frozen from the law source at invocation start'
         def lawRoot = Files.createDirectories(tempDir.resolve('clone'))
         write(lawRoot, ORIGINAL)
-        def check = new VerifyCheck.Judge(CRITERIA, 'claude-opus', [:], 1)
+        def check = JudgeChecks.agent(CRITERIA, 'claude-opus')
         def law = PipelineLawReader.freeze(lawRoot, pipeline(check))
 
         and: 'the gnome then rewrites the criteria file in its working copy'
@@ -45,9 +45,8 @@ class JudgeCriteriaLawSourceSpec extends Specification {
         write(workingCopy, WEAKENED)
 
         when: 'the vote composes its prompt over that working copy'
-        def prompt = new JudgePromptBuilder(law).build(check,
-                new TaskContext('task-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()),
-                new DirectoryWorkspace(workingCopy))
+        def prompt = new JudgePromptBuilder(law).verdictInput(check.criteriaFile(),
+                new TaskContext('task-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()))
 
         then:
         prompt.contains(ORIGINAL)

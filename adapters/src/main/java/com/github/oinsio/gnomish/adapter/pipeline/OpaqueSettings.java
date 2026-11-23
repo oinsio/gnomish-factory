@@ -9,8 +9,8 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The one copy of every opaque map the loader carries into the domain (FR11, D5a of
- * load-pipeline-config) — an executor's and a declaration's {@code settings}, a judge's {@code
- * settings}, a built-in or external check's {@code params}: a defensive plain-JDK copy, absent
+ * load-pipeline-config) — an executor block's (a stage's or a judge check's) and a declaration's
+ * {@code settings}, a built-in or external check's {@code params}: a defensive plain-JDK copy, absent
  * mapping to empty.
  *
  * <p>A key written with no value is YAML {@code null}, which no immutable JDK map holds: each such

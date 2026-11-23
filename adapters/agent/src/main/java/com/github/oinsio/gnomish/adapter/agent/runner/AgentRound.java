@@ -30,8 +30,9 @@ import java.util.Map;
  * round scratch directory ({@link RoundScratchDirectory}), read capped after the exit and never through
  * a pipe of its own; stdout read live from the launch by the one line reader ({@link ProgressLines})
  * under the line cap, each line parsed by the dialect ({@link DialectLines}); the wait under the
- * round's three bounds, resolved once per run by {@link RoundBounds} — the factory's startup-read and
- * silence bounds, the overall bound the request's {@code roundTimeout} declares or the factory's — on
+ * round's bounds, resolved once per run by {@link RoundBounds} — the factory's startup-read and
+ * silence bounds when the dialect's describe declares {@code streams_progress} (FR16), the overall
+ * bound the request's {@code roundTimeout} declares or the factory's — on
  * the run's time equipment ({@code ProgressWait}), an expiry killing the process tree. The dialect
  * renders the request with those same bounds as its time hints, so the bound the CLI is told and the
  * bound it is killed at are one value. How the process ended is judged by {@link
@@ -41,7 +42,7 @@ import java.util.Map;
  * stdout that did not end within the handle's post-exit bound are each {@code failed/infrastructure}
  * naming what went wrong, with the stderr tail.
  *
- * <p>Implements FR1, FR7, FR8, FR9, NFR-R1 of extract-agent-round-runner.
+ * <p>Implements FR1, FR7, FR8, FR9, FR16, NFR-R1 of extract-agent-round-runner.
  *
  * @param <E> the dialect's own event type
  */
@@ -84,7 +85,7 @@ final class AgentRound<E> {
      * @return the round's result; never null
      */
     ExecutorResult run(ExecutorRequest request) {
-        RoundBounds bounds = RoundBounds.of(equipment.bounds(), request);
+        RoundBounds bounds = RoundBounds.of(equipment.bounds(), dialect.describe(), request);
         RenderedArgv rendered = dialect.render(bounds.hinted(request));
         String answerFile = answerFile(request);
         Map<String, String> variables = new LinkedHashMap<>(credentials());

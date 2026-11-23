@@ -127,8 +127,11 @@ class ClaudeDialectAnswerSpec extends Specification {
     }
 
     def "FR3: an answer file that cannot be written is the factory's own failure, thrown"() {
+        given: 'a parent that is a regular file, so no directory can hold the answer'
+        def blocker = Files.writeString(scratch.resolve('blocker'), 'not a directory')
+
         when:
-        dialect.answer(VERDICT, events(structured('{"passed":true}')), scratch.resolve('missing/answer.json'))
+        dialect.answer(VERDICT, events(structured('{"passed":true}')), blocker.resolve('answer.json'))
 
         then:
         thrown(UncheckedIOException)

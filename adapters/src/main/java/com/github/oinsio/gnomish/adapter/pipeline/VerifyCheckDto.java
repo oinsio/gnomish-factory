@@ -17,15 +17,16 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Opaque {@code params}/{@code settings} are typed {@code Map<String, Object>}
  * so they bind to plain JDK types, never a Jackson {@code JsonNode} (D5a) —
- * keeping the domain Jackson-free. Local-sanity ranges (external timing, judge
- * votes) are validator concerns (task 4.4), not the DTO's; timing is carried as
+ * keeping the domain Jackson-free. Local-sanity ranges (external timing) are validator
+ * concerns (task 4.4), not the DTO's; timing is carried as
  * raw strings and parsed to {@code Duration} by the mapper (task 5.3).
  *
  * <p>Each record opts out of the interface's deserializer ({@code JsonDeserializer.None}), so
  * binding one does not recurse into the selection.
  *
  * <p>Implements FR2 (DTO shapes), D2, D5, D5a of load-pipeline-config; FR1, UX2 of
- * migrate-verify-to-executor-contract.
+ * migrate-verify-to-executor-contract; FR13 of extract-agent-round-runner (the judge's executor
+ * block).
  */
 @JsonDeserialize(using = VerifyCheckDtoDeserializer.class)
 public sealed interface VerifyCheckDto {
@@ -114,23 +115,18 @@ public sealed interface VerifyCheckDto {
     }
 
     /**
-     * A {@code judge} check: acceptance-criteria file, pinned model, opaque
-     * {@code settings} (plain JDK map, D5a) and a vote count.
+     * A {@code judge} check: the acceptance-criteria file and the executor block that judges —
+     * the same {@link ExecutorDto} a stage's {@code executor:} binds to (design D12 of
+     * extract-agent-round-runner). The check declares no {@code model}, {@code settings} or {@code
+     * votes} of its own, so each of those keys is an unknown field the loader refuses ({@link
+     * StructuralParse}).
      *
-     * @param criteriaFile the acceptance-criteria file path, or {@code null} when
-     *     omitted
-     * @param model the pinned judge model, or {@code null} when omitted
-     * @param settings the opaque model settings; {@code null}/absent means none
-     * @param votes the vote count, or {@code null} when omitted (a validator
-     *     concern, task 4.4)
+     * @param criteriaFile the acceptance-criteria file path, or {@code null} when omitted
+     * @param executor the check's executor block, or {@code null} when omitted (a located load
+     *     error: no judge is defaulted)
      */
     @JsonDeserialize(using = JsonDeserializer.None.class)
-    record Judge(
-            @Nullable String criteriaFile,
-            @Nullable String model,
-            @Nullable Map<String, Object> settings,
-            @Nullable Integer votes)
-            implements VerifyCheckDto {}
+    record Judge(@Nullable String criteriaFile, @Nullable ExecutorDto executor) implements VerifyCheckDto {}
 
     /**
      * The explicit {@code executor: <name>} form (FR1 of migrate-verify-to-executor-contract): a

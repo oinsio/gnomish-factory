@@ -7,8 +7,9 @@ import spock.lang.Specification
  * Design D13 of make-checkpoint-gate-durable: in the sandbox modules and the agent adapter, a
  * monitor lives only where its lock case has been argued (`lock-scope.md`). {@code LiveBox} is the
  * one live box per role — a state-guarding lock in the three-phase shape, with every materialize
- * run unlocked — and {@code EnvironmentLease} and {@code FreshJudgeEnvironments} delegate to it
- * rather than holding a monitor of their own; {@code GuardDenialReads} guards the denial cursor and
+ * run unlocked — and {@code EnvironmentLease} delegates to it rather than holding a monitor of its
+ * own (the judge's box source, {@code FreshJudgeEnvironments}, left with task 4.1 of
+ * extract-agent-round-runner: a judge request takes a box of its own); {@code GuardDenialReads} guards the denial cursor and
  * runs its container reads outside the lock. A new {@code synchronized} elsewhere in these trees —
  * the shape the lease and the judge source had before D13, a materialize held under the monitor —
  * fails this scan until its lock case is argued and the file is added here.

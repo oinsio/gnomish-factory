@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.DoNotMutate;
-import com.github.oinsio.gnomish.adapter.agent.FreshJudgeEnvironments;
 import com.github.oinsio.gnomish.adapter.check.SandboxCheckEnvironmentSource;
 import com.github.oinsio.gnomish.adapter.git.BestEffortClosingPush;
 import com.github.oinsio.gnomish.adapter.git.EnvironmentAttemptPersistence;
@@ -72,7 +71,6 @@ final class ContainerRunSupport implements SandboxRunSupport {
     final CurrentRound rounds = new CurrentRound();
     final GitObjects gitObjects;
     final TaskLifecycleStore taskRepository;
-    final FreshJudgeEnvironments judgeEnvironments;
     final BestEffortClosingPush push;
     final SandboxLifecyclePass sandboxLifecyclePass;
     final ClaimEpochSource epochs;
@@ -116,7 +114,6 @@ final class ContainerRunSupport implements SandboxRunSupport {
                 new GitInfrastructureRetry(
                         time, GitInfrastructureRetry.DEFAULT_ATTEMPTS, GitInfrastructureRetry.DEFAULT_INITIAL_BACKOFF),
                 time.clock());
-        this.judgeEnvironments = new FreshJudgeEnvironments(environments::judgeEnvironment, branch);
         this.push = new BestEffortClosingPush(runner);
         this.sandboxLifecyclePass = sandboxLifecyclePass;
     }
@@ -150,7 +147,6 @@ final class ContainerRunSupport implements SandboxRunSupport {
         var checkEnvironments = new SandboxCheckEnvironmentSource(lease, environments, branch);
         return new SandboxRunPieces(
                 new SandboxRoundEnvironmentSource(lease, runner, cloneDir, taskId, rounds, time.clock()),
-                judgeEnvironments,
                 checkEnvironments,
                 checkEnvironments,
                 gitObjects,

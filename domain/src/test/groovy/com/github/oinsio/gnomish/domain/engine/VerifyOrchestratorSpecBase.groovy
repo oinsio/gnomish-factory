@@ -5,13 +5,13 @@ import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import spock.lang.Specification
@@ -48,8 +48,8 @@ abstract class VerifyOrchestratorSpecBase extends Specification {
         VerifyChecks.external(checkId, 'ci-platform', interval, timeout, timeoutClass)
     }
 
-    static VerifyCheck.Judge judge(int votes) {
-        new VerifyCheck.Judge('criteria.md', 'model', [:], votes)
+    static VerifyCheck.Judge judge() {
+        JudgeChecks.agent('criteria.md', 'model')
     }
 
     def listener = new RecordingEventListener()
@@ -57,14 +57,18 @@ abstract class VerifyOrchestratorSpecBase extends Specification {
     def sleeper = new VirtualSleeper(clock)
     def persistence = new InMemoryAttemptPersistence()
 
+    /**
+     * The chain over scripted check rounds by executor name: the two in-process built-ins, a judge's
+     * check round (its block resolves to {@code claude}, design D2 of extract-agent-round-runner),
+     * and every other executor.
+     */
     VerifyOrchestrator orchestrator(ScriptedCheckRounds builtinRunner,
             ScriptedCheckRounds commandRunner,
             ScriptedCheckRounds externalClient = new ScriptedCheckRounds(),
-            ScriptedJudgeVoter judgeVoter = new ScriptedJudgeVoter(),
+            ScriptedCheckRounds judges = new ScriptedCheckRounds(),
             AttemptDelivery attemptDelivery = AttemptDelivery.assumedDelivered()) {
-        def rounds = CheckRouting.byExecutor(builtinRunner, commandRunner, externalClient)
+        def rounds = CheckRouting.byExecutor(builtinRunner, commandRunner, externalClient, judges)
         new VerifyOrchestrator(new PendingPoll(rounds, persistence, attemptDelivery, VirtualTimeEquipment.on(clock, sleeper),
-                listener),
-                new JudgeVoting(judgeVoter), clock, listener)
+                listener), clock, listener)
     }
 }

@@ -41,7 +41,8 @@ import org.jspecify.annotations.Nullable;
  * round of a run reaches this wrapper through {@link CheckRoundRoute} and {@link CheckDispatch} (task
  * 4.2f).
  *
- * <p>Implements FR1, FR2, FR3, FR11, FR13, NFR-R1 of migrate-verify-to-executor-contract.
+ * <p>Implements FR1, FR2, FR3, FR11, FR13, NFR-R1 of migrate-verify-to-executor-contract; FR4 of
+ * extract-agent-round-runner.
  */
 final class CheckRound implements StageExecutor {
 
@@ -53,66 +54,83 @@ final class CheckRound implements StageExecutor {
     private final @Nullable PendingAdoption adoption;
     private final VerifyCheck.Executor check;
     private final Runnable release;
+    private final VerdictInput input;
 
     /**
-     * A round over an executor bound in no environment of its own: it releases nothing.
+     * A round over an executor bound in no environment of its own, of a run with no law: it releases
+     * nothing, and names the check by its identifier.
      *
      * @param bound the executor bound to {@code check} and its working copy, behind its pin-check;
      *     never null
-     * @param adoption the same executor's adoption role, taken before the pin decorator wrapped it;
+     * @param adoption the same executor's adoption role, as its binding built it before any decorator;
      *     {@code null} for an executor that does not take the role
      * @param check the check the round judges; never null
      */
     CheckRound(Executor bound, @Nullable PendingAdoption adoption, VerifyCheck.Executor check) {
-        this(bound, adoption, check, () -> {});
+        this(bound, adoption, check, () -> {}, VerdictInput.IDENTIFIER_ONLY);
     }
 
     /**
      * @param bound the executor bound to {@code check} and its working copy, behind its pin-check;
      *     never null
-     * @param adoption the same executor's adoption role, taken before the pin decorator wrapped it;
+     * @param adoption the same executor's adoption role, as its binding built it before any decorator;
      *     {@code null} for an executor that does not take the role
      * @param check the check the round judges; never null
      * @param release what releases the environment the executor was bound in, run once when the
      *     request ends, whatever it answered or threw; never null
+     * @param input the run's role input of a check's request; never null
      */
-    CheckRound(Executor bound, @Nullable PendingAdoption adoption, VerifyCheck.Executor check, Runnable release) {
+    CheckRound(
+            Executor bound,
+            @Nullable PendingAdoption adoption,
+            VerifyCheck.Executor check,
+            Runnable release,
+            VerdictInput input) {
         this.executor = check.executorName();
         this.bound = bound;
         this.adoption = adoption;
         this.check = check;
         this.release = release;
+        this.input = input;
     }
 
     /**
-     * The adoption role of an executor as its entry bound it, read before the pin decorator wraps it.
+     * The round of a check refused ahead of its request — a judge whose criteria cannot be read: it
+     * binds nothing, asks no executor, and answers {@code refusal} through the one mapping every
+     * check round's answer takes.
      *
-     * @param executor the executor the entry bound; never null
-     * @return its {@link PendingAdoption} role, or {@code null} when it does not take the role
+     * @param check the check; never null
+     * @param refusal the check's answer; never null
+     * @return the round; never null
      */
-    static @Nullable PendingAdoption adoptionOf(Executor executor) {
-        return executor instanceof PendingAdoption adoption ? adoption : null;
+    static StageExecutor refused(VerifyCheck.Executor check, ExecutorResult refusal) {
+        return request -> engineResult(check.executorName(), request, refusal);
     }
 
     @Override
     public ExecutionResult execute(Request request) {
-        var key = new AttemptKey(request.context().taskId(), request.stage().name(), request.attempt());
-        var verdict = new ExecutorRequest(
-                Role.VERDICT,
-                new Workspace(WORKSPACE),
-                new Policy.ReadOnly(),
-                RoleInputs.verdict("check '" + check.checkId() + "'"),
-                ExecutorContractJson.settingsTree(check.settings()),
-                Bounds.none(),
-                List.of(),
-                null);
+        ExecutorResult result;
         try {
-            return ProgramResultMapping.toEngine(
-                    executor, verdict.role(), key, run(verdict, request.pending()), List.of());
+            var verdict = new ExecutorRequest(
+                    Role.VERDICT,
+                    new Workspace(WORKSPACE),
+                    new Policy.ReadOnly(),
+                    RoleInputs.verdict(input.text(check, request.context())),
+                    ExecutorContractJson.settingsTree(check.settings()),
+                    Bounds.none(),
+                    List.of(),
+                    null);
+            result = run(verdict, request.pending());
         } finally {
-            // A program's box lives for this one request: its start, or its adoption and poll.
+            // A box lives for this one request: its start, or its adoption and poll.
             release.run();
         }
+        return engineResult(executor, request, result);
+    }
+
+    private static ExecutionResult engineResult(String executor, Request request, ExecutorResult result) {
+        var key = new AttemptKey(request.context().taskId(), request.stage().name(), request.attempt());
+        return ProgramResultMapping.toEngine(executor, Role.VERDICT, key, result, List.of());
     }
 
     private ExecutorResult run(ExecutorRequest verdict, @Nullable PendingTurn turn) {

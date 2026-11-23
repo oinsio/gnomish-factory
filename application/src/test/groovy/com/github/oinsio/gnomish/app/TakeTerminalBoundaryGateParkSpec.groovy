@@ -114,7 +114,7 @@ class TakeTerminalBoundaryGateParkSpec extends Specification implements RunChain
         def support = Mock(SandboxRunSupport) {
             persistence() >> persistence
             workspace() >> new FakeWorkspace()
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
         }
         def execution = new TakeContainerEngineExecution(assemblyRunning(executor), Stub(TaskBranchGit), dispatch(), [], new ClaimLossFlag(),
         LawBinding.atRevision(CLONE_DIR, GitObjects.HEAD))

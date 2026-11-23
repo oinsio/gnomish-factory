@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.Sandbox
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 import spock.lang.Specification
 
 /**
@@ -105,7 +106,7 @@ class CommandSettingsValidatorSpec extends Specification {
 
     def "FR3: a judge check on a command stage is not this validator's to judge"() {
         given:
-        def judge = new VerifyCheck.Judge('accept.md', 'judge-model', [allowedTools: ['Read']], 1)
+        def judge = JudgeChecks.agent('accept.md', 'judge-model', [allowedTools: ['Read']])
         def stage = stage('gen', commandExecutor([:]), [judge])
 
         expect:

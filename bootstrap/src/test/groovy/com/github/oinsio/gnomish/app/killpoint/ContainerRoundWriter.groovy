@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app.killpoint
 
-import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BestEffortClosingPush
 import com.github.oinsio.gnomish.adapter.git.EnvironmentAttemptPersistence
@@ -9,10 +8,10 @@ import com.github.oinsio.gnomish.adapter.git.LocalBoxEnvironment
 import com.github.oinsio.gnomish.adapter.git.PushBestEffortAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.SandboxRoundEnvironmentSource
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
+import com.github.oinsio.gnomish.app.ClaudeStageFixture
 import com.github.oinsio.gnomish.app.HandAssembledCheckDispatch
 import com.github.oinsio.gnomish.app.KillPointTakeRoutes
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
-import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.*
@@ -28,7 +27,7 @@ import java.nio.file.Path
 /**
  * The container medium's round writer of a {@link TakeKillPointWorld}: the whole production round,
  * driven one layer down the way {@code ContainerContinuationMedium} drives it — the domain {@link
- * Engine} over {@link CliStageExecutor}, {@link SandboxRoundEnvironmentSource} and {@link
+ * Engine} over the {@code claude} entry's stage half ({@link ClaudeStageFixture}), {@link SandboxRoundEnvironmentSource} and {@link
  * EnvironmentAttemptPersistence} in a {@link LocalBoxEnvironment} — because a box over the scripted
  * docker never closes a round; the engine's outcome is dropped, which is the kill before the park
  * commit (design D8 of make-checkpoint-gate-durable).
@@ -67,8 +66,7 @@ final class ContainerRoundWriter {
         KillPointTakeRoutes.segments(world.definition))
         def source = new SandboxRoundEnvironmentSource(lease, new GitProcessRunner(), world.repoDir, world.taskId, rounds,
                 new VirtualClock())
-        def executor = new CliStageExecutor(FakeAgentSupport.propertiesFor(asks ? 'decision-needed' : 'plain-round'),
-                new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)), { e -> } as AgentProgressListener, ChildEnvAllowlist.none(), TAKE_LAW, source)
+        def executor = ClaudeStageFixture.executor(FakeAgentSupport.propertiesFor(asks ? 'decision-needed' : 'plain-round'), new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)), ChildEnvAllowlist.none(), TAKE_LAW, source)
         // Behind the closing push, as ContainerRunSupport#persistence assembles it: the state commit
         // becomes the factory register (design D13 of tighten-spec-contract).
         def persistence = new PushBestEffortAttemptPersistence(
@@ -77,7 +75,7 @@ final class ContainerRoundWriter {
         def clock = new VirtualClock()
         // The engine's check rounds through the run's check dispatch, as the run assembly routes them
         // (task 4.2f of migrate-verify-to-executor-contract).
-        def ports = new EnginePorts(HandAssembledCheckDispatch.routed(executor, world.definition, world.repoDir), new ScriptedJudgeVoter(), new RecordingEventListener(), persistence,
+        def ports = new EnginePorts(HandAssembledCheckDispatch.routed(executor, world.definition, world.repoDir), new RecordingEventListener(), persistence,
                 VirtualTimeEquipment.on(clock), source.identity())
         new Engine().run(world.definition, context(),
                 TaskState.atStageStart(world.definition.stages().first().name()),

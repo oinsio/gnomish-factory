@@ -26,8 +26,8 @@ import spock.lang.Specification
  * FR3, FR11, NFR-R1 of migrate-verify-to-executor-contract (design D14): the {@code RECORDED} arm of
  * the check round — a key the resume path read from the pending record is handed to the executor's
  * {@link PendingAdoption} before its poll, and only then; an {@code ISSUED} key and an executor that
- * takes no role are polled as they are. The role is read from the executor the entry bound, before the
- * pin decorator wraps it.
+ * takes no role are polled as they are. The role reaches the round in the {@code BoundCheck}, beside
+ * the executor, as its binding built it; no decorator takes it.
  */
 class CheckRoundAdoptionSpec extends Specification {
 
@@ -80,13 +80,15 @@ class CheckRoundAdoptionSpec extends Specification {
         1 * bound.poll(_, KEY) >> pending()
     }
 
-    def "FR3, D14: the adoption role is the bound executor's own when it takes one, and absent otherwise"() {
+    def "FR3, D14: no adoption role means a RECORDED key is polled as it is"() {
         given:
-        def adopting = Mock(Executor, additionalInterfaces: [PendingAdoption])
-        def plain = Mock(Executor)
+        def bound = Mock(Executor)
 
-        expect:
-        CheckRound.adoptionOf(adopting).is(adopting)
-        CheckRound.adoptionOf(plain) == null
+        when:
+        new CheckRound(bound, null, CHECK).execute(poll(PendingTurn.Origin.RECORDED))
+
+        then:
+        1 * bound.poll(_, KEY) >> pending()
+        0 * bound.start(_)
     }
 }

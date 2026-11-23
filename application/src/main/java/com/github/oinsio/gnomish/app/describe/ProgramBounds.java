@@ -9,15 +9,18 @@ import java.util.Objects;
  * define-executor-contract; design D3, D5): {@code startup} — how long its {@code describe} may
  * take, the startup read before any round; {@code silence} — how long a run whose describe declares
  * {@code streams_progress} may go without a progress line; {@code overall} — how long one run may
- * take at all. The expiry of any is {@code failed/infrastructure} naming the bound; the request
- * carries all three as hints ({@link #hints()}), so a well-behaved executor can stop itself first.
+ * take at all. Whether the bounds on a quiet stdout apply to a run is {@link QuietStdoutBounds}'
+ * answer, never read here. The expiry of any is {@code failed/infrastructure} naming the bound; the
+ * request carries all three as hints ({@link #hints()}), so a well-behaved executor can stop itself
+ * first.
  *
  * <p>The bounds are the factory's, not the executor's (an executor that set its own would set the
  * bound meant to contain it), and for a {@code program} run not the law's either. An agent round
  * takes its overall bound from the {@code roundTimeout} its stage or check declares, and these bounds'
- * startup-read and silence bounds always, through the one resolution {@code RoundBounds} in {@code
- * :adapters:agent} (FR7, D6 of extract-agent-round-runner): the law is bound from the base ref before
- * any round and is not the contained party. {@link
+ * startup-read and silence bounds when its dialect's describe declares {@code streams_progress} and
+ * none otherwise ({@link QuietStdoutBounds}; FR16), through the one resolution {@code RoundBounds} in
+ * {@code :adapters:agent} (FR7, D6 of extract-agent-round-runner): the law is bound from the base ref
+ * before any round and is not the contained party. {@link
  * #DEFAULTS} is the one place the values are written; every consumer — the describe preflight and
  * the program executor — takes a {@code ProgramBounds} as a parameter from the composition root, so
  * an operator configuration key, when one is added, is one binding there.

@@ -5,23 +5,26 @@ import spock.lang.Specification
 
 /**
  * FR7, D10 of add-agent-executor: the factory subscribes one listener to its agent rounds, the
- * shipped SLF4J renderer, and nothing else. A listener is a constructor argument of the two CLI
- * adapters, so the subscription is a construction site in production code; this scan finds every
+ * shipped SLF4J renderer, and nothing else. A listener is a constructor argument of the {@code claude}
+ * entry's runner construction, which every agent stage round (task 5.1a of extract-agent-round-runner)
+ * and a judge check's round (task 4.1) run on, and of the CLI stage adapter task 5.1 deletes, which no
+ * production path builds any more, so the subscription is a construction site in production code; this scan finds every
  * one in the whole tree and reads the listener it passes. A second subscriber (a console, a
  * metrics hook) would have to be a new argument here, and fails the gate instead of passing as a
  * green wiring nobody asked for.
  *
- * <p>The per-round listener a sandboxed round source adds (the mid-round harvest and push
- * polls) is the round environment's own mechanism, not a subscription the factory makes, and is
- * not a construction argument of either adapter.
+ * <p>The per-round listener a round source adds (the mid-round harvest and push polls) is the round
+ * environment's own mechanism, not a subscription the factory makes: the stage half joins it to the
+ * renderer per open round, and it is no construction argument of the runner construction.
  */
 class ProgressListenerWiringSpec extends Specification {
 
-    static final String SELECTOR = 'bootstrap/src/main/java/com/github/oinsio/gnomish/app/ExecutorAdapterSelector.java'
+    static final String CLAUDE_ENTRY = 'bootstrap/src/main/java/com/github/oinsio/gnomish/app/ClaudeEntry.java'
     static final String RENDERER = 'new LoggingAgentProgressListener()'
-    static final List<String> ADAPTERS = [
-        'new CliStageExecutor(',
-        'new CliJudgeVoter('
+    /** Each construction, with the index of its listener argument. */
+    static final Map<String, Integer> ADAPTERS = [
+        'new CliStageExecutor(': 2,
+        'new AgentRunners<>(': 2
     ]
 
     /** The top-level arguments of the call whose opening parenthesis ends at {@code open}. */
@@ -50,11 +53,11 @@ class ProgressListenerWiringSpec extends Specification {
         assert sources.size() >= RepoSourceTree.KNOWN_PRODUCTION_SOURCES
         sources.collectMany { file ->
             def code = RepoSourceTree.code(file)
-            ADAPTERS.collectMany { adapter ->
+            ADAPTERS.collectMany { adapter, listener ->
                 def sites = []
                 int at = code.indexOf(adapter)
                 while (at >= 0) {
-                    sites << [file: RepoSourceTree.relative(file), args: arguments(code, at + adapter.length())]
+                    sites << [file: RepoSourceTree.relative(file), args: arguments(code, at + adapter.length()), listener: listener]
                     at = code.indexOf(adapter, at + 1)
                 }
                 sites
@@ -68,20 +71,20 @@ class ProgressListenerWiringSpec extends Specification {
         when:
         def sites = constructions()
 
-        // Task 7.3 of define-executor-contract: one round source per run, so one agent arm.
-        then: 'the scan reached the composition root: the one executor site and the judge site'
-        sites*.file.unique() == [SELECTOR]
-        sites.size() == 2
+        // Task 5.1a of extract-agent-round-runner: the type-keyed agent arm is gone, so the claude entry
+        //     is the one construction, for stage rounds and judge checks alike.
+        then: 'the scan reached the composition root: the claude entry, and no CLI adapter is built'
+        sites*.file == [CLAUDE_ENTRY]
 
         and: 'each passes the renderer as its listener, and no other listener is built at the site'
-        sites.every { site -> site.args[2] == RENDERER }
+        sites.every { site -> site.args[site.listener] == RENDERER }
         sites.every { site -> site.args.count { it.contains('Listener') } == 1 }
     }
 
     // The argument reader is the gate's own parser — a nested call must stay one argument
     def "the argument reader keeps nested calls whole"() {
         given:
-        def code = 'x = new CliJudgeVoter(a, f(b, c), new LoggingAgentProgressListener(), d);'
+        def code = 'x = new AgentRunners<>(a, f(b, c), new LoggingAgentProgressListener(), d);'
 
         expect:
         arguments(code, code.indexOf('(') + 1) == [

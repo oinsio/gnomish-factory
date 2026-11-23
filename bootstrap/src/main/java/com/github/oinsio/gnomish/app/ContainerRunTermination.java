@@ -48,7 +48,6 @@ final class ContainerRunTermination {
      * repository decorator's (FR1, FR6 of fix-lifecycle-push), not this boundary's.
      */
     static void completeAndDispose(ContainerRunSupport support, TaskState finalState) {
-        support.judgeEnvironments.disposeCurrent();
         support.lease.dispose();
         // The completion's marker is owed on both paths: take's finish clears it on receipt, and a
         // manual run's cleanup commit removes it with the whole envelope at once.
@@ -116,7 +115,7 @@ final class ContainerRunTermination {
     /**
      * Keep semantics for a run that ended without disposing (a park, an abort, an EOF-interrupted
      * dialog): the container is stopped so no gnome process keeps executing, volume and network
-     * remain for salvage and resume; fresh judge boxes are disposed — they hold nothing durable.
+     * remain for salvage and resume; a check's fresh box was disposed when its request ended.
      *
      * <p>This is the keep half of the terminal-boundary touchpoint (FR3 of fix-lifecycle-push);
      * {@link #completeAndDispose} covers the dispose half. For a park ({@code Escalated}/{@code
@@ -128,7 +127,6 @@ final class ContainerRunTermination {
      * lost, or an abort whose last round's push was, is delivered now.
      */
     static void keepStopped(ContainerRunSupport support) {
-        support.judgeEnvironments.disposeCurrent();
         support.environments.stopKeeping();
         reconcileRemote(support);
     }

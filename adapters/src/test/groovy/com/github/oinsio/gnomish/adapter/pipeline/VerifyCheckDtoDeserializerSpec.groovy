@@ -32,7 +32,7 @@ class VerifyCheckDtoDeserializerSpec extends Specification {
         'builtin' | 'type: builtin\nname: files_exist\n' || VerifyCheckDto.Builtin
         'command' | 'type: command\ncommand: make\n' || VerifyCheckDto.Command
         'external' | 'type: external\ncheckId: ci\n' || VerifyCheckDto.External
-        'judge' | 'type: judge\ncriteriaFile: a.md\nmodel: m\nvotes: 1\n' || VerifyCheckDto.Judge
+        'judge' | 'type: judge\ncriteriaFile: a.md\nexecutor:\n  type: agent-cli\n  model: m\n' || VerifyCheckDto.Judge
     }
 
     // FR1: with no type, an `executor` key selects the explicit form, every field bound raw

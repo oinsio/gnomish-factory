@@ -11,7 +11,6 @@ import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
@@ -183,7 +182,6 @@ class GiteaActionsStageVerifyE2ESpec extends Specification implements BareGitRep
         new VerifyOrchestrator(
                 new PendingPoll(rounds, new InMemoryAttemptPersistence(), AttemptDelivery.assumedDelivered(), time,
                 listener),
-                new JudgeVoting(new ScriptedJudgeVoter()),
                 clock,
                 listener)
     }

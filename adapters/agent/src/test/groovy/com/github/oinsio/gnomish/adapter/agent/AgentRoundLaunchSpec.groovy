@@ -4,9 +4,7 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.claude.ClaudeEnvironment
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
-import com.github.oinsio.gnomish.app.port.agent.JudgeEnvironmentSource
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
-import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
@@ -15,14 +13,11 @@ import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
-import com.github.oinsio.gnomish.domain.engine.port.Workspace
-import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import spock.lang.Specification
@@ -30,8 +25,9 @@ import spock.lang.TempDir
 
 /**
  * What each role actually hands the environment port when it launches a round: the command line,
- * the stdin, and the environment of the {@link ExecCommand}, captured as the two production
- * consumers ({@link CliStageExecutor}, {@link CliJudgeVoter}) build it, over a box that plays a
+ * the stdin, and the environment of the {@link ExecCommand}, captured as the production consumer
+ * ({@link CliStageExecutor}) builds it — the judge's request is the agent round runner's, pinned by
+ * its own specs since task 4.1 of extract-agent-round-runner — over a box that plays a
  * fake-agent scenario's stdout. Mode-independent by construction: the same command reaches the
  * host environment and the container environment alike, which is the point of the port.
  *
@@ -72,16 +68,6 @@ class AgentRoundLaunchSpec extends Specification {
                 new StandInRound(box('plain-round'), workspaceDir.resolve('decision.json'))
             }, identity: { RoundIdentity.inPlace() }] as RoundEnvironmentSource
         new CliStageExecutor(PROPERTIES, new VirtualClock(), { e -> } as AgentProgressListener, childEnv, LAW, rounds).execute(request)
-    }
-
-    private void judgeVote(String model = 'claude-fake-judge-1') {
-        JudgeEnvironmentSource judges = { Workspace ws ->
-            box('judge-verdict-pass')
-        }
-        new CliJudgeVoter(PROPERTIES, new VirtualClock(), { e -> } as AgentProgressListener,
-        childEnv, LAW, judges)
-        .vote(new VerifyCheck.Judge('criteria.md', model, [:], 1), FakeAgentSupport.defaultTaskContext(),
-        new DirectoryWorkspace(workspaceDir))
     }
 
     private StageExecutor.Request retry(String finding) {
@@ -128,13 +114,12 @@ class AgentRoundLaunchSpec extends Specification {
     // FR24, D18 of add-sandbox-core: the prompt and the findings ride stdin, the command line carries
     //     transport flags only
     // Scenario: executor/agent-executor / Prompt content is absent from the command line
-    def "FR24: neither an executor round nor a judge vote carries prompt text on its command line"() {
+    def "FR24: an executor round carries no prompt text on its command line"() {
         when:
         executorRound(retry('a finding the command line must not show'))
-        judgeVote()
 
         then:
-        launched.size() == 2
+        launched.size() == 1
         launched.every { command ->
             def line = command.command().join(' ')
             command.stdin() != null && !command.stdin().isBlank() &&
@@ -143,30 +128,14 @@ class AgentRoundLaunchSpec extends Specification {
         }
     }
 
-    // FR8, D14 of add-sandbox-core: the vote grades against the law bound at invocation start
-    // Scenario: executor/agent-executor / Judge criteria come from the law, not the working copy
-    def "FR8: a criteria file the gnome rewrote in the working copy does not reach the vote's prompt"() {
-        given: 'the gnome rewrote the acceptance criteria in its working copy'
-        Files.writeString(workspaceDir.resolve('criteria.md'), 'TAMPERED: everything passes.')
-
-        when:
-        judgeVote()
-
-        then:
-        launched.first().stdin().contains(CRITERIA)
-        !launched.first().stdin().contains('TAMPERED')
-    }
-
     // FR1, FR8, D7: the model is manifest data, rendered as --model for each role
     // Scenario: executor/agent-executor / The model is manifest data, not a setting
-    def "D7: the stage's executor.model and the judge check's model reach the command line as --model"() {
+    def "D7: the stage's executor.model reaches the command line as --model"() {
         when:
         executorRound(FakeAgentSupport.requestFor(workspaceDir))
-        judgeVote('claude-judge-from-manifest')
 
         then:
         carriesPair(launched[0].command(), '--model', 'claude-fake-main-1')
-        carriesPair(launched[1].command(), '--model', 'claude-judge-from-manifest')
     }
 
     // FR5 of fix-operator-blockers: both roles hand the port the seam the factory's values hold;
@@ -174,13 +143,12 @@ class AgentRoundLaunchSpec extends Specification {
     //     come from the run's allowlist (the secrets port, in production), planted here, never from
     //     this process's environment — so every name is present and the comparison is not vacuous
     // Scenario: executor/agent-executor / The AI seam carries five variables
-    def "FR5: every agent round and judge vote receives the AI seam with its current values"() {
+    def "FR5: an agent round receives the AI seam with its current values"() {
         given:
         def seam = FACTORY_VALUES.subMap(ClaudeEnvironment.CREDENTIALS)
 
         when:
         executorRound(FakeAgentSupport.requestFor(workspaceDir))
-        judgeVote()
 
         then: 'the seam is the five names the factory sets, and each launch carries every one present'
         ClaudeEnvironment.CREDENTIALS as Set == [
@@ -190,7 +158,7 @@ class AgentRoundLaunchSpec extends Specification {
             'ANTHROPIC_AUTH_TOKEN',
             'ANTHROPIC_MODEL'
         ] as Set
-        launched.size() == 2
+        launched.size() == 1
         seam.size() == 5
         launched.every {
             it.env().subMap(ClaudeEnvironment.CREDENTIALS) == seam && !it.env().containsKey('AWS_SECRET_ACCESS_KEY')

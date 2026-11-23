@@ -40,7 +40,7 @@ class ExecutorTypeWireRoundTripSpec extends Specification implements PipelineLoa
     }
 
     static ExecutorType mapped(String type) {
-        StageDefinitionMapper.mapExecutor('stages/s/stage.yaml', new ExecutorDto(type, 'm', null), []).type()
+        StageDefinitionMapper.mapExecutor('stages/s/stage.yaml', 'executor', new ExecutorDto(type, 'm', null), []).type()
     }
 
     static StageDto stage(String type) {
@@ -122,11 +122,11 @@ class ExecutorTypeWireRoundTripSpec extends Specification implements PipelineLoa
         List<ConfigError> errors = []
 
         when:
-        BlankMechanismFields.check(errors, MANIFEST, new ExecutorDto(token(type), null, null, null, null, '  '))
+        BlankMechanismFields.check(errors, MANIFEST, 'executor', new ExecutorDto(token(type), null, null, null, null, '  '))
 
         then:
         errors == (type == ExecutorType.COMMAND ? [] : [
-            MechanismFieldErrors.commandOnStage(MANIFEST, token(type))
+            MechanismFieldErrors.commandOnStage(MANIFEST, 'executor', token(type))
         ])
 
         where:
@@ -139,11 +139,11 @@ class ExecutorTypeWireRoundTripSpec extends Specification implements PipelineLoa
         List<ConfigError> errors = []
 
         when:
-        BlankMechanismFields.check(errors, MANIFEST, new ExecutorDto(token(type), '  ', null, null, null, 'make gen'))
+        BlankMechanismFields.check(errors, MANIFEST, 'executor', new ExecutorDto(token(type), '  ', null, null, null, 'make gen'))
 
         then:
         errors == (type == ExecutorType.COMMAND ? [
-            MechanismFieldErrors.modelOnCommandStage(MANIFEST)
+            MechanismFieldErrors.modelOnCommandStage(MANIFEST, 'executor')
         ] : [])
 
         where:
@@ -168,7 +168,7 @@ class ExecutorTypeWireRoundTripSpec extends Specification implements PipelineLoa
         errors.findAll {
             it.where() == 'executor.command'
         } == [
-            MechanismFieldErrors.commandOnStage(MANIFEST, token(type))
+            MechanismFieldErrors.commandOnStage(MANIFEST, 'executor', token(type))
         ]
 
         where:

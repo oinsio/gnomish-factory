@@ -4,11 +4,12 @@ import spock.lang.Specification
 
 /**
  * FR1, FR13 of migrate-verify-to-executor-contract (design D18, "The six built-in names have one
- * owner"): the one set of the six built-in names, and the check-token constants that refer to it.
+ * owner"); FR14 of extract-agent-round-runner (design D12): the one set of the seven built-in names,
+ * the six of them a check may name, and the check-token constants that refer to it.
  */
 class BuiltInExecutorsSpec extends Specification {
 
-    def "the set is the six built-ins, in reading order, and the check tokens' constants are its own"() {
+    def "the set is the seven built-ins, in reading order, and the check tokens' constants are its own"() {
         expect:
         BuiltInExecutors.NAMES == [
             'files-exist',
@@ -16,7 +17,8 @@ class BuiltInExecutorsSpec extends Specification {
             'github-actions',
             'scm-status',
             'http',
-            'command'
+            'command',
+            'claude'
         ]
         VerifyCheck.Executor.FILES_EXIST == BuiltInExecutors.FILES_EXIST
         VerifyCheck.Executor.SHELL == BuiltInExecutors.SHELL
@@ -30,6 +32,13 @@ class BuiltInExecutorsSpec extends Specification {
 
         where:
         name << BuiltInExecutors.NAMES + ['acme', 'github', '']
-        builtIn << [true] * 6 + [false] * 3
+        builtIn << [true] * 7 + [false] * 3
+    }
+
+    // FR14, D12 of extract-agent-round-runner: the agent entry is reserved, but no check names it
+    def "a check may name every built-in but the reserved agent entry"() {
+        expect:
+        BuiltInExecutors.CLAUDE == 'claude'
+        BuiltInExecutors.CHECK_NAMES == BuiltInExecutors.NAMES - ['claude']
     }
 }
