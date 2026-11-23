@@ -80,7 +80,11 @@ final class ClaudeLoginPreflight {
                     + 'interactive login prompt. Run `claude login` manually, then retry paidSmokeTest.')
         }
 
-        def result = events.collect { it.event() }.findAll { it instanceof AgentEvent.ResultEvent }
+        def result = events.collect {
+            it.event()
+        }.findAll {
+            it instanceof AgentEvent.ResultEvent
+        }
         if (result.isEmpty()) {
             return Result.failure(
                     "'${binary}' ran but produced no usable result event — not authenticated, or the "
