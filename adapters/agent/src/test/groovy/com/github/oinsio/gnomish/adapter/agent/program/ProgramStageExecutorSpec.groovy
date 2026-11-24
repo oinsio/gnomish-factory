@@ -146,6 +146,8 @@ class ProgramStageExecutorSpec extends Specification {
         'completed' | RoundClose.VERIFIABLE | 'Completed'
         'quality' | RoundClose.UNVERIFIABLE | 'Failed'
         'limit' | RoundClose.UNVERIFIABLE | 'Failed'
+        // FR10 of extract-agent-round-runner (D11): a pending transform round closes under the pending-round subject
+        'pending' | RoundClose.PENDING | 'Pending'
     }
 
     // FR9 (task 7.1, obligation 4), FR4: the request carries the one merge of the settings, the model and the prior findings

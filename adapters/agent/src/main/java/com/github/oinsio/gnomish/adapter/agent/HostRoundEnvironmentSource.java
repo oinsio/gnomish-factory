@@ -108,9 +108,10 @@ public record HostRoundEnvironmentSource(InstantSource clock, ChildEnvAllowlist 
 
         @Override
         public void closeRound(RoundClose close) {
-            // Host rounds close in persistence (FR21), and a git-mode host round that completed is
-            // snapshotted by the stage chain's decoration, which acts on the result itself (design
-            // D22 of migrate-verify-to-executor-contract): the close names nothing here. The
+            // Host rounds close in persistence (FR21), and a git-mode host round that completed or
+            // went pending is snapshotted by the stage chain's decoration, which acts on the result
+            // itself (design D22 of migrate-verify-to-executor-contract; D11 of
+            // extract-agent-round-runner): the close names nothing here. The
             // executor read the answer file before the close; the round's scratch area leaves now.
             environment.dispose();
         }

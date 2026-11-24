@@ -460,7 +460,7 @@ owner). Old way: the `transform` arm "a
   `pendingPolls` list; wire round-trip spec iterating every subject
   and pinning the unknown-token arm; a record whose round token does not name the round the
   registered commit holds open is refused, never polled (FR10, NFR-R3, D11)
-- [ ] 6.3 Engine path, TDD on virtual time with a fake `transform` executor declaring `poll`:
+- [x] 6.3 Engine path, TDD on virtual time with a fake `transform` executor declaring `poll`:
   narrow the refusal in `RoundFailures`/`AttemptAccounting`/`RoundOutcome` to executors without
   `poll`, re-point `ExecutorOutcomeTableSpec`'s marker feature to the reworded scenario and add the
   pollable row; `StageAttemptLoop` hands `pending` to `PendingPoll`; pending interval and ceiling

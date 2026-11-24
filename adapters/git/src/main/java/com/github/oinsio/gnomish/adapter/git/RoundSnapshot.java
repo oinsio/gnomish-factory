@@ -77,13 +77,16 @@ final class RoundSnapshot {
 
     /**
      * The one choice of a snapshot's subject by the round's close: {@code gnomish: snapshot}, which
-     * a pickup resumes as an interrupted verification, or {@code gnomish: unverified-snapshot}, which
-     * it never does. A persist that re-admits the snapshot judges it by the same choice.
+     * a pickup resumes as an interrupted verification, or {@code gnomish: unverified-snapshot} or
+     * {@code gnomish: pending-snapshot} (the snapshot a pending round commit lands on, design D11 of
+     * extract-agent-round-runner), which it never does. A persist that re-admits the snapshot judges
+     * it by the same choice.
      */
     static String subject(AttemptKey key, RoundToken token, RoundClose close) {
         return switch (close) {
             case VERIFIABLE -> ServiceCommitMessages.snapshot(key.stage(), key.attempt(), token);
             case UNVERIFIABLE -> ServiceCommitMessages.unverifiedSnapshot(key.stage(), key.attempt(), token);
+            case PENDING -> ServiceCommitMessages.pendingSnapshot(key.stage(), key.attempt(), token);
         };
     }
 }

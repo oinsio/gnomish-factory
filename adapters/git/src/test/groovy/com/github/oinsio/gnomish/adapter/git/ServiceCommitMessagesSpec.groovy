@@ -77,6 +77,19 @@ class ServiceCommitMessagesSpec extends Specification {
         !subject.startsWith(ServiceCommitMessages.SNAPSHOT_PREFIX)
     }
 
+    // FR10 of extract-agent-round-runner (design D11): the pending-round snapshot stays in the service
+    // namespace and outside both prefixes the recogniser reads, so it is never read as a round to verify
+    def "FR10: pendingSnapshot(stage, round, token) is a service subject outside the snapshot and pending prefixes"() {
+        when:
+        def subject = ServiceCommitMessages.pendingSnapshot('work', 0, RoundToken.of('0a1b2c'))
+
+        then:
+        subject == 'gnomish: pending-snapshot work#0 0a1b2c'
+        subject.startsWith(GnomeRangeInspection.SERVICE_SUBJECT)
+        !subject.startsWith(ServiceCommitMessages.SNAPSHOT_PREFIX)
+        !subject.startsWith(ServiceCommitMessages.PENDING_PREFIX)
+    }
+
     // FR19 (design D22): the step's one choice of the subject by the round's close
     def "FR19: the snapshot step names a #close close #expected"() {
         expect:
@@ -86,6 +99,7 @@ class ServiceCommitMessagesSpec extends Specification {
         close || expected
         RoundClose.VERIFIABLE || 'gnomish: snapshot work#2 0a1b2c'
         RoundClose.UNVERIFIABLE || 'gnomish: unverified-snapshot work#2 0a1b2c'
+        RoundClose.PENDING || 'gnomish: pending-snapshot work#2 0a1b2c'
     }
 
     // FR20 of migrate-verify-to-executor-contract (design D21): the stage from the position, round and

@@ -79,13 +79,18 @@ public final class ProgramResultMapping {
      * How the round closes (D22): verifiable exactly when {@code result} maps to {@code completed} —
      * decided from the contract result before it is mapped, by the same {@link
      * ProgramCompletedAnswer#refusal} the mapping refuses a completed answer by, so the close never reads the engine's status (G4 of
-     * define-executor-contract, human decision 2026-11-12).
+     * define-executor-contract, human decision 2026-11-12); pending exactly when a {@code transform}
+     * round answered {@code pending}, so its snapshot carries the pending-round subject its pending
+     * round commit lands on (design D11 of extract-agent-round-runner); unverifiable otherwise.
      *
      * @param role the role the round was requested in; never null
      * @param result the contract result the run produced; never null
      * @return the round's close; never null
      */
     public static RoundClose closeOf(Role role, ExecutorResult result) {
+        if (result.status() == Status.PENDING && role == Role.TRANSFORM) {
+            return RoundClose.PENDING;
+        }
         return result.status() == Status.COMPLETED && ProgramCompletedAnswer.refusal(role, result) == null
                 ? RoundClose.VERIFIABLE
                 : RoundClose.UNVERIFIABLE;

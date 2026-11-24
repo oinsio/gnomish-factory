@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.PendingPollRecord
+import com.github.oinsio.gnomish.domain.engine.PendingState
 import com.github.oinsio.gnomish.domain.engine.PendingSubject
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -88,6 +89,19 @@ trait HostSnapshotRound implements RegisteredRoundFixture {
             new PendingKey(key), Instant.parse('2026-11-12T09:00:00Z'))
         }
         persistence().persistPending(TASK, recorded.withPendingPolls(entries))
+    }
+
+    /** The round's own pending write (design D11 of extract-agent-round-runner): one {@code Round} entry. */
+    void persistPendingRound(String key) {
+        def recorded = store.readRecordedState(worktree(), TASK).orElseThrow()
+        persistence().persistPending(TASK, recorded.withPendingPolls([
+            new PendingPollRecord(PendingSubject.ROUND, ROUND, cell.opened(), new PendingKey(key), Instant.parse('2026-11-24T09:00:00Z'))
+        ]))
+    }
+
+    static ExecutionResult pending(String key) {
+        new ExecutionResult(new ExecutionResult.Pending(new PendingKey(key), null, PendingState.RUNNING, null, null),
+                null, ExecutorUsage.none(), new ToolTrace(new AttemptKey(TASK, 'implement', ROUND), []), [])
     }
 
     static ExecutionResult completed() {

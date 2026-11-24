@@ -53,8 +53,7 @@ import java.util.List;
  * returns.
  *
  * <p>{@link #persistPending} lands an open round's pending commit in the box ({@link
- * InBoxPendingCommit}; design D21 of migrate-verify-to-executor-contract) on the round's last
- * registered commit, and moves that commit in the cell; the state commit then sits on it.
+ * InBoxPendingCommit}; D21) on the round's last registered commit, moved in the cell.
  *
  * <p>Kept in sync with {@link GitAttemptPersistence}: both must close a round with the same durable
  * sequence — {@code state.json} and the round's trace written first, then one commit stamped with
@@ -66,7 +65,9 @@ import java.util.List;
  * write the pending commit alike: exactly {@code state.json}, its tree the registered commit's with
  * that one blob replaced, its only parent the registered commit (here through a private index in the
  * box; there from objects), its register in the same transaction, its subject from {@link
- * PendingWrite} (design D21). The denial cursor ({@link EnvironmentRoundDocuments}) and the round's
+ * PendingWrite} (design D21) for an entry of either subject: a check's above the round's snapshot,
+ * the round's own (a pending round commit) above the snapshot closed under the pending-round subject
+ * (here the box's close, there the host trigger; D11 of extract-agent-round-runner). The denial cursor ({@link EnvironmentRoundDocuments}) and the round's
  * decision carve-out are environment-side only: the host has no denial source, and its request never
  * enters the working copy.
  *
@@ -76,9 +77,9 @@ import java.util.List;
  * pickup resumes the interrupted verification from it. A kill after it, before the push, freezes
  * "closed locally, not pushed", converged by the next push of this branch.
  *
- * <p>Implements FR21, FR22, FR23 of add-sandbox-core; FR13 of
- * harden-logging-observability; FR13, FR15 of make-checkpoint-gate-durable; FR13,
- * NFR-S2 of tighten-spec-contract.
+ * <p>Implements FR21, FR22, FR23 of add-sandbox-core; FR13 of harden-logging-observability; FR13,
+ * FR15 of make-checkpoint-gate-durable; FR13, NFR-S2 of tighten-spec-contract; FR10 of
+ * extract-agent-round-runner.
  */
 public final class EnvironmentAttemptPersistence implements AttemptPersistence {
 

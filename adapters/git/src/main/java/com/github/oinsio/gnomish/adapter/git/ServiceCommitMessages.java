@@ -106,6 +106,17 @@ public final class ServiceCommitMessages {
     }
 
     /**
+     * The snapshot message of a {@code transform} round that answered {@code pending}, under its
+     * pending round commit: {@code gnomish: pending-snapshot <stage>#<round> <token>} (design D11 of
+     * extract-agent-round-runner). It starts with neither {@link #SNAPSHOT_PREFIX} nor {@link
+     * #PENDING_PREFIX}, so {@link SnapshotTipCheck} never reads it as a round to verify; parameters
+     * as {@link #unverifiedSnapshot}.
+     */
+    public static String pendingSnapshot(String stage, int round, RoundToken token) {
+        return PREFIX + "pending-snapshot " + stage + "#" + round + " " + token.commit();
+    }
+
+    /**
      * The pending commit message of an open round, on either medium: {@code gnomish: pending
      * <stage>#<round> <token>} (design D21 of migrate-verify-to-executor-contract). The stage comes
      * from the persisted state's position — the one source on both ends, since a pending entry

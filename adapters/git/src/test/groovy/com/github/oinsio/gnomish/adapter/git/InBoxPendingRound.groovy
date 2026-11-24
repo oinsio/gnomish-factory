@@ -39,7 +39,8 @@ trait InBoxPendingRound implements BareGitRepoFixture {
     EnvironmentRoundSnapshot snapshotStep
     String snapshot
 
-    void setupPendingRound() {
+    /** The round snapshotted under {@code close}: verifiable for a check's pending, pending for the round's own. */
+    void setupPendingRound(RoundClose close = RoundClose.VERIFIABLE) {
         cloneDir = initWorkingRepo(tempDir, 'factory-clone')
         Files.createDirectories(cloneDir.resolve('.gnomish-task'))
         Files.writeString(cloneDir.resolve(STATE), '{"stateVersion":1}')
@@ -50,7 +51,7 @@ trait InBoxPendingRound implements BareGitRepoFixture {
         box = boxOver(new LocalBoxEnvironment(cloneDir, Files.createDirectories(tempDir.resolve('box'))))
         snapshotStep = new EnvironmentRoundSnapshot(box, runner, cloneDir, OpenedRound.reopen(rounds, cloneDir, BRANCH))
         new File(box.workingCopy.toFile(), 'work.txt').text = 'gnome work'
-        snapshot = snapshotStep.snapshot(TASK, 'implement', 1, RoundClose.VERIFIABLE)
+        snapshot = snapshotStep.snapshot(TASK, 'implement', 1, close)
     }
 
     LocalBoxEnvironment boxOver(LocalBoxEnvironment environment) {
@@ -72,6 +73,13 @@ trait InBoxPendingRound implements BareGitRepoFixture {
             new PendingPollRecord(new PendingSubject.Check(new CheckRef(i, UntrustedText.factory('executor:ci'))), 1, rounds.opened(),
             new PendingKey(key), Instant.parse('2026-11-12T09:00:00Z'))
         })
+    }
+
+    /** The round's own pending write (design D11 of extract-agent-round-runner): one {@code Round} entry. */
+    TaskState roundPendingState(String key) {
+        TaskState.atStageStart('implement').withPendingPolls([
+            new PendingPollRecord(PendingSubject.ROUND, 1, rounds.opened(), new PendingKey(key), Instant.parse('2026-11-24T09:00:00Z'))
+        ])
     }
 
     String tip() {

@@ -95,7 +95,9 @@ class ProgramResultMappingSpec extends Specification {
         Role.TRANSFORM | Status.COMPLETED | [kind: 'decision-request', question: 'q?', options: ['a', 'b']] || RoundClose.VERIFIABLE
         Role.VERDICT | Status.COMPLETED | null || RoundClose.UNVERIFIABLE
         Role.TRANSFORM | Status.FAILED | null || RoundClose.UNVERIFIABLE
-        Role.TRANSFORM | Status.PENDING | null || RoundClose.UNVERIFIABLE
+        Role.TRANSFORM | Status.PENDING | null || RoundClose.PENDING
+        Role.VERDICT | Status.PENDING | null || RoundClose.UNVERIFIABLE
+        Role.DECISION | Status.PENDING | null || RoundClose.UNVERIFIABLE
         Role.TRANSFORM | Status.COMPLETED | [kind: 'decision-request', question: 'q?', options: ['a']] || RoundClose.UNVERIFIABLE
         Role.TRANSFORM | Status.COMPLETED | [kind: 'select', chosen: 'a'] || RoundClose.UNVERIFIABLE
         Role.TRANSFORM | Status.COMPLETED | VERDICT_ANSWER || RoundClose.UNVERIFIABLE
