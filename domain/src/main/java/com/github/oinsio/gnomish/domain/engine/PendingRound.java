@@ -80,16 +80,6 @@ final class PendingRound {
         return key;
     }
 
-    /** The task the round belongs to. */
-    String taskId() {
-        return key.taskId();
-    }
-
-    /** The round's attempt number, the one an entry it writes carries. */
-    int attempt() {
-        return key.attempt();
-    }
-
     /** The round's token, or {@code null} in the in-place run. */
     @Nullable
     RoundToken token() {

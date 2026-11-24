@@ -83,8 +83,11 @@ class PendingTransformRoundSpec extends PendingTransformRoundSpecBase {
         persistence.pending*.state*.attempts().every { it.isEmpty() }
     }
 
-    // FR10: the terminal poll closes the round through the normal close, whose state drops the entry;
-    //     the round's record carries the token it went pending with, taken once
+    // FR10, UX3: the terminal poll closes the round through the normal close — the verify chain runs on
+    //     the round's own working copy, the closing state drops the entry, the round's finish names the
+    //     key it went pending with (the ledger's `pending key=<prefix>`, rendered by
+    //     RoundOutcomeLedgerWriterSpec), and its record carries the token it went pending with, taken once
+    // Scenario: pipeline/stage-engine / Completed poll closes the round
     def "the closing commit drops the pending record and carries the round's one token"() {
         given:
         executor.scripted << pending('job-42') << completed()
@@ -93,11 +96,20 @@ class PendingTransformRoundSpec extends PendingTransformRoundSpecBase {
         when:
         def outcome = run()
 
-        then:
+        then: 'the round closed with the completed result and was verified on the working copy the poll left'
+        outcome instanceof TaskOutcome.Completed
+        checks.calls.size() == 1
+        executor.requests[1].workspace().is(executor.requests[0].workspace())
         persistence.entries.size() == 1
         persistence.entries[0].state.pendingPolls().isEmpty()
         persistence.entries[0].state.attempts()[0].roundToken() == TOKEN
         taken == 1
+
+        and: 'the round\'s finish names the key it went pending with'
+        def finished = listener.events.find {
+            it instanceof EngineEvent.ExecutionFinished
+        } as EngineEvent.ExecutionFinished
+        finished.pendingKey() == UntrustedText.subprocess('job-42')
     }
 
     // NFR-O2: the usage of the start and of every poll is recorded under the one round
