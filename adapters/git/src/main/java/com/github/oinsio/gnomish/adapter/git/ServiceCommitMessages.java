@@ -139,8 +139,8 @@ public final class ServiceCommitMessages {
         return pending(stage, last.attempt(), token);
     }
 
-    /** The entry's subject as the refusal names it: the check by its index, or the round. */
-    private static String subject(PendingPollRecord entry) {
+    /** The entry's subject as a refusal names it: the check by its index, or the round. */
+    static String subject(PendingPollRecord entry) {
         return switch (entry.subject()) {
             case PendingSubject.Check(CheckRef ref) -> "check " + ref.index();
             case PendingSubject.Round _ -> "the round";

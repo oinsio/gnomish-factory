@@ -470,7 +470,7 @@ owner). Old way: the `transform` arm "a
   advancement on a pending round commit; closing commit drops the record; one feature per
   scenario of the `pipeline/stage-engine` and `executor/wire-contract` deltas, markers included
   (FR10, FR11, NFR-O2, UX3)
-- [ ] 6.4 Pending round commit at both ends of the persistence pair: the `Round` subject on the
+- [x] 6.4 Pending round commit at both ends of the persistence pair: the `Round` subject on the
   entry `persistPending` already writes (the pending commit of `git-task-persistence`, "Pending
   commits of an open round"); the host snapshot trigger (D22 of
   `migrate-verify-to-executor-contract`, `completed` only) widened to a `pending` `transform`

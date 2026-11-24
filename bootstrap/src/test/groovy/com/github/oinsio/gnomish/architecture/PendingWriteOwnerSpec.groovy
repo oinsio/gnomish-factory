@@ -17,12 +17,14 @@ import spock.lang.Specification
  * FR2, FR10, NFR-R4 of migrate-verify-to-executor-contract (design D12 as amended 2026-11-12, D21;
  * the D9 rows of {@code PendingPoll} and {@code TaskState.withPendingPolls}): the open round's pending
  * entries have one writer. {@code PendingPoll} is the one caller of {@code
- * AttemptPersistence.persistPending} — from its first key's write ({@code answer}) and its key
- * rotation ({@code persisted}), the same write — besides the persistences that decorate the port and
+ * AttemptPersistence.persistPending} — from its first key's write ({@code continueStarted}, for a
+ * check's {@code start} and a {@code transform} round's alike) and its key rotation ({@code
+ * persisted}), the same write — besides the persistences that decorate the port and
  * hand the call on; so no check, executor or adapter writes a pending commit of its own, and a
  * rotated key is never kept only in memory. An entry is built only by that owner and by the state
  * file's parse ({@code StatePendingPollMapper}), and the list is set on a state only by the round's
- * view ({@code PendingRound}), the resumed state's carry ({@code Engine.resumedFrom}) and the parse
+ * views — a check's ({@code PendingRound}) and a pending {@code transform} round's ({@code RoundAsk},
+ * FR10 of extract-agent-round-runner, design D8, D11) — the resumed state's carry ({@code Engine.resumedFrom}) and the parse
  * ({@code StateJsonMapper}). The targets are named by their fully qualified names and asserted
  * reached, so a rename fails here rather than leaving a rule vacuous.
  */
@@ -33,6 +35,7 @@ class PendingWriteOwnerSpec extends Specification {
     private static final String STATE = 'com.github.oinsio.gnomish.domain.engine.TaskState'
     private static final String POLL = 'com.github.oinsio.gnomish.domain.engine.PendingPoll'
     private static final String ROUND = 'com.github.oinsio.gnomish.domain.engine.PendingRound'
+    private static final String ROUND_ASK = 'com.github.oinsio.gnomish.domain.engine.RoundAsk'
     private static final String ENGINE = 'com.github.oinsio.gnomish.domain.engine.Engine'
     private static final String RECORD_PARSE = 'com.github.oinsio.gnomish.adapter.git.state.StatePendingPollMapper'
     private static final String STATE_PARSE = 'com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper'
@@ -50,6 +53,7 @@ class PendingWriteOwnerSpec extends Specification {
             STATE,
             POLL,
             ROUND,
+            ROUND_ASK,
             ENGINE,
             RECORD_PARSE,
             STATE_PARSE
@@ -58,7 +62,10 @@ class PendingWriteOwnerSpec extends Specification {
         }
 
         and: 'the owner writes the first key and the rotated key through the one port operation'
-        callers(POLL, calling(PORT, 'persistPending')) == ['answer', 'persisted'] as Set
+        callers(POLL, calling(PORT, 'persistPending')) == [
+            'continueStarted',
+            'persisted'
+        ] as Set
 
         and:
         [POLL, RECORD_PARSE].every { owner ->
@@ -66,7 +73,12 @@ class PendingWriteOwnerSpec extends Specification {
                 building(RECORD).test(it)
             }
         }
-        [ROUND, ENGINE, STATE_PARSE].every { owner ->
+        [
+            ROUND,
+            ROUND_ASK,
+            ENGINE,
+            STATE_PARSE
+        ].every { owner ->
             productionClasses.get(owner).methodCallsFromSelf.any {
                 calling(STATE, 'withPendingPolls').test(it)
             }
@@ -87,9 +99,10 @@ class PendingWriteOwnerSpec extends Specification {
                 .check(productionClasses)
     }
 
-    def "D21: the round's list is set on a state only by the round's view, the resumed carry and the parse"() {
+    def "D21: the round's list is set on a state only by the round's views, the resumed carry and the parse"() {
         expect:
-        noClasses().that().doNotHaveFullyQualifiedName(ROUND).and().doNotHaveFullyQualifiedName(ENGINE)
+        noClasses().that().doNotHaveFullyQualifiedName(ROUND).and().doNotHaveFullyQualifiedName(ROUND_ASK)
+                .and().doNotHaveFullyQualifiedName(ENGINE)
                 .and().doNotHaveFullyQualifiedName(STATE_PARSE)
                 .should().callMethodWhere(calling(STATE, 'withPendingPolls'))
                 .check(productionClasses)

@@ -50,10 +50,10 @@ import java.time.InstantSource;
  * transaction carried to origin by one atomic push (design D13, D18 of tighten-spec-contract); and write the pending
  * commit alike: exactly {@code state.json}, its tree the registered commit's with that one blob replaced, its only
  * parent the registered commit (here from objects; there through a private index in the box), its register in the
- * same transaction, its subject from {@link PendingWrite} (design D21 of migrate-verify-to-executor-contract) for an
- * entry of either subject: a check's above the round's snapshot, the round's own (a pending round commit) above the
- * snapshot closed under the pending-round subject (here the host trigger, there the box's close; D11 of
- * extract-agent-round-runner).
+ * same transaction, its subject rule held by {@link PendingWrite} (design D21 of migrate-verify-to-executor-contract;
+ * D7, D11 of extract-agent-round-runner): {@code gnomish: pending <stage>#<round> <token>} for either entry subject, a
+ * check's entry above the round's {@code gnomish: snapshot}, the round's own (a pending round commit) above its {@code
+ * gnomish: pending-snapshot} (here closed by {@link SnapshottingStageExecutor}, there by the box's round close).
  *
  * <p>Kill windows: the durability point of each write is its ref transaction. Before it, the branch and the register
  * name the previous closing commit; between it and the push, "closed locally, not pushed", which the next push of the
@@ -148,7 +148,7 @@ public final class GitAttemptPersistence implements AttemptPersistence {
     @Override
     public void persistPending(String taskId, TaskState state) {
         PendingWrite write = PendingWrite.of(taskId, state);
-        ClosedRound round = rounds.snapshot().orElseThrow(write::noSnapshot);
+        ClosedRound round = write.landsOn(rounds.snapshot());
         rounds.pendingRegistered(pendingCommit.land(write, state, round.registered()));
         AttemptKey key = write.key();
         bestEffortPush.pushBestEffort(

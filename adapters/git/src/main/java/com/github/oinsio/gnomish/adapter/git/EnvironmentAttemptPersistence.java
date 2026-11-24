@@ -52,8 +52,7 @@ import java.util.List;
  * path. This is a strict port: any failure to durably commit throws, never
  * returns.
  *
- * <p>{@link #persistPending} lands an open round's pending commit in the box ({@link
- * InBoxPendingCommit}; D21) on the round's last registered commit, moved in the cell.
+ * <p>{@link #persistPending} lands a pending commit in the box ({@link InBoxPendingCommit}; D21).
  *
  * <p>Kept in sync with {@link GitAttemptPersistence}: both must close a round with the same durable
  * sequence — {@code state.json} and the round's trace written first, then one commit stamped with
@@ -65,11 +64,12 @@ import java.util.List;
  * write the pending commit alike: exactly {@code state.json}, its tree the registered commit's with
  * that one blob replaced, its only parent the registered commit (here through a private index in the
  * box; there from objects), its register in the same transaction, its subject from {@link
- * PendingWrite} (design D21) for an entry of either subject: a check's above the round's snapshot,
- * the round's own (a pending round commit) above the snapshot closed under the pending-round subject
- * (here the box's close, there the host trigger; D11 of extract-agent-round-runner). The denial cursor ({@link EnvironmentRoundDocuments}) and the round's
- * decision carve-out are environment-side only: the host has no denial source, and its request never
- * enters the working copy.
+ * PendingWrite} (D21; D7, D11 of extract-agent-round-runner): {@code gnomish: pending <stage>#<round>
+ * <token>} for either entry subject, a check's entry above the round's {@code gnomish: snapshot}, the
+ * round's own (a pending round commit) above its {@code gnomish: pending-snapshot} (here closed by
+ * the box's round close, there by the host trigger). The denial cursor ({@link
+ * EnvironmentRoundDocuments}) and the round's decision carve-out are environment-side only: the host
+ * has no denial source, and its request never enters the working copy.
  *
  * <p>Kill windows (crash-consistency rule). The durable step of both writes is the admission's
  * ref transaction; the push is {@link PushBestEffortAttemptPersistence}'s. A kill before it freezes
@@ -167,7 +167,7 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
     @Override
     public void persistPending(String taskId, TaskState state) {
         PendingWrite write = PendingWrite.of(taskId, state);
-        ClosedRound round = rounds.snapshot().orElseThrow(write::noSnapshot);
+        ClosedRound round = write.landsOn(rounds.snapshot());
         rounds.pendingRegistered(pendingCommit.land(write, state, round));
     }
 
