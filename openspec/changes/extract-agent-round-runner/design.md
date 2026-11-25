@@ -321,7 +321,9 @@ measurement does not show.
   two are implementations of one port in modules with no compile edge (`adapters/agent`,
   `adapters/git`), the barrier `manual-sync-pairs.md` asks a declared pair to name; what was
   hand-synced between them is now pinned by one port contract spec both run (D14), and the
-  registry row is reworded to what that spec does not cover.
+  registry row is reworded to what that spec does not cover. *Amended 2026-11-25 (D11):* both
+  ends gain the same two phases — going pending and a poll of the open round — in one task
+  (6.4c), pinned by the same contract spec.
 - `MidRoundPushRounds` ↔ `SandboxRoundEnvironmentSource` (both in `adapters/git`, markers at both
   ends, listed under the Host/Sandbox registry row): both mint the round token once per opened
   round through `RoundToken.of` from a `VerifiedTip`-checked tip. Both ends share `adapters/git`,
@@ -342,7 +344,10 @@ measurement does not show.
   already writes; the host snapshot trigger (D22 of `migrate-verify-to-executor-contract`,
   `completed` only) widened to a `pending` `transform` result; and the container's round close
   given a pending-round subject that the recogniser reads. One task changes both ends, and the
-  registry row of the pair names the pending commit's subject rule; `MidRoundHarvestListener` ↔ `MidRoundPushListener`: untouched, they subscribe to
+  registry row of the pair names the pending commit's subject rule. *Amended 2026-11-25 (D11):*
+  the trigger and the subject apply to the `start`'s result only, and the pair gains one more
+  mirrored edit, the terminal snapshot of a pending round — its parent, its range and the settled
+  `state.json` lag — in one task for both ends (6.4d); `MidRoundHarvestListener` ↔ `MidRoundPushListener`: untouched, they subscribe to
   the vendor-neutral progress events (FR6) and read no session id.
 - *No new parallel implementation:* the fake dialect in `test-fixtures` is a test double, not a
   second production dialect.
@@ -356,7 +361,7 @@ measurement does not show.
 | The question a decision answers (`Decision`, `domain/engine`; D4 as amended) | `Decision` with its optional question and options, built by one function from the position, the consumed outcome's report, the reply, the author and the instant | `ResumeDecisionCommit` (the `take` path) and `EscalationResume` (the `run` path), which both call that function; `TaskJsonMapper` (the `decisions` entries of `task.json`, read without a question as before); `BriefingSections.renderDecisions` (the stage round prompt and the judge prompt). Reads the body only, by design: `StatusTextRenderer`/`StatusReport`, `DecisionAck` | `new Decision(` at `ResumeDecisionCommit.java:36` and `EscalationResume.java:127`, each with its own copy of the position switch; `lastEscalation` as the only place a question survives | `DecisionOwnerSpec` (`:bootstrap`): `new Decision(` in main sources only in the one builder and in `TaskJsonMapper`, the allowlist asserted reached; identity spec `DecisionQuestionIdentitySpec` on a real bare origin: the question and options of the park commit's report equal those of the decision in the decision commit and those in the next round's prompt, on the host and in container mode |
 | `EnvelopePaths.answerFile` (domain)                                         | `EnvelopePath`                                                               | `AgentRoundRunner` (hands the path), `BranchDecisionFile` (reads it), salvage (`FactoryOwnedPaths`). Invariant: `EnvelopePaths.answerFile` is the branch-durable location of a `decision-request` answer, the one path `BranchDecisionFile` reads at the tip; the contract's result channel separately names a per-request scratch answer path | `DecisionFileTransport` deleted; `GNOMISH_DECISION_FILE` literal removed. Exemption: `ProgramSpawn`/`ProgramResultRead` (the `program` executor, `result-channel` capability) keep their per-request answer path, unchanged — a scratch channel of one request, not the branch envelope | existing envelope-paths build gate extended with the new constant                                                                                                                                                                                                                                                                 |
 | Policy compilation (`ClaudePolicyCompiler`)                                 | argv fragment from `Policy`                                                  | `ClaudeDialect`                                                                                                                                                                                                                                    | `AgentRole`, `JUDGE_READ_ONLY_TOOLS`, per-role branches in `AgentInvocationOptions`                                                                                                                  | `Policy` sealed type in the request; spec: no argv carries `bypassPermissions`                                                                                                                                                                                                                                                    |
-| `PendingPoll` (`domain/engine`, from `migrate-verify-to-executor-contract`) | `PendingPollRecord` (an entry of `TaskState.pendingPolls`) with the sealed subject `Round` beside `Check(CheckRef)`; the round token is already on the record | `StageAttemptLoop` (hands a `transform` `pending` to `PendingPoll`), `PendingPoll` (live and resumed), the two `persistPending` implementations (`GitAttemptPersistence`, `EnvironmentAttemptPersistence`), `StateJsonMapper`/`TaskState` (the `pendingPolls` list), `ResumeVerificationStageExecutor` (the recogniser and one recovery owner; a `Round` entry resumes through `PendingPoll`, never as `Completed`) | the `transform` arm "a `pending` the stage cannot poll" in `RoundFailures`/`AttemptAccounting`/`RoundOutcome` narrowed to executors declaring no `poll`; no second pending record, loop or key store | sealed subject (exhaustive switch); `PendingKey` parameter type; architecture spec `ExecutorPollOwnerSpec` (`:bootstrap`): `Executor.poll(` is called in `domain`/`application` main sources only from `PendingPoll`, the scan asserted to reach its allowlist; identity spec `PendingRoundIdentitySpec`; kill-point specs of D11 |
+| `PendingPoll` (`domain/engine`, from `migrate-verify-to-executor-contract`) | `PendingPollRecord` (an entry of `TaskState.pendingPolls`) with the sealed subject `Round` beside `Check(CheckRef)`; the round token is already on the record | `StageAttemptLoop` (hands a `transform` `pending` to `PendingPoll`), `PendingPoll` (live and resumed), the two `persistPending` implementations (`GitAttemptPersistence`, `EnvironmentAttemptPersistence`), `StateJsonMapper`/`TaskState` (the `pendingPolls` list), `ResumeVerificationStageExecutor` (the recogniser and one recovery owner; a `Round` entry resumes through `PendingPoll`, never as `Completed`); as amended 2026-11-25: the engine's round execution (`RoundExecution`, `TransformRound`: reads the round's entry against the restored cell's token and continues it through `resumeRound`), `ProgramStageExecutor` (hands the adoption role to `PendingTurnRun`), `SnapshotTipCheck` and `PendingChain` (read the pending-round snapshot subject) | the `transform` arm "a `pending` the stage cannot poll" in `RoundFailures`/`AttemptAccounting`/`RoundOutcome` narrowed to executors declaring no `poll`; no second pending record, loop or key store | sealed subject (exhaustive switch); `PendingKey` parameter type; architecture spec `ExecutorPollOwnerSpec` (`:bootstrap`): `Executor.poll(` is called in `domain`/`application` main sources only from `PendingPoll`, the scan asserted to reach its allowlist; identity spec `PendingRoundIdentitySpec`; kill-point specs of D11 |
 | Credential names (`ClaudeDialect.describe`)                                 | `ExecutorCredentialNames`                                                    | `ChildEnvAllowlist` layer via the contract's delivery                                                                                                                                                                                              | `AgentAiSeam` deleted (the dead `agent-cli-env-passthrough` knob is already gone, `RemovedKeys.java:14`)                                                                                             | identity spec `ProgramCredentialDeliverySpec` extended for `claude`                                                                                                                                                                                                                                                               |
 | Whether the bounds on a quiet stdout apply (one predicate over the describe's capabilities, beside `ProgramBounds`; D6, FR16) | yes when the describe declares `streams_progress`, no otherwise | `ProgramExecutor` (the `program` run's wait); `RoundBounds` (the agent round's wait and the request's time hints) | `describe.capabilities().contains(Capability.STREAMS_PROGRESS)` in `ProgramExecutor.java:70`; the unconditional `new ProgressWait(bounds.startup(), bounds.silence(), …)` in `RoundBounds.waitOn` | `RoundBoundsOwnerSpec` (`:bootstrap`): `Capability.STREAMS_PROGRESS` is read in main sources only by the predicate's file, and written only in a describe (scan asserted reached); the runner's spec with a fake dialect that declares no `streams_progress`, quiet past the silence bound and alive; `PaidSmokeLivenessSpec` for the truth of a declaration (FR17) |
 | `RoundBounds` (`adapters/agent`; D6 as amended) | `ProgramBounds` of one round: the factory's startup-read and silence bounds, the overall bound from the request settings' `roundTimeout` or the factory's | `AgentRound`'s wait (every role: a stage round, each judge vote, a decision round); the time hints of the request an agent executor receives; `CommandStageExecutor`'s timeout | `RoundTimeout.resolve(` in `ExecutorRoundExecution` and `JudgeRoundExecution` (both deleted, 4.1 and 5.1) and in `CommandStageExecutor`; `equipment.bounds()` read for the round's wait in `AgentRound`; the `RoundTimeout.DEFAULT` literal, a second spelling of `ProgramBounds.DEFAULTS.overall()` | `RoundBoundsOwnerSpec` (`:bootstrap`): `RoundTimeout.resolve(` appears only in `RoundBounds.java`, and `new ProgressWait(` in `adapters/agent/runner` only where the bounds come from it (scan asserted reached); identity spec `RoundBoundIdentitySpec`: a stage declaring `roundTimeout` is killed at exactly that value on virtual time, and the request's overall hint equals it |
@@ -364,6 +369,7 @@ measurement does not show.
 | The guard probe (the decorator over `Executor`, `adapters/agent`; D13) | a request's result, or `failed/infrastructure` naming a dead guard | every executor bound to an environment: the stage half and the check half of a `program` entry and of the `claude` entry | `probeGuard()` called by `ProgramStageExecutor`, `ExecutorRoundExecution` and `JudgeCannotVerify`, each for itself, and by no one for a check round | `GuardProbeOwnerSpec` (`:bootstrap`): `probeGuard(` in main sources only in the decorator and the environment types that declare or forward it, the allowlist asserted reached; spec: a `program` verdict check in a box with a dead guard is cannot-verify |
 | A fresh box for a verdict (`FreshBoxSource`, from `migrate-verify-to-executor-contract`) | one materialized box per check request, released when the request ends | the check half of a `program` entry (`ProgramCheckBinding`) and of the `claude` entry | `FreshJudgeEnvironments` (one box per attempt commit, shared by the votes), `JudgeEnvironmentSource`, `HostJudgeEnvironmentSource` | the types are deleted (compile); scenario "Two judge checks do not share a box" |
 | The round bracket (`RoundEnvironmentSource`, `app/port/agent`; D14) | an open round: its environment, identity, answer path, mid-round listener, close and discard | `ProgramStageExecutor`, the one round wrapper of every registry entry (`ExecutorDispatch.java:67`); the implementations `HostRoundEnvironmentSource`, `MidRoundPushRounds`, `SandboxRoundEnvironmentSource` | the planned move of these duties to the check acquisition is withdrawn; `Round.readDecision`, whose value has had no reader since task 5.1a (`ProgramStageExecutor.java:91` discards it), leaves the port | one port contract spec in `:test-fixtures` run against every implementation, the list of implementations asserted reached (M9); `CurrentRoundWriterSpec` as landed |
+| The round's continuation (`StageExecutor.poll`, `domain/port`, over the open round a `RoundEnvironmentSource` holds; D11 and D14 as amended 2026-11-25) | the open round of a poll: the round its `start` opened, or the one the run's cell was restored with | `PendingPoll` (the only caller of `StageExecutor.poll`); the port's implementations `CheckRoundRoute`, `ResumeVerificationStageExecutor`, `SnapshottingStageExecutor` (a snapshot on a terminal poll only), `ExecutorDispatch`, `ProgramStageExecutor` (takes the open round, closes on a terminal result only) and `CheckRound` (a check round per request, as today); the round sources `HostRoundEnvironmentSource`, `MidRoundPushRounds`, `SandboxRoundEnvironmentSource`; `WorktreeSnapshot` and the in-box snapshot (the terminal snapshot's parent and range) | `Request.pending()`; `rounds.openRound(request)` and `round.closeRound(…)` on a poll (`ProgramStageExecutor.java:71,91`); a mint per poll (`MidRoundPushRounds.java:92`, `SandboxRoundEnvironmentSource.java:111`); the snapshot on a poll's `pending` result (`SnapshottingStageExecutor.java:78`); the `null` adoption (`ProgramStageExecutor.java:79`); the pending kind as an argument of `closeRound` | the port's two methods and the removed field (compile); the port contract spec of D14 (a second open refused, a poll with no open round refused, a poll's round names what the round opened with); `RoundBracketOwnerSpec` (`:bootstrap`): `.openRound(` in main sources only on the start path of `ProgramStageExecutor` and in the delegating `MidRoundPushRounds`, the token mint only in the two minting sources, the allowlist asserted reached; flow spec `PendingRoundFlowSpec` on a real bare origin, host and container; identity spec `PendingRoundIdentitySpec` |
 | How an answer is obtained (a sealed declaration on `AgentDialect`; D15) | schema-enforced final output, or a file the agent writes | `AgentRoundRunner` (validates; writes a schema-enforced answer to the round's answer path); the dialect's policy compilation (`writeExactly` only for the file form); the prompt's answer instruction | `ClaudeAnswerSchema.of` answering "no schema" for `transform`; the answer-file instruction spelled in the vendor-neutral prompt builder | exhaustive switch over the sealed declaration; spec: no argv of a schema-form dialect grants a write under `.gnomish-task/`; `PaidSmokeStructuredAnswerSpec` for the truth of a declaration (FR22) |
 | The answer read (one function in `:application` over `ResultFileReader` and the contract's `Answer.read`; D15) | a reading: absent, a contract answer, or refused with its cause | `RoundJudgement` (the live agent round), `ProgramResultRead` (a `program` and a built-in), `BranchDecisionFile` (the box round's file), `SnapshotTipCheck` (recovery at the register); the mapping of a refused reading to the round's result is one function both the live path and the recovery call | `DecisionRequestRead` with its raw-text and empty-file fallbacks; the host round's read at close; the second parse in `ProgramResultRead.answer` | `ResultPathReadBoundarySpec` extended to the one function; identity spec `AnswerReadIdentitySpec` on a real bare origin: the same bytes give the same round outcome live and from a snapshot (NFR-R5) |
 
@@ -377,7 +383,10 @@ are re-pointed at the answer file. *Amended 2026-11-23 (D15):* a schema-enforced
 written by the runner into the working copy before the round's close, so it rides the same
 snapshot or salvage commit as an agent-written file did and adds no durable step; and the
 recovery of a snapshot reads the file through the function the live round reads it through
-(item 14), which the tolerant recovery read did not.
+(item 14), which the tolerant recovery read did not. *Amended 2026-11-25 (D11):* a pending round
+adds three durable steps — its pending-round snapshot, its pending round commits and its terminal
+snapshot — whose windows are D11's table, K5 included; and the round cell has one recovery
+producer, the run's assembly, for an interrupted verification and a pending round alike.
 
 **D10 — Lock scope.** No lock added. `FreshJudgeEnvironments` is deleted with the judge path
 (D2): a judge request takes a box of its own from `FreshBoxSource`, so no box is shared between
@@ -385,14 +394,16 @@ requests and its `LiveBox` has no user left in the verification path. The guard 
 `docker inspect` on the request's own thread, under no lock.
 
 **D11 — A pending `transform` round rides the one pending-poll owner.** (FR10–FR12, NFR-R3,
-NFR-R4, NFR-O2, NFR-C2, UX3, G5; human decision 2026-11-02.)
+NFR-R4, NFR-O2, NFR-C2, UX3, G5; human decision 2026-11-02; amended 2026-11-25 after the
+decision review of task 6.5: a poll continues the open round.)
 `StageAttemptLoop` hands a `transform` result `pending(key)` from an executor declaring `poll`
 to `PendingPoll`, whose `PendingPollRecord` gains a sealed subject: `Check(CheckRef)` as built by
 `migrate-verify-to-executor-contract`, or `Round` (the round token is already a field of the
 record, `PendingPollRecord.java:34`). *What is persisted* — the landed mechanism, no second one:
 the round's working copy is registered as the round's snapshot (the host snapshot trigger of
 D22 there widens from `completed` to a `pending` `transform` result; the container's round close
-gets a pending-round subject, so the recogniser never reads that snapshot as a finished round);
+gets a pending-round subject, so the recogniser never reads that snapshot as a finished round;
+both on the `start`'s result only, never on a poll's — the amendment below);
 then the entry `{subject: Round, attempt, token, key, since}` is appended to
 `TaskState.pendingPolls` and written by `AttemptPersistence.persistPending` as the **pending round
 commit** — a pending commit as `git-task-persistence` specifies it ("Pending commits of an open
@@ -400,7 +411,7 @@ round": exactly `state.json`, the snapshot as its only parent, so its tree carri
 copy and the record; its register in the same ref transaction, one atomic push; crash-consistency
 item 9). It is a round boundary that closes no attempt: the position is unchanged, the verify
 chain does not run and no stage advances on it (item 12 — the stop rides the record). Then
-`PendingPoll` polls in the round's environment at the engine's pace, `max(pending interval,
+`PendingPoll` polls in the round its `start` opened (the amendment below) at the engine's pace, `max(pending interval,
 pollAfter)` clamped to the ceiling, as `PendingWait` does for a check — no in-poll wait bound
 travels on the request (NG13 of `migrate-verify-to-executor-contract`, human decision
 2026-11-13); a round-scoped `PendingWait` is built from the factory's pending interval and
@@ -432,22 +443,126 @@ never presence; the attempt number is not an identity). The recovery owner is th
 InProgress with one recovery owner") recognises the pending commit; an entry with subject `Round`
 resumes through `PendingPoll` with no `start` and is never answered `Completed`.
 
-*Kill windows (durable steps: (1) `start` returns `pending`, an external effect; (2) pending
-round commit pushed, above the pending-round snapshot (a snapshot registered without it is still
-window K1); (3) a later `pending` with a new key pushed; (4) round close pushed):*
+*Amended 2026-11-25 (decision review of task 6.5) — a poll continues the open round.* In plain
+words: a round's `start` and all its polls are one round — one token, one open, one close. A poll
+is a step inside the round, never a round of its own.
+
+*What was wrong before.* This decision and D14 said nothing about what a poll does to the round
+bracket, and `PendingPoll` reached the executor only through `StageExecutor.execute`, whose one
+implementation is the whole bracket. Verified in code: `PendingPoll.java:175` calls `execute` per
+poll; `ProgramStageExecutor.java:71,91` opens and closes a round per call;
+`MidRoundPushRounds.java:92` and `SandboxRoundEnvironmentSource.java:111` mint a token per open;
+`CurrentRound.java:59` replaces the open round and drops its snapshot and registered chain;
+`SnapshottingStageExecutor.java:62-78` snapshots on every `pending` result. So the record carries
+the token of the `start` while the cell and every later subject carry the token of the last poll.
+By reading only — no spec drove `start`, pending commit and a poll on a real medium, which is why
+tasks 6.3 and 6.4 were green — the host close after a poll reports a boundary violation (the
+`state.json` lag of the pending commit, `PendingStateLag`, is settled against an empty chain) and
+the box close fails its parent check.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Open: start (open, mint the token)
+    Open --> Pending: start answers pending (pending-round snapshot, pending round commit)
+    Pending --> Pending: poll answers pending (no write, or a rotated key's commit)
+    Pending --> Closed: poll answers a terminal status (close)
+    Open --> Closed: start answers a terminal status (close)
+    Closed --> [*]
+```
+
+*The rule.*
+- The engine's port names the two operations: `StageExecutor.execute(Request)` starts a round,
+  `StageExecutor.poll(Request, PendingTurn)` continues one. `Request.pending()` leaves the port, so
+  no implementation can treat a poll as a start by not looking (`implementation.md`, item 3).
+  Every implementation and decorator implements `poll` itself: a check's poll is a check round as
+  today (`CheckRound`, a fresh box per request by design); a stage's poll reaches the open round
+  its round source holds (D14 as amended).
+- A poll opens no round, mints no token, closes nothing and writes nothing on the task branch. The
+  one write of a wait is the pending round commit of a rotated key (FR12).
+- Going pending is not a close. When `start` answers `pending`, the round's working copy is
+  registered once as the **pending-round snapshot** (subject
+  `gnomish: pending-snapshot <stage>#<round> <token>`) through a round operation of its own, and
+  the round stays open: its environment, scratch area, listeners and cell state are kept.
+  `closeRound` takes a terminal outcome only.
+- The terminal poll closes the round through the normal close. Its snapshot has the round's last
+  registered commit — the last pending round commit — as its only parent, carries the round's
+  token, and is judged over the range from that parent, the base
+  `GitAttemptPersistence.persist` already takes (`:119-121`), with the `state.json` lag settled
+  before the judgement and the staging, on both media. A range judged from the open token would
+  hold the factory's own snapshot and pending commits (`HostRoundBoundary.committed`).
+- The environment's denials are read once, at the one close, and join the terminal result. A
+  non-terminal poll reads none, so none is dropped with its result (`PendingPoll` keeps the usage
+  of a non-terminal result and nothing else).
+- What a non-terminal poll writes into the working copy becomes durable only with the terminal
+  snapshot; a resumed poll runs in an environment at the registered commit and does not see it.
+  The wire contract already puts what a poll needs outside the working copy
+  (`executor/conformance-kit`, "Pending cases poll from a new working copy").
+
+*Resume.* The recogniser reads the two subjects it did not read: `SnapshotTipCheck.java:118-127`
+matched no `pending-snapshot`, and `PendingChain.snapshotBelow` (`:68-79`) accepted only a
+`gnomish: snapshot` bottom, so a kill during the polls fell to salvage and a re-driven `start`.
+The bottom of a registered chain names its kind: a snapshot below pending commits is an
+interrupted verification, a pending-round snapshot below pending commits is a pending round. The
+run's assembly restores the round cell from the recognised tip — the token, the registered chain
+and the pending kind, where `CurrentRound.restore` hard-codes a verifiable close today — through
+the subject parse the live path writes with (item 14), **before** the engine decides between
+`start` and a poll: the engine reads the round's entry against the cell's token
+(`PendingEntries.roundEntry`) and continues it through `PendingPoll.resumeRound`, neither of which
+had a caller. The restore of an interrupted verification moves to the same point, so the cell has
+one recovery producer; task 6.5 opens with the premise check that nothing opens a round between
+the assembly and the first request, and a refuted premise is a blocker under `spec-mismatch.md`.
+A resumed poll's turn is `RECORDED`, and the wrapper hands the executor's adoption role to
+`PendingTurnRun` as `CheckRound` does; `ProgramStageExecutor.java:79` passed none, so a resumed
+program poll was refused as an unknown key.
+
+*Alternative zero — a poll with nothing around it:* take the open, the mint, the close and the
+snapshot out of a poll. What is left per poll is one request in the open round and no write; per
+round, one pending-round snapshot, one pending round commit and one terminal snapshot. Only how a
+poll reaches the open round is designed.
+*Alternative rejected — one `execute` and a branch on `request.pending()`* (the steelman: no port
+change; six implementations and some twenty test fakes stay as they are): the branch is needed
+wherever per-round work is done — both round sources, the wrapper's close, the host snapshot
+trigger — and a fifth place written without it repeats this defect with a green build. The port
+change buys what `implementation.md` item 3 asks for.
+*Alternative rejected — keep the re-opens and preserve the token:* an entry point may be
+re-entered only where entry writes nothing, identity is derived and the medium refuses a
+duplicate create, as a Kubernetes reconcile does; a round's open mints, its close commits and
+`start` is not deduplicated.
+*Alternative rejected — the engine holds the open round* (the steelman: the strongest guarantee,
+and the layering objection falls to a round interface owned by `:domain`): the engine would then
+own close and discard on every failure path, which D14 gives to one wrapper. Kept from it: the
+open round is a named object with a stated lifetime, held by the round source.
+*Comparable systems* choose a distinct continuation wherever the unit has setup and an accounted
+identity. Airflow increments a try "only when there's legitimately a new try", never when a task
+comes out of a deferral or a reschedule (apache/airflow PR 39336; issue 45366 is this defect, a
+reschedule-mode sensor bumping the try on every poke), and resumes through a named method, not
+`execute`. The Jenkins durable-task `Controller` is launched once and has no method that launches
+again. Temporal keeps one activity execution across polls, its retries and heartbeats outside the
+history. In state-machine terms a poll is an internal transition: it runs no entry and no exit
+action.
+
+*Kill windows (amended 2026-11-25; durable steps: (1) `start` returns `pending`, an external
+effect; (2) the pending-round snapshot registered; (3) the pending round commit pushed above it;
+(4) a later `pending` with a new key pushed; (5) the terminal poll's snapshot registered; (6) the
+round close pushed):*
 
 | Window                                   | Registered commit shows                     | Shape                           | Recovery owner                                         | Action                                                                                                                                                                       |
 |------------------------------------------|---------------------------------------------|---------------------------------|--------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| K1: after (1), before (2)                | the round-open commit with the gnome range above it, or the round's pending-round snapshot with no pending commit above it | `InProgress` (open round)       | existing round-close owner + `StageAttemptLoop` resume; `ResumeVerificationStageExecutor` for a registered snapshot, which reads the pending-round subject and hands it back to the round instead of re-verifying | salvage the range as today, re-drive `start` (one duplicate remote run, logged, NFR-C2)                                                                                      |
-| K2: after (2), during polls              | pending record, subject `Round`             | `InProgress`, pending sub-state | `PendingPoll`                                          | poll the recorded key, never `start`; clock from `since`                                                                                                                     |
-| K3: after a new key returned, before (3) | record with the previous key                | `InProgress`, pending sub-state | `PendingPoll`                                          | poll the previous key, never `start`: the contract keeps a superseded key pollable for its run; a non-conforming refusal is `failed/infrastructure` naming the key (visible) |
-| K4: after a terminal poll, before (4)    | record still present                        | `InProgress`, pending sub-state | `PendingPoll`                                          | poll the key again, never `start`: the contract returns the ended run's terminal result again, and the round closes with it; a refusal as K3                                 |
-| after (4)                                | closed attempt, no record                   | the shape the close produces    | the owner of that shape                                | none: a second pass is a no-op                                                                                                                                               |
+| K1: after (1), before (3)                | the round-open commit with the gnome range above it, or the round's pending-round snapshot with no pending commit above it | `InProgress` (open round)       | existing round-close owner + `StageAttemptLoop` resume; the recogniser names a registered pending-round snapshot and hands it back to the round instead of re-verifying it | salvage the range as today, re-drive `start` (one duplicate remote run, logged, NFR-C2)                                                                                      |
+| K2: after (3), during polls              | a pending round commit above the pending-round snapshot; record with subject `Round` | `InProgress`, pending sub-state | `PendingPoll`                                          | poll the recorded key, never `start`; clock from `since`                                                                                                                     |
+| K3: after a new key returned, before (4) | record with the previous key                | `InProgress`, pending sub-state | `PendingPoll`                                          | poll the previous key, never `start`: the contract keeps a superseded key pollable for its run; a non-conforming refusal is `failed/infrastructure` naming the key (visible) |
+| K4: after a terminal poll, before (5)    | a pending round commit at the tip, record still present | `InProgress`, pending sub-state | `PendingPoll`                                          | poll the key again, never `start`: the contract returns the ended run's terminal result again, and the round closes with it; a refusal as K3                                 |
+| K5: after (5), before (6)                | the round's snapshot above its pending round commits; its `state.json` still carries the record | `InProgress`                    | the interrupted-verification resume (`ResumeVerificationStageExecutor`) | re-verify the snapshot: no poll and no `start`; the closing commit drops the record                                                                                          |
+| after (6)                                | closed attempt, no record                   | the shape the close produces    | the owner of that shape                                | none: a second pass is a no-op                                                                                                                                               |
 
 K3 and K4 rest on the wire requirement "A pending key stays pollable until its run ends"
 (FR11, D11 of `migrate-verify-to-executor-contract`; proposal Q2, closed 2026-11-02), pinned for
-every candidate by the conformance kit's `pending-repoll` case; with it, no window after (2)
-re-drives `start`, and G5 holds for any conforming executor.
+every candidate by the conformance kit's `pending-repoll` case; with it, no window after (3)
+re-drives `start`, and G5 holds for any conforming executor. K5 is decided by the subject at the
+registered tip, never by the record's presence (item 13): a snapshot of the round's token above
+its pending round commits says the round closed verifiable, so its record is a consumed message
+the closing commit removes, and the interrupted-verification resume is the window's one owner
+(item 3). A terminal poll that failed registers no snapshot, so its kill stays K4.
 
 The pending entry is an entry of `TaskState.pendingPolls` on a registered pending commit, as the
 verdict entry is (D7 as amended and D21 of `migrate-verify-to-executor-contract`); a registered
@@ -536,7 +651,8 @@ for itself (Kubernetes KEP-753, sidecar containers; Istio `holdApplicationUntilP
 third already missed a path.
 
 **D14 — The round source owns a round's open and close, for every entry.** (FR18, G3; added
-2026-11-23 after the decision review of task 5.1.) In plain words: one component brackets a
+2026-11-23 after the decision review of task 5.1; amended 2026-11-25 after the decision review of
+task 6.5: the phases of a pending round.) In plain words: one component brackets a
 round — it gives the round its identity and its working place when it opens and puts the result
 on the task branch when it closes — and every kind of executor runs inside that bracket. Handing
 out an environment for a check is a different job and stays one.
@@ -559,8 +675,17 @@ already uses". Three premises, checked in code:
 |-----------|---------------------------------------------------------------------------------|-----------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
 | open      | materializes the host environment with its scratch area; names the answer path there; identity `inPlace` | mints the round token from the worktree tip into `CurrentRound`, then as in place | takes the stage's leased box; mints the token from the clone's verified branch tip into `CurrentRound`; names the answer path `EnvelopePaths.answerFile` |
 | mid-round | nothing                                                                         | `MidRoundPushListener` pushes the branch                              | `MidRoundHarvestListener` harvests under the admission rule of the round                                                |
+| went pending | nothing: the environment and its scratch area are kept                       | as in place; `SnapshottingStageExecutor` registers the pending-round snapshot | the pending-round snapshot commit and its harvest, into `CurrentRound`; the box is kept                                 |
+| poll      | hands out the open round: no new environment, no new scratch area               | as in place: no mint, the open round's push listener                  | hands out the open round: the same box, token, answer path and harvest listener; no mint                               |
 | close     | disposes the environment and its scratch area                                   | as in place                                                           | `EnvironmentRoundSnapshot`: the snapshot commit and its harvest, the attempt commit into `CurrentRound`                 |
 | discard   | disposes the environment                                                        | as in place                                                           | nothing: the box's file dies with the box or rides a salvage commit                                                     |
+
+*The open round is held by the source* (amended 2026-11-25, D11). A source opens one round at a
+time and keeps it until its close or discard: a second open while a round is open is refused, a
+poll takes the open round from the source and is refused when none is open, and a resuming
+instance's first poll takes the round the run's cell was restored with (D11, "Resume"), in an
+environment at the registered commit, with no mint. Going pending and a poll are phases of the
+table above, so no implementation meets a poll in its `open`.
 
 *Alternative zero — delete the sources as D7 first said:* every box round loses its token, its
 mid-round harvest, its snapshot and the durable decision request, and nobody carries them; a
@@ -583,7 +708,9 @@ agreement was a registry row. It becomes a contract spec in `:test-fixtures`, wr
 the port and run by each implementation's module, one feature per row of the table that holds
 for every medium (an open round names an answer path and an identity; a close followed by a
 discard is refused or a no-op as the port states; a discard after an open leaves no scratch
-area) — `testing.md`, "Contract tests for every port". The registry row stays for what a port
+area; and, as amended 2026-11-25, a second open while a round is open is refused, a poll with no
+open round is refused, and a poll's round names the identity, the environment and the answer path
+the round opened with) — `testing.md`, "Contract tests for every port". The registry row stays for what a port
 spec cannot hold, and names the barrier.
 
 *The rule this failure adds* (`design-decisions.md`, "A decision that deletes a class lists its
@@ -716,6 +843,17 @@ measurement covers, never the judgement.
 - [A non-conforming executor that refuses a superseded or ended key (K3, K4)] → the conformance
   kit's `pending-repoll` case fails it before use; at run time the refusal is a visible
   infrastructure failure naming the key, never a silent loss or a silent `start`.
+- [A re-driven `start` in window K1 is not deduplicated by the executor] → one duplicate remote
+  run per kill, named in the ledger (NFR-C2); a client token on `start` is NG14 with its pickup
+  condition.
+- [An executor forgets an ended run before a resuming instance polls it (K4)] → the poll is
+  refused and the round is a visible `failed/infrastructure` naming the key, never a silent
+  `start`; a stated retention window is NG15.
+- [The pending ceiling is counted from a `since` one instance stamped and another compares] →
+  the wait ends early or late by the skew between two operator machines; accepted, as it is for a
+  pending check, and the ceiling's default (24 h) is far above any expected skew.
+- [The port change of D11 touches every `StageExecutor` implementation and fake] → the compiler
+  lists them; task 6.4b is the one task that changes the port, and nothing else lands in it.
 - [`migrate-verify-to-executor-contract` task 4.3a lands a design that does not let another
   instance poll a `program` key] → FR11 cannot hold for `program` executors; task 6.1 checks the
   premise first and stops under `spec-mismatch.md` if it fails.

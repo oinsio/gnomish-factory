@@ -447,6 +447,19 @@ resumed), the `persistPending` implementations of `GitAttemptPersistence` and
 owner). Old way: the `transform` arm "a
 `pending` the stage cannot poll" in `RoundFailures`, `AttemptAccounting`, `RoundOutcome`.
 
+Amended 2026-11-25 (decision review of task 6.5; D11, D14, D8 row "The round's continuation"):
+a poll continues the open round. Tasks 6.3 and 6.4 stay ticked for what they built; the code
+they left opens, mints and closes a round on every poll, and tasks 6.4a–6.4d correct it before
+6.5. Work them in the order written. Consumers of the continuation: `PendingPoll` (the only
+caller of `StageExecutor.poll`); the port's implementations `CheckRoundRoute`,
+`ResumeVerificationStageExecutor`, `SnapshottingStageExecutor`, `ExecutorDispatch`,
+`ProgramStageExecutor`, `CheckRound`; the round sources `HostRoundEnvironmentSource`,
+`MidRoundPushRounds`, `SandboxRoundEnvironmentSource`; `WorktreeSnapshot` and the in-box snapshot.
+Old way: `Request.pending()`; `rounds.openRound(request)` and `round.closeRound(…)` on a poll
+(`ProgramStageExecutor.java:71,91`); a mint per poll (`MidRoundPushRounds.java:92`,
+`SandboxRoundEnvironmentSource.java:111`); the snapshot on a poll's `pending` result
+(`SnapshottingStageExecutor.java:78`); the `null` adoption (`ProgramStageExecutor.java:79`).
+
 - [x] 6.1 Premise check (`spec-mismatch.md`, item 1): confirm with `file:line` that
   `migrate-verify-to-executor-contract` landed `PendingPoll`, `PendingPollRecord` as entries of
   `TaskState.pendingPolls`, `AttemptPersistence.persistPending` and the recogniser in
@@ -476,33 +489,102 @@ owner). Old way: the `transform` arm "a
   `migrate-verify-to-executor-contract`, `completed` only) widened to a `pending` `transform`
   result; the container's round close given a pending-round subject; the registry row of the pair
   names the pending commit's subject rule; specs per medium (FR10, D7, D11)
-- [ ] 6.5 One path, live and resumed, on the landed rule of `PendingPoll` (D11): the live instance
-  continues from the entry it persisted, a resuming instance from the entry parsed at the register,
-  both through `PendingPoll`'s one wait path; `ResumeVerificationStageExecutor` gains the
-  pending-round subject — an entry with subject `Round` resumes through `PendingPoll` with no
-  `start` and is never answered `Completed`, and a pending-round snapshot with no pending commit
-  above it is handed back to the round (K1), never re-verified; the resume materializes the
-  environment at the registered commit; identity spec `PendingRoundIdentitySpec`
-  on a real bare origin — the round token, the usage participants and the ledger lines of a round
-  closed by a second instance equal those of the round that went pending (FR11, NFR-R4, D11)
+- [ ] 6.4a The flow spec first, red: `PendingRoundFlowSpec` on a real bare origin, once on the
+  host and once in container mode, through the fixtures `HostPendingRoundCommitSpec` and
+  `InBoxPendingRoundCommitSpec` use, with a `transform` fixture executor declaring `poll` (a
+  stand-in preset, `testing.md`): `start` answers `pending`, two polls answer `pending` with the
+  recorded key, a third answers `completed`, the round closes and its verify chain runs. It
+  asserts the branch holds exactly the pending-round snapshot, one pending round commit, the
+  closing snapshot and the closing commit; every subject and the attempt record carry the token
+  the round opened with; the register does not move between the pending round commit and the
+  closing snapshot; no boundary violation. Run it against the code as it stands and put the
+  failure it shows, per medium, in the task report: the two audits of 2026-11-25 derived the
+  failure by reading and disagree on the container's. The features carry the markers of
+  `pipeline/stage-engine` "A poll that answers pending writes nothing" and "Every commit of a
+  pending round names one token" and stay `@PendingFeature(reason = "6.4d: …")` until 6.4d
+  (FR10, NFR-R4, D11)
+- [ ] 6.4b The port, and nothing else: `StageExecutor.poll(Request, PendingTurn)` beside
+  `execute(Request)`; `Request.pending()` removed; `PendingPoll` calls `poll` for a turn and
+  `execute` for a `start`; every implementation named above implements `poll` — the routing ones
+  forward it, `CheckRound` runs a check round as today — and every test fake follows. No
+  behaviour changes in this task: `ProgramStageExecutor.poll` and `SnapshottingStageExecutor.poll`
+  still do what `execute` did with a turn, so the task's specs are the existing ones, green. The
+  port's javadoc ("One `execute(Request)` call is one attempt", `StageExecutor.java:18`) states
+  the two operations and what a poll must never do (D11, D8)
+- [ ] 6.4c The round sources, both ends of the pair and the host decoration in one task: a source
+  holds its open round until the close or the discard; a second `openRound` while one is open is
+  refused; a new port operation hands a poll the open round — the one this source opened, or the
+  one the run's cell was restored with — and refuses when there is none, with no mint; going
+  pending is a round operation of its own that registers the pending-round snapshot and keeps the
+  environment, the scratch area and the listeners, and `closeRound` takes a terminal outcome only.
+  `ProgramStageExecutor.poll` takes the open round, hands the adoption role to `PendingTurnRun`,
+  reads denials and closes on a terminal result only; `SnapshottingStageExecutor.poll` takes no
+  snapshot on a `pending` result. The port contract spec of D14 gains the three features the
+  amended D14 names, and the list of implementations it runs against is still asserted reached;
+  the registry row of the pair, `MidRoundPushRounds`' javadoc ("exactly once per attempt
+  request") and `ProgramStageExecutor`'s ("one round is one start — or … one poll") say the new
+  rule; feature for "A poll with no open round is refused", marker included (FR10, D11, D14, D7)
+- [ ] 6.4d The closing snapshot of a pending round, both ends of the persistence pair in one
+  task: its only parent is the round's last registered commit, its subject carries the round's
+  token, the gnome range is judged from that parent, and the `state.json` lag of the pending
+  round commits is settled before the judgement and the staging (`PendingStateLag`) — on the host
+  in `WorktreeSnapshot`/`RoundSnapshot`, in the box in the in-box snapshot and its admission; one
+  feature per scenario of `git/git-task-persistence` "Pending-round snapshot" and "The closing
+  snapshot of a pending round", markers included; the `@PendingFeature` of 6.4a removed and
+  `PendingRoundFlowSpec` green on both media; `scripts/linux-specs.sh` for the host half, whose
+  subject is real git (FR10, NFR-R4, D11)
+- [ ] 6.5 One path, live and resumed (D11, "Resume"). Premise check first, with `file:line`:
+  nothing opens a round between the run's assembly and the engine's first request — a refuted
+  premise is a blocker under `spec-mismatch.md`. Then: `SnapshotTipCheck` and `PendingChain` read
+  the pending-round snapshot subject, so a pending commit above one is a pending round and a
+  pending-round snapshot alone is handed back to the round (K1) with a line naming the re-driven
+  `start`, never re-verified; the run's assembly restores the round cell from the recognised tip
+  — token, registered chain and the pending kind — through the subject parse the live path writes
+  with, for an interrupted verification and a pending round alike, and
+  `ResumeVerificationStageExecutor` no longer restores inside `execute`; the engine's round
+  execution reads the round's entry against the cell's token (`PendingEntries.roundEntry`) and
+  continues it through `PendingPoll.resumeRound`, with no `start`, never answered `Completed`; the
+  resumed poll runs in an environment at the registered commit and its key is adopted; one
+  feature per scenario of `lifecycle/task-branch-contract` "A pending round is resumed by the
+  same owner" and `git/git-task-persistence` "A pending commit above a pending-round snapshot is
+  a pending round", markers included; identity spec `PendingRoundIdentitySpec` on a real bare
+  origin — the round token, the usage participants and the ledger lines of a round closed by a
+  second instance equal those of the round that went pending (FR11, NFR-R3, NFR-R4, D11)
 - [ ] 6.6 Key rotation for a round (FR12, reuse): `migrate-verify-to-executor-contract` owns the
   rule (its FR10, D12; proposal Q3, closed 2026-11-02); this task adds only the `Round` subject's
   case — the new key lands in a pending round commit through the persistence pair of 6.4, the
   attempt stays open — with a feature for the `pipeline/stage-engine` scenario "A changed key of a
   pending round lands in a pending round commit", marker included; no second rotation path
-- [ ] 6.7 Kill-point specs on a real bare origin for windows K1–K4 and after the round close
+- [ ] 6.7 Kill-point specs on a real bare origin for windows K1–K5 and after the round close
   (design D11), each resumed by a second instance, each followed by a second recovery pass that
   changes nothing; K1 — killed before the snapshot, and with the pending-round snapshot registered
   but no pending commit — asserts the re-driven `start` is in the ledger; K3 and K4 assert no `start`
   (the fixture executor conforms to "A pending key stays pollable until its run ends"), K4 also
-  the scenario "Kill after the terminal poll closes the round without a start", marker included
-  (NFR-R3, NFR-C2)
+  the scenario "Kill after the terminal poll closes the round without a start", marker included;
+  K5 — killed with the closing snapshot registered and no closing commit — asserts the snapshot
+  is re-verified with no `poll` and no `start` and the closing commit carries no pending entry
+  (`pipeline/stage-engine` "Kill after the terminal snapshot re-verifies without a poll",
+  `lifecycle/task-branch-contract` "A closing snapshot above pending round commits is an
+  interrupted verification", markers included) (NFR-R3, NFR-C2)
 - [ ] 6.8 Owner gate and sweep: `ExecutorPollOwnerSpec` (`:bootstrap`) — `.poll(` on an `Executor`
   in `domain`/`application` main sources only in `PendingPoll`, the allowlist asserted reached;
   sweep `grep -rn "cannot poll\|PendingRuns\|\.poll(" --include='*.java' */src/main
-  adapters/*/src/main` and report each hit as routed, removed or exempt with its reason (D8)
+  adapters/*/src/main` and report each hit as routed, removed or exempt with its reason (D8);
+  `RoundBracketOwnerSpec` (`:bootstrap`) — `.openRound(` in main sources only on the start path
+  of `ProgramStageExecutor` and in the delegating `MidRoundPushRounds`, the token mint only in
+  the two minting sources, the allowlist asserted reached — with its sweep
+  `grep -rn "openRound(\|closeRound(\|\.pending()\|mint\.open(" --include='*.java' */src/main
+  adapters/*/src/main`, each hit reported the same way (D8 row "The round's continuation")
 - [ ] 6.9 Glossary: "pending key" entry (from `migrate-verify-to-executor-contract`) extended to
-  the `transform` round; new entry "pending round commit"
+  the `transform` round; new entries "pending round commit" and "pending-round snapshot"
+- [ ] 6.9a Rules, each with this failure as its record (`process-invariants.md`, "A rule has one
+  owner"): in `design-decisions.md`, a section "A continuation is an operation of its own" — a
+  step that continues an open unit (a poll of a round, a re-attach, a resume) gets its own entry
+  point on the port, and a design that reaches it by re-entering the unit's whole entry point
+  names why entry writes nothing, mints nothing and is refused as a duplicate by the medium; in
+  `verification-scope.md`, beside the per-task steps, that a task which builds one link of a flow
+  crossing a durable write runs the flow's spec on the real medium, written before the link
+  tasks, so two green link tasks cannot leave a flow no spec ever drove (D11)
 
 ## 7. Integration
 

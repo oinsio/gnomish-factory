@@ -65,6 +65,26 @@ pending ceiling counted from the recorded start time, as `failed/infrastructure`
 - **WHEN** a poll of a pending round returns `pending` with a key other than the recorded one
 - **THEN** a pending round commit carrying the new key is pushed before the next `poll`, and the attempt stays open
 
+### Requirement: A poll continues the open round
+A `poll` of a pending `transform` round SHALL run in the round its `start` opened: it SHALL NOT
+open a round, mint a round token or close the round, and a `poll` that answers `pending` with the
+recorded key SHALL write nothing on the task branch. A `poll` with no open round SHALL be refused
+as `failed/infrastructure`.
+**Implements**: FR10, NFR-R4 of extract-agent-round-runner
+**Notes**: A check's `poll` is a check round in a box of its own, as `verification/pending-poll` states; this requirement is the stage round's.
+
+#### Scenario: A poll that answers pending writes nothing
+- **WHEN** a poll of a pending round returns `pending` with the recorded key
+- **THEN** the task branch and its register are the ones the pending round commit left, and the round's environment is the one its `start` ran in
+
+#### Scenario: Every commit of a pending round names one token
+- **WHEN** a round goes `pending`, is polled twice and closes on a `completed` poll
+- **THEN** its pending-round snapshot, its pending round commit, its closing snapshot and its attempt record carry the round token the round opened with, and the branch holds no other commit of the round
+
+#### Scenario: A poll with no open round is refused
+- **WHEN** a poll reaches a stage executor whose round source holds no open round and whose round cell was not restored
+- **THEN** the result is `failed/infrastructure` naming the missing round, and no round is opened
+
 ### Requirement: Any instance resumes a pending transform round
 A pickup that finds a pending round record at the registered commit SHALL continue that round
 with `poll(key)` in an environment materialized at that commit, on any instance, and SHALL NOT
@@ -80,8 +100,12 @@ call `start`.
 - **THEN** a second instance polls the recorded key, makes no `start` call, and the ledger shows `resumed key=<prefix>`
 
 #### Scenario: Kill after the terminal poll closes the round without a start
-- **WHEN** the factory is killed after a poll of a pending round returned a terminal status and before the round close was pushed
+- **WHEN** the factory is killed after a poll of a pending round returned a terminal status and before that poll's snapshot was registered
 - **THEN** a second instance polls the recorded key again, closes the round with the terminal result it returns, and makes no `start` call
+
+#### Scenario: Kill after the terminal snapshot re-verifies without a poll
+- **WHEN** the factory is killed after the terminal poll's snapshot was registered and before the round close was pushed
+- **THEN** a second instance re-verifies that snapshot, makes no `poll` and no `start` call, and the closing commit carries no pending record
 
 #### Scenario: Resumed round keeps its identity
 - **WHEN** a pending round is closed by a second instance

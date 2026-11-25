@@ -149,6 +149,15 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   condition: the first executor that must ask a question whose options it cannot enumerate; the
   contract and the arbiter's consult gate (`add-decision-arbiter`, design D6) are then decided
   together.
+- NG14: a client token on `start` that lets an executor answer a re-driven `start` with the run it
+  already began (the kill window before the pending commit, NFR-C2). The request carries no round
+  token today, so this is a clause of the wire contract and a conformance case. Pickup condition:
+  the first `transform` executor declaring `poll` whose `start` is not safe to repeat — it charges
+  per run or changes a target outside the working copy.
+- NG15: a stated retention window for an ended run's terminal result. The wire contract keeps a
+  key pollable until its run ends and returns the terminal result again; how long after the end
+  is the executor's. Pickup condition: the first executor whose documented retention is shorter
+  than a claim's lease plus the pickup delay, or a recorded round that failed on an ended key.
 
 ## Users & Scenarios
 
@@ -214,13 +223,15 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   engine SHALL then, through the pending-poll owner of `migrate-verify-to-executor-contract`,
   land the round's working copy and a pending record (the round's token, stage, attempt, key,
   start time) in one pending round commit with its register before the first `poll`; poll at the
-  factory's pending interval, in the round's environment, until a terminal status or the
+  factory's pending interval, in the round its `start` opened, until a terminal status or the
   factory's pending ceiling counted from the recorded start time; and close the round with the
-  terminal result as any round. A `pending` from a `transform` executor declaring no `poll`
+  terminal result as any round. A `poll` SHALL NOT open a round, mint a round token or close the
+  round, and one that answers `pending` with the recorded key SHALL write nothing on the task
+  branch (design D11 as amended 2026-11-25). A `pending` from a `transform` executor declaring no `poll`
   stays `failed/infrastructure`.
 - FR11: A pickup that finds a pending record at the registered commit SHALL continue that round
-  with `poll(key)` in an environment materialized at that commit, on any instance, and SHALL NOT
-  call `start`; neither the verify chain nor advancement SHALL run on a pending round commit.
+  with `poll(key)` in an environment materialized at that commit, on any instance, under the
+  round identity restored from that record, and SHALL NOT call `start`; neither the verify chain nor advancement SHALL run on a pending round commit.
 - FR12: A pending `transform` round SHALL reuse the key-rotation rule of
   `migrate-verify-to-executor-contract` (its FR10, human decision 2026-11-02): a `poll` that
   returns `pending` with a key different from the recorded one has the new key persisted, in a
@@ -288,8 +299,9 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
 - NFR-R3: Every kill window of a pending `transform` round classifies to a named shape with one
   recovery owner: a kill before the pending commit is pushed re-drives `start` (one duplicate
   remote run per kill, logged); a kill after it — including after a key-rotating poll and after a
-  terminal poll not yet closed — resumes the poll with no `start`, on the wire obligation of FR11
-  of `migrate-verify-to-executor-contract`; recovery of a closed round is a no-op. Kill-point specs cover each window, each resumed by a second instance.
+  terminal poll whose snapshot is not yet registered — resumes the poll with no `start`, on the wire obligation of FR11
+  of `migrate-verify-to-executor-contract`; a kill after the terminal poll's snapshot is registered re-verifies that
+  snapshot with no `poll` and no `start`; recovery of a closed round is a no-op. Kill-point specs cover each window, each resumed by a second instance.
 - NFR-R4: The live path and the resume path continue a pending round through the pending-poll
   owner's one wait path over one record — the live path from the entry it persisted, the resume
   from that entry parsed back at the register — so the round token, usage and ledger lines of a resumed round are those of the round
@@ -378,9 +390,13 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
 - `executor/result-channel`: the answer file and the findings file keep one reader each; the
   raw-text fallback of the decision file is removed.
 - `git/git-task-persistence`: the decision commit records the question and options a decision
-  answers.
+  answers; the pending-round snapshot and the closing snapshot of a pending round; a check's
+  pending commit is told from a round's by the snapshot its chain ends on.
+- `lifecycle/task-branch-contract`: the interrupted-verification resume recognises a pending
+  round and continues it by a poll; a closing snapshot above pending round commits is re-verified.
 - `stage-engine`: a judge check is one verdict request; majority voting and `JudgeVoter`
-  removed; pending `transform` rounds persisted, polled and resumed.
+  removed; pending `transform` rounds persisted, polled and resumed; a poll continues the open
+  round.
 - `pipeline/pipeline-config`: a `judge` check declares the stage's `executor:` block; `votes` is
   refused.
 - `verification/verification-hardening`: a judge request runs in a fresh box of its own.
