@@ -6,21 +6,26 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace;
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult;
 import com.github.oinsio.gnomish.domain.engine.ExecutorOutcomeClassifier;
+import com.github.oinsio.gnomish.domain.engine.port.PendingTurn;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import org.jspecify.annotations.Nullable;
 
 /**
  * The git-mode host trigger of the round snapshot (design D22 of migrate-verify-to-executor-contract):
- * a decoration of the run's stage chain that, after the delegate returns {@code completed} or {@code
- * pending}, closes the round's gnome work in a snapshot commit before the engine verifies or polls it, through the one {@link
- * RoundSnapshot} step over the host worktree ({@link WorktreeSnapshot}) and the run's cell.
+ * a decoration of the run's stage chain that, after the delegate's {@code start} returns {@code
+ * completed} or {@code pending}, or a poll returns {@code completed}, registers the round's gnome work
+ * in a snapshot commit before the engine verifies or polls it, through the one {@link RoundSnapshot}
+ * step over the host worktree ({@link WorktreeSnapshot}) and the run's cell.
  *
  * <p>A completed round with no question — the round the engine's classifier calls {@linkplain
  * ExecutorOutcomeClassifier#verifiable verifiable}, asked rather than read here (G4 of
  * define-executor-contract) — is snapshotted verifiable. A round that answered {@code pending} — a
  * stage round is a {@code transform} round — is snapshotted under the pending-round subject
  * ({@link RoundClose#PENDING}), the snapshot its pending round commit lands on, which no pickup
- * reads as a round to verify (design D11 of extract-agent-round-runner). A round that ended {@code
+ * reads as a round to verify (design D11 of extract-agent-round-runner) — on the {@code start}'s
+ * result only: a poll that answers {@code pending} continues the open round and takes no snapshot
+ * (D11 as amended 2026-11-25), so only the terminal poll's verifiable result is snapshotted. A round
+ * that ended {@code
  * failed}, or that asked a decision, keeps its record commit as its one commit: a resume would
  * otherwise re-verify a failed round, or verify a round whose question the host's per-round
  * decision file never put into the tree. It sits inside the resume re-verification decorator, so a
@@ -59,7 +64,21 @@ final class SnapshottingStageExecutor implements StageExecutor {
     @Override
     public ExecutionResult execute(Request request) {
         ExecutionResult result = delegate.execute(request);
-        RoundClose close = closeOf(result);
+        return snapshotted(request, result, closeOf(result));
+    }
+
+    /**
+     * The poll of a pending {@code transform} round, forwarded down the chain: a verifiable terminal
+     * result takes the round's snapshot, a {@code pending} one none (D11 as amended 2026-11-25).
+     */
+    @Override
+    public ExecutionResult poll(Request request, PendingTurn turn) {
+        ExecutionResult result = delegate.poll(request, turn);
+        return snapshotted(
+                request, result, ExecutorOutcomeClassifier.verifiable(result) ? RoundClose.VERIFIABLE : null);
+    }
+
+    private ExecutionResult snapshotted(Request request, ExecutionResult result, @Nullable RoundClose close) {
         if (close == null) {
             return result;
         }
@@ -70,7 +89,7 @@ final class SnapshottingStageExecutor implements StageExecutor {
         return result;
     }
 
-    /** The snapshot's close for {@code result}, or {@code null} when the round takes no snapshot. */
+    /** The snapshot's close for a {@code start}'s {@code result}, or {@code null} when it takes none. */
     private static @Nullable RoundClose closeOf(ExecutionResult result) {
         if (ExecutorOutcomeClassifier.verifiable(result)) {
             return RoundClose.VERIFIABLE;

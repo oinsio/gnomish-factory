@@ -59,7 +59,7 @@ class PendingTransformRoundSpec extends PendingTransformRoundSpecBase {
         and: 'the poll is the round\'s own request: no check, the issued key'
         def poll = executor.requests[1]
         poll.check() == null
-        poll.pending() == new PendingTurn(new PendingKey('job-42'), PendingTurn.Origin.ISSUED)
+        executor.turns[1] == new PendingTurn(new PendingKey('job-42'), PendingTurn.Origin.ISSUED)
         poll.stage() == STAGE
         poll.attempt() == 0
     }

@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.git.CurrentRound;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult;
+import com.github.oinsio.gnomish.domain.engine.port.PendingTurn;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.executorcontract.Role;
 import com.github.oinsio.gnomish.executorcontract.Usage;
@@ -109,5 +110,15 @@ public final class ResumeVerificationStageExecutor implements StageExecutor {
             return ProgramResultMapping.toEngine(executor, Role.TRANSFORM, key, recovered, List.of());
         }
         return delegate.execute(request);
+    }
+
+    /**
+     * A poll continues a round whose {@code start} already went through {@link #execute}, which is
+     * where an interrupted verification is recognised: it is forwarded to the chain as it is (design
+     * D11 of extract-agent-round-runner, as amended 2026-11-25).
+     */
+    @Override
+    public ExecutionResult poll(Request request, PendingTurn turn) {
+        return delegate.poll(request, turn);
     }
 }

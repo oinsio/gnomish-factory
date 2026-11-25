@@ -61,6 +61,12 @@ class MidRoundPushRoundsContractSpec extends RoundEnvironmentSourceContract impl
         !Files.exists(Path.of(scratchRoot))
     }
 
+    /** A commit on the worktree, whose {@code HEAD} a git-mode host round's token is minted from. */
+    @Override
+    protected void moveTip() {
+        commit(repo, 'moved.txt', 'moved')
+    }
+
     @Override
     protected boolean environmentOutlivesRound(RoundEnvironmentSource.Round round) {
         false

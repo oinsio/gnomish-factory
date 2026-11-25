@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.agent.command.CommandExecutorFactory;
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramStageExecutor;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult;
+import com.github.oinsio.gnomish.domain.engine.port.PendingTurn;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
 import com.github.oinsio.gnomish.executorcontract.ExecutorName;
@@ -54,6 +55,16 @@ final class ExecutorDispatch implements StageExecutor {
 
     @Override
     public ExecutionResult execute(Request request) {
+        return wrapperOf(request).execute(request);
+    }
+
+    /** A poll reaches the same entry's round wrapper as its {@code start} did (design D11 of extract-agent-round-runner). */
+    @Override
+    public ExecutionResult poll(Request request, PendingTurn turn) {
+        return wrapperOf(request).poll(request, turn);
+    }
+
+    private StageExecutor wrapperOf(Request request) {
         StageDefinition.Executor executor = request.stage().executor();
         ExecutorName name =
                 switch (executor.type()) {
@@ -64,6 +75,6 @@ final class ExecutorDispatch implements StageExecutor {
                     // Every other block resolves by the name its block resolves to, as a judge's does.
                     default -> new ExecutorName(executor.registryName());
                 };
-        return new ProgramStageExecutor(registry.resolve(name).rounds(), rounds).execute(request);
+        return new ProgramStageExecutor(registry.resolve(name).rounds(), rounds);
     }
 }

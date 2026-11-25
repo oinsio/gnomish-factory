@@ -54,3 +54,6 @@
 
 [verdict-poll]
 {"protocolVersion":1,"version":"1","roles":["verdict"],"capabilities":["poll"],"settingsSchema":{"type":"object","properties":{"defer":{"type":"boolean"}}},"credentials":[],"egress":[],"policyDisablingFlags":[],"enforcementLevel":"PROMPT_ONLY","reportsUsage":false}
+
+[transform-poll]
+{"protocolVersion":1,"version":"1","roles":["transform"],"capabilities":["poll"],"settingsSchema":{},"credentials":[],"egress":[],"policyDisablingFlags":[],"enforcementLevel":"PROMPT_ONLY","reportsUsage":false}

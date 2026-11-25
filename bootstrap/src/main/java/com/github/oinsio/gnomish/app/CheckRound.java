@@ -29,8 +29,8 @@ import org.jspecify.annotations.Nullable;
  * the engine's shape ({@link ProgramResultMapping}), in role {@code verdict}, so a verdict answer
  * crosses the port as an {@code ExecutionResult.VerdictReply}.
  *
- * <p>The request's {@link PendingTurn} selects the arm (D14), through {@link PendingTurnRun}, the one
- * choice a stage round makes too: no turn → {@code start}; a key this run
+ * <p>The port's operation selects the arm (D14), through {@link PendingTurnRun}, the one
+ * choice a stage round makes too: {@link #execute} → {@code start}; {@link #poll} with a key this run
  * issued ({@link PendingTurn.Origin#ISSUED}) → {@code poll} by that key, handed over as the turn
  * carries it: the turn and the contract name one type, the {@code :pendingkey} leaf's (D20), so
  * nothing is re-wrapped here. A recorded key ({@link PendingTurn.Origin#RECORDED}, set by the resume
@@ -106,11 +106,35 @@ final class CheckRound implements StageExecutor {
      * @return the round; never null
      */
     static StageExecutor refused(VerifyCheck.Executor check, ExecutorResult refusal) {
-        return request -> engineResult(check.executorName(), request, refusal);
+        return new StageExecutor() {
+            @Override
+            public ExecutionResult execute(Request request) {
+                return engineResult(check.executorName(), request, refusal);
+            }
+
+            @Override
+            public ExecutionResult poll(Request request, PendingTurn turn) {
+                return engineResult(check.executorName(), request, refusal);
+            }
+        };
     }
 
     @Override
     public ExecutionResult execute(Request request) {
+        return run(request, null);
+    }
+
+    /**
+     * A check's poll is a check round of its own, as its {@code start} is: the request binds a fresh
+     * environment and releases it when it ends (design D14 of migrate-verify-to-executor-contract;
+     * D11 of extract-agent-round-runner, as amended 2026-11-25).
+     */
+    @Override
+    public ExecutionResult poll(Request request, PendingTurn turn) {
+        return run(request, turn);
+    }
+
+    private ExecutionResult run(Request request, @Nullable PendingTurn turn) {
         ExecutorResult result;
         try {
             var verdict = new ExecutorRequest(
@@ -122,7 +146,7 @@ final class CheckRound implements StageExecutor {
                     Bounds.none(),
                     List.of(),
                     null);
-            result = PendingTurnRun.run(bound, adoption, verdict, request.pending());
+            result = PendingTurnRun.run(bound, adoption, verdict, turn);
         } finally {
             // A box lives for this one request: its start, or its adoption and poll.
             release.run();

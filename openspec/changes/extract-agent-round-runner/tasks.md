@@ -489,7 +489,7 @@ Old way: `Request.pending()`; `rounds.openRound(request)` and `round.closeRound(
   `migrate-verify-to-executor-contract`, `completed` only) widened to a `pending` `transform`
   result; the container's round close given a pending-round subject; the registry row of the pair
   names the pending commit's subject rule; specs per medium (FR10, D7, D11)
-- [ ] 6.4a The flow spec first, red: `PendingRoundFlowSpec` on a real bare origin, once on the
+- [x] 6.4a The flow spec first, red: `PendingRoundFlowSpec` on a real bare origin, once on the
   host and once in container mode, through the fixtures `HostPendingRoundCommitSpec` and
   `InBoxPendingRoundCommitSpec` use, with a `transform` fixture executor declaring `poll` (a
   stand-in preset, `testing.md`): `start` answers `pending`, two polls answer `pending` with the
@@ -503,7 +503,7 @@ Old way: `Request.pending()`; `rounds.openRound(request)` and `round.closeRound(
   `pipeline/stage-engine` "A poll that answers pending writes nothing" and "Every commit of a
   pending round names one token" and stay `@PendingFeature(reason = "6.4d: …")` until 6.4d
   (FR10, NFR-R4, D11)
-- [ ] 6.4b The port, and nothing else: `StageExecutor.poll(Request, PendingTurn)` beside
+- [x] 6.4b The port, and nothing else: `StageExecutor.poll(Request, PendingTurn)` beside
   `execute(Request)`; `Request.pending()` removed; `PendingPoll` calls `poll` for a turn and
   `execute` for a `start`; every implementation named above implements `poll` — the routing ones
   forward it, `CheckRound` runs a check round as today — and every test fake follows. No

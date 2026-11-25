@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent
 
-import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
+import com.github.oinsio.gnomish.app.port.agent.TerminalClose
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.nio.file.Path
@@ -42,7 +42,11 @@ class StandInRound implements RoundEnvironmentSource.Round {
     }
 
     @Override
-    void closeRound(RoundClose close) {
+    void goPending() {
+    }
+
+    @Override
+    void closeRound(TerminalClose close) {
     }
 
     /** Whether the round was discarded; a failed round is, exactly once. */

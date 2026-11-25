@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.domain.engine.port.PendingTurn
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyingStages
 import com.github.oinsio.gnomish.pendingkey.PendingKey
@@ -21,9 +22,9 @@ class PendingPollRotationSpec extends PendingPollSpecBase {
     private ScriptedExecutor counting(List<ExecutionResult> script, List<Integer> writesBefore) {
         new ScriptedExecutor(script) {
                     @Override
-                    ExecutionResult execute(StageExecutor.Request request) {
+                    protected ExecutionResult respond(StageExecutor.Request request, PendingTurn turn) {
                         writesBefore << persistence.pending.size()
-                        super.execute(request)
+                        super.respond(request, turn)
                     }
                 }
     }
@@ -132,11 +133,9 @@ class PendingPollRotationSpec extends PendingPollSpecBase {
             passed()
         ]) {
             @Override
-            ExecutionResult execute(StageExecutor.Request request) {
-                if (request.pending() != null) {
-                    persistence.failPending = new IllegalStateException('killed before the rotated commit')
-                }
-                super.execute(request)
+            ExecutionResult poll(StageExecutor.Request request, PendingTurn turn) {
+                persistence.failPending = new IllegalStateException('killed before the rotated commit')
+                super.poll(request, turn)
             }
         }
 

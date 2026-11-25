@@ -2,7 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
-import com.github.oinsio.gnomish.app.port.agent.RoundClose
+import com.github.oinsio.gnomish.app.port.agent.TerminalClose
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
@@ -97,7 +97,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
     def "each round gets a fresh listener with its own baseline"() {
         given:
         def source = new MidRoundPushRounds(new PassThroughRounds(), runner, new VirtualClock(), new CurrentRound())
-        source.openRound(request(0))
+        source.openRound(request(0)).closeRound(TerminalClose.VERIFIABLE)
         gnomeCommit()
 
         when: 'a second round opens after the commit and observes an event'
@@ -116,7 +116,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
 
         when:
         def round = source.openRound(request())
-        round.closeRound(RoundClose.VERIFIABLE)
+        round.closeRound(TerminalClose.VERIFIABLE)
         round.discard()
 
         then:
@@ -156,9 +156,10 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
     // cannot be resolved is one fault whether it spans polls of one round or rounds of one task,
     // so the second round's failure is a suppressed repeat, not a fresh WARN edge.
     def "a tip-resolution failure spanning two rounds logs one WARN edge, not one per round"() {
-        given: 'two rounds opened over the worktree, whose HEAD then stops resolving, so every poll fails'
+        given: 'two rounds opened over the worktree one after the other, whose HEAD then stops resolving, so every poll fails'
         def source = new MidRoundPushRounds(new PassThroughRounds(), runner, new VirtualClock(), new CurrentRound())
         def first = source.openRound(request(0))
+        first.closeRound(TerminalClose.VERIFIABLE)
         def second = source.openRound(request(1))
         unbornHead()
         def logs = LogCaptureSupport.attach(MidRoundPushListener, Level.DEBUG)
@@ -193,7 +194,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
         round.roundListener().onProgress(toolEvent)
         gnomeCommit()
         round.roundListener().onProgress(toolEvent)
-        round.closeRound(RoundClose.VERIFIABLE)
+        round.closeRound(TerminalClose.VERIFIABLE)
 
         then: 'nothing thrown, the round closed normally, and the fault is the push WARN'
         noExceptionThrown()
@@ -217,7 +218,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
 
         when:
         round.roundListener().onProgress(toolEvent)
-        round.closeRound(RoundClose.VERIFIABLE)
+        round.closeRound(TerminalClose.VERIFIABLE)
 
         then:
         noExceptionThrown()
@@ -239,7 +240,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
 
         when: 'a round opens, the round commits, and the next round opens'
         def firstTip = currentHead(repo)
-        source.openRound(request(0))
+        source.openRound(request(0)).closeRound(TerminalClose.VERIFIABLE)
         def firstToken = source.identity().takeToken()
         gnomeCommit()
         source.openRound(request(1))

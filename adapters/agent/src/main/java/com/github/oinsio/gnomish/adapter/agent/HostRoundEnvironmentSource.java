@@ -1,8 +1,10 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.app.describe.ProgramChannel;
-import com.github.oinsio.gnomish.app.port.agent.RoundClose;
+import com.github.oinsio.gnomish.app.port.agent.NoOpenRoundException;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
+import com.github.oinsio.gnomish.app.port.agent.RoundHold;
+import com.github.oinsio.gnomish.app.port.agent.TerminalClose;
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace;
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
@@ -27,6 +29,12 @@ import java.util.Map;
  * discard each dispose the environment with its scratch area (design D14 of
  * extract-agent-round-runner).
  *
+ * <p>The source holds its open round in a {@link RoundHold} (D11, D14 as amended 2026-11-25): a
+ * second open while one is held is refused before anything is materialized; a round that went
+ * pending keeps its environment and scratch area, and a poll is handed that same round by {@link
+ * #continueRound}, never a new environment; with no held round a poll is refused — this source has
+ * no cell, so it restores no round.
+ *
  * <p>This source mints no round token: it has no git and needs none, because undecorated it serves
  * the in-place run only, whose workspace need not be a repository ({@code cli/manual-run}, "In-place
  * mode needs no git"), so its {@link #identity()} is {@link RoundIdentity#inPlace()}. A git-mode
@@ -39,7 +47,9 @@ import java.util.Map;
  * (no shared classpath between {@code adapters/agent} and {@code adapters/git}). What the two hold alike for every
  * medium — an open round names its answer path in {@code GNOMISH_ANSWER_FILE}, a round listener
  * and the identity it opened under; a close ends the round's environment duties and a discard after
- * it is a no-op; a discard leaves no scratch area of the round's own — is pinned by the port contract
+ * it is a no-op; a discard leaves no scratch area of the round's own; a second open while a round is
+ * open is refused, a poll with no open round is refused, and a poll's round names the identity, the
+ * environment and the answer path the round opened with (D14 as amended 2026-11-25) — is pinned by the port contract
  * {@code RoundEnvironmentSourceContract}, which both modules run. What stays in sync by hand is what
  * that contract does not hold: the answer path is one round's own, never read across rounds (here
  * by a per-round scratch directory disposed at the close or the discard, there by a path named after
@@ -48,27 +58,44 @@ import java.util.Map;
  * add-sandbox-core: none on the host, whose round commit is the persistence's; in the box the
  * snapshot commit and its harvest).
  *
- * <p>Implements FR2, FR4 of add-sandbox-core; FR21 of define-executor-contract; FR9 of
+ * <p>Implements FR2, FR4 of add-sandbox-core; FR21 of define-executor-contract; FR9, FR10 of
  * extract-agent-round-runner.
- *
- * @param clock the exec start-instant source; never null
- * @param childEnv the run's layered child-env allowlist (D6, FR9); never null
  */
-public record HostRoundEnvironmentSource(InstantSource clock, ChildEnvAllowlist childEnv)
-        implements RoundEnvironmentSource {
+public final class HostRoundEnvironmentSource implements RoundEnvironmentSource {
 
     /** The executor word the host round's answer file is named after in its scratch area. */
     private static final String ANSWER_NAME = "agent-cli";
 
+    private final InstantSource clock;
+    private final ChildEnvAllowlist childEnv;
+    private final RoundHold<HostRound> hold = new RoundHold<>();
+
+    /**
+     * @param clock the exec start-instant source; never null
+     * @param childEnv the run's layered child-env allowlist (D6, FR9); never null
+     */
+    public HostRoundEnvironmentSource(InstantSource clock, ChildEnvAllowlist childEnv) {
+        this.clock = clock;
+        this.childEnv = childEnv;
+    }
+
     @Override
     public Round openRound(StageExecutor.Request request) {
+        hold.refuseOpenWhileHeld();
         var workspace = (DirectoryWorkspace) request.workspace();
         var environment = new HostTaskExecutionEnvironment(workspace.root(), clock, childEnv, ProcessLaunch.grouped());
         // A round's environment has a scratch area, as a box round's has: a program executor names
         // its result files under it (FR5 of define-executor-contract). The host one leaves with the
         // round, at its close or its discard.
         environment.materialize("round:" + request.context().taskId(), null);
-        return new HostRound(environment, ProgramChannel.freshPath(environment, ANSWER_NAME, "answer"));
+        return hold.hold(new HostRound(environment, ProgramChannel.freshPath(environment, ANSWER_NAME, "answer")));
+    }
+
+    /** The held round, its environment and scratch area as it opened; refused when none is held. */
+    @Override
+    public Round continueRound(StageExecutor.Request request) {
+        return hold.held()
+                .orElseThrow(() -> new NoOpenRoundException(request.stage().name(), request.attempt()));
     }
 
     /** The in-place identity: undecorated, this source serves the git-less in-place run. */
@@ -81,7 +108,7 @@ public record HostRoundEnvironmentSource(InstantSource clock, ChildEnvAllowlist 
      * One host round: its environment, materialized at the open, and the answer file in that
      * environment's scratch area.
      */
-    private static final class HostRound implements Round {
+    private final class HostRound implements Round {
 
         private final TaskExecutionEnvironment environment;
         private final String answerFile;
@@ -107,17 +134,28 @@ public record HostRoundEnvironmentSource(InstantSource clock, ChildEnvAllowlist 
         }
 
         @Override
-        public void closeRound(RoundClose close) {
-            // Host rounds close in persistence (FR21), and a git-mode host round that completed or
-            // went pending is snapshotted by the stage chain's decoration, which acts on the result
-            // itself (design D22 of migrate-verify-to-executor-contract; D11 of
-            // extract-agent-round-runner): the close names nothing here. The
-            // executor read the answer file before the close; the round's scratch area leaves now.
-            environment.dispose();
+        public void goPending() {
+            // A git-mode host round that went pending is snapshotted by the stage chain's decoration
+            // (D11 of extract-agent-round-runner); the round stays open with its environment and
+            // scratch area, which the polls run in.
+        }
+
+        @Override
+        public void closeRound(TerminalClose close) {
+            // Host rounds close in persistence (FR21), and a git-mode host round that completed is
+            // snapshotted by the stage chain's decoration, which acts on the result itself (design D22
+            // of migrate-verify-to-executor-contract): the close names nothing here. The executor read
+            // the answer file before the close; the round's scratch area leaves now.
+            end();
         }
 
         @Override
         public void discard() {
+            end();
+        }
+
+        private void end() {
+            hold.release(this);
             environment.dispose();
         }
     }

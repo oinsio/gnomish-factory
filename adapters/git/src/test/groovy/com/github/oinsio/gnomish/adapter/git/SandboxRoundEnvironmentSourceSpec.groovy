@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
+import com.github.oinsio.gnomish.app.port.agent.TerminalClose
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
@@ -121,7 +122,7 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
         def first = source().openRound(request(0))
         assert rounds.opened() == RoundToken.of(openTip)
         def firstPath = first.answerFilePath().toString()
-        first.closeRound(RoundClose.VERIFIABLE)
+        first.closeRound(TerminalClose.VERIFIABLE)
 
         when: 'the same stage and attempt open again on the moved tip'
         def second = source().openRound(request(0))
@@ -180,7 +181,7 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
         new File(((LocalBoxEnvironment) round.environment()).workingCopy.toFile(), 'work.txt').text = 'gnome work'
 
         when:
-        round.closeRound(RoundClose.VERIFIABLE)
+        round.closeRound(TerminalClose.VERIFIABLE)
 
         then: 'the cell now holds the round closed by the harvested snapshot commit, under the token it opened with'
         def closed = rounds.closed()
@@ -201,7 +202,7 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
         new File(((LocalBoxEnvironment) round.environment()).workingCopy.toFile(), 'work.txt').text = 'gnome work'
 
         when:
-        round.closeRound(RoundClose.UNVERIFIABLE)
+        round.closeRound(TerminalClose.UNVERIFIABLE)
 
         then:
         def closed = rounds.closed()

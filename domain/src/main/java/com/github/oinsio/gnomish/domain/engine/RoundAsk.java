@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.domain.engine;
 
-import com.github.oinsio.gnomish.domain.engine.port.PendingTurn;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import java.time.Instant;
@@ -9,8 +8,8 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * A pending {@code transform} round's wait (design D11 of extract-agent-round-runner): the round's own
- * request with the turn it continues — its context, stage, working copy, attempt and feedback, no
- * check — the factory's {@link PendingBounds}, whose ceiling expires as {@code failed/infrastructure}
+ * request, which each poll takes beside its turn — its context, stage, working copy, attempt and
+ * feedback, no check — the factory's {@link PendingBounds}, whose ceiling expires as {@code failed/infrastructure}
  * naming it, and the one entry the round's pending round commit carries.
  *
  * <p>The state a pending write carries is the last persisted state with its list replaced by the
@@ -76,9 +75,8 @@ final class RoundAsk implements PendingAsk {
     }
 
     @Override
-    public StageExecutor.Request request(@Nullable PendingTurn turn) {
-        return new StageExecutor.Request(
-                start.context(), start.stage(), start.workspace(), start.attempt(), start.feedback(), turn);
+    public StageExecutor.Request request() {
+        return start;
     }
 
     @Override

@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
-import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
+import com.github.oinsio.gnomish.app.port.agent.TerminalClose
 import com.github.oinsio.gnomish.domain.engine.Denial
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
@@ -93,6 +93,11 @@ final class ScriptedDenialRounds implements RoundEnvironmentSource {
         new ScriptedRound(delegate.openRound(request), this)
     }
 
+    @Override
+    Round continueRound(StageExecutor.Request request) {
+        new ScriptedRound(delegate.continueRound(request), this)
+    }
+
     private static final class ScriptedRound implements Round {
         private final Round delegate
         private final ScriptedDenialRounds source
@@ -123,7 +128,12 @@ final class ScriptedDenialRounds implements RoundEnvironmentSource {
         }
 
         @Override
-        void closeRound(RoundClose close) {
+        void goPending() {
+            delegate.goPending()
+        }
+
+        @Override
+        void closeRound(TerminalClose close) {
             delegate.closeRound(close)
         }
 

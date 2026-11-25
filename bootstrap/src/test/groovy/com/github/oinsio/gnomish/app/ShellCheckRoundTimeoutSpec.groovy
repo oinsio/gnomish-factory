@@ -60,7 +60,7 @@ class ShellCheckRoundTimeoutSpec extends Specification {
         def result = round.execute(new StageExecutor.Request(new TaskContext('TASK-1', UntrustedText.tracker('t'),
                 UntrustedText.tracker('b'), []), new StageDefinition('build', 'p', [], [],
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'm', [:]), 'i.md', [check], new AutonomyLimits(1),
-                AdvancementMode.AUTO), new DirectoryWorkspace(tempDir), 0, [], check, CheckRef.of(0, check), null))
+                AdvancementMode.AUTO), new DirectoryWorkspace(tempDir), 0, [], check, CheckRef.of(0, check)))
 
         then: 'a quality failure whose one finding names the timeout and carries the tail'
         def failed = result.status() as ExecutionResult.Failed

@@ -32,6 +32,8 @@ class GuardProbeOwnerSpec extends Specification {
     private static final String OWNER = AGENT + 'program/GuardedExecutor.java'
     private static final String STAGE_HALF = AGENT + 'program/ProgramStageExecutor.java'
     private static final String CHECK_HALF = AGENT + 'program/ProgramCheckBinding.java'
+    /** The one choice of the operation a stage round sends (D11): it sends to the executor it is handed. */
+    private static final String TURN_RUN = AGENT + 'program/PendingTurnRun.java'
     /** The check half of the {@code claude} entry (task 4.0a). */
     private static final String AGENT_CHECK_HALF = AGENT + 'runner/AgentCheckBinding.java'
     /** The stage half of the {@code claude} entry: a round-executor factory the stage wrapper decorates. */
@@ -55,6 +57,7 @@ class GuardProbeOwnerSpec extends Specification {
             OWNER,
             STAGE_HALF,
             CHECK_HALF,
+            TURN_RUN,
             AGENT_CHECK_HALF,
             AGENT_STAGE_HALF,
             DECLARED,
@@ -112,8 +115,19 @@ class GuardProbeOwnerSpec extends Specification {
         and: "the round-executor factory's binding of the open round is taken only as the decorator's argument"
         stage.count('executors.executor(') == 1
         stage.replaceAll(/\s+/, ' ').contains('GuardedExecutor.over(subject, name, round.environment(), executors.executor(round));')
-        stage.count('.start(') == 1
-        stage.contains('executor.start(contractRequest)')
+
+        and: 'the decorated executor alone is sent the request, by the one choice of start or poll (D11)'
+        stage.count('.start(') == 0
+        stage.count('.poll(') == 0
+        stage.count('PendingTurnRun.run(') == 1
+        stage.contains('PendingTurnRun.run(executor, null, contractRequest, turn)')
+
+        and: 'the choice sends to the executor it is handed and to nothing else'
+        def turnRun = code(TURN_RUN)
+        turnRun.count('.start(') == 1
+        turnRun.contains('executor.start(request)')
+        turnRun.count('.poll(') == 1
+        turnRun.contains('executor.poll(request, turn.key())')
     }
 
     def "FR15: the claude entry's check half hands the runner it binds straight to the decorator"() {

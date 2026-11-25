@@ -200,7 +200,7 @@ class ExecutorAdapterSelectorSpec extends Specification implements AppAssemblyFi
         def rounds = ExecutorAdapterSelector.stageRounds(newAssembly().withSandbox(pieces()), childEnv, this.law, described,
                 law, HttpRunContext.none(), PINS)
         def request = new StageExecutor.Request(new TaskContext('TASK-1', UntrustedText.tracker('t'),
-                UntrustedText.tracker('b'), []), law.stages()[0], new DirectoryWorkspace(workingCopy), 0, [], check, CheckRef.of(0, check), null)
+                UntrustedText.tracker('b'), []), law.stages()[0], new DirectoryWorkspace(workingCopy), 0, [], check, CheckRef.of(0, check))
 
         when:
         def result = rounds.port().execute(request)

@@ -5,9 +5,11 @@ import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.describe.ProgramBounds
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.LastRegisteredCommit
+import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.domain.engine.port.PendingTurn
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
@@ -19,6 +21,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.Sandbox
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.pendingkey.PendingKey
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
@@ -95,6 +98,29 @@ class ExecutorDispatchSpec extends Specification {
         then:
         def opened = thrown(Opened)
         opened.request.is(build)
+    }
+
+    // FR10, D11 of extract-agent-round-runner (as amended 2026-11-25): a poll takes the start's route —
+    //     the entry its name resolves to, through the shared round wrapper and the run's round source
+    def "FR10: a poll of a program stage reaches the resolved entry's round wrapper, and answers what the wrapper answered"() {
+        given: 'a round source whose round has nothing behind it, so the wrapper ends the round itself'
+        def build = request(stage(ExecutorType.PROGRAM, 'acme'))
+        def opened = []
+        rounds = Stub(RoundEnvironmentSource) {
+            openRound(_) >> { StageExecutor.Request request ->
+                opened << request
+                Stub(RoundEnvironmentSource.Round)
+            }
+        }
+
+        when:
+        def result = dispatch([acme: ProgramInBox.describe()], 'acme')
+        .poll(build, new PendingTurn(new PendingKey('job-1'), PendingTurn.Origin.ISSUED))
+
+        then:
+        opened == [build]
+        result != null
+        result.trace().key() == new AttemptKey('TASK-1', 'build', 0)
     }
 
     // FR1, FR14 of extract-agent-round-runner (D12, task 5.1a): no type-keyed agent arm is left — the

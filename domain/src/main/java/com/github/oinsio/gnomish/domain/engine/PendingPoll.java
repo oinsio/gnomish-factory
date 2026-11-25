@@ -23,7 +23,9 @@ import org.jspecify.annotations.Nullable;
  * PendingTurn.Origin#RECORDED RECORDED} turn and no {@code start}. A {@code start} answering {@code
  * pending} writes the subject's entry through {@link AttemptPersistence#persistPending} before the
  * first poll — for a round, the pending round commit; a throwing write is not caught, so no poll is
- * made. One method continues an entry, live and resumed (crash-consistency item 14), on the subject's
+ * made. The {@code start} goes through {@link StageExecutor#execute} and every poll through {@link
+ * StageExecutor#poll}, the turn beside the subject's one request: this class is the only caller of
+ * {@code poll} (D11 as amended 2026-11-25). One method continues an entry, live and resumed (crash-consistency item 14), on the subject's
  * {@link PendingWait}; a resumed entry is polled at once. A poll naming another key rewrites the entry,
  * {@code since} unchanged, through the same write before the next poll (D12 as amended 2026-11-12). The
  * deadline is classified by {@link PendingTimeout}: a check's by its last state and declared class, a
@@ -87,7 +89,7 @@ final class PendingPoll {
             var run = waitFor(ask, recorded.get(), null);
             return CheckRoundAnswers.polled(check, run.result(), run.resumedKey());
         }
-        var started = executor.execute(ask.request(null));
+        var started = executor.execute(ask.request());
         if (ExecutorOutcomeClassifier.pending(started).isEmpty()) {
             return CheckRoundAnswers.polled(check, started, null);
         }
@@ -172,7 +174,7 @@ final class PendingPoll {
                             turn.origin(),
                             wait.elapsed(),
                             wait.remaining()));
-            var result = executor.execute(ask.request(turn));
+            var result = executor.poll(ask.request(), turn);
             usages.add(result.usage());
             var pending = ExecutorOutcomeClassifier.pending(result);
             if (pending.isEmpty()) {

@@ -9,7 +9,6 @@ import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-import com.github.oinsio.gnomish.pendingkey.PendingKey
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import spock.lang.Specification
@@ -151,36 +150,65 @@ class StageExecutorRequestSpec extends Specification {
                 new StageExecutor.Request(context, stage, workspace, 2, feedback)
     }
 
-    // FR1, D18 of migrate-verify-to-executor-contract: a stage round has no check subject and no turn
-    def "a stage round's Request names no check and no pending turn"() {
+    // FR1, D18 of migrate-verify-to-executor-contract: a stage round has no check subject
+    def "a stage round's Request names no check"() {
         expect:
-        with(new StageExecutor.Request(sampleContext(), sampleStage(), sampleWorkspace(), 0, [])) {
-            check() == null
-            pending() == null
-        }
+        new StageExecutor.Request(sampleContext(), sampleStage(), sampleWorkspace(), 0, []).check() == null
     }
 
-    // FR1, FR2, D14, D18: a check round names its check beside the stage, and may carry the turn it continues
-    def "a check round's Request carries its check and its pending turn"() {
+    // FR1, FR2, D14, D18: a check round names its check beside the stage
+    def "a check round's Request carries its check and its identity in the round"() {
         given:
         def check = VerifyChecks.builtin('files', [files: ['a.txt']])
-        def turn = new PendingTurn(new PendingKey('job-9'), PendingTurn.Origin.ISSUED)
 
         when:
         def request = new StageExecutor.Request(sampleContext(), sampleStage(), sampleWorkspace(), 1, [], check,
-        CheckRef.of(2, check), turn)
+        CheckRef.of(2, check))
 
         then:
         request.check() == check
         request.checkRef() == CheckRef.of(2, check)
-        request.pending() == turn
         request.stage() == sampleStage()
+    }
+
+    // FR10, D11 of extract-agent-round-runner (as amended 2026-11-25): a continuation is the port's
+    //     poll, which takes the turn beside the request, so the request has no component to carry one
+    def "a Request carries no pending turn"() {
+        expect:
+        StageExecutor.Request.recordComponents*.name ==
+                [
+                    'context',
+                    'stage',
+                    'workspace',
+                    'attempt',
+                    'feedback',
+                    'check',
+                    'checkRef'
+                ]
+        StageExecutor.methods.findAll {
+            !it.synthetic && !it.default && !java.lang.reflect.Modifier.isStatic(it.modifiers)
+        }
+        .collect {
+            [
+                it.name,
+                it.parameterTypes*.simpleName
+            ]
+        }.sort {
+            it[0]
+        } ==
+        [
+            ['execute', ['Request']],
+            [
+                'poll',
+                ['Request', 'PendingTurn']
+            ]
+        ]
     }
 
     // FR3, D14 as amended 2026-11-13: the check and its identity in the round are set together or not at all
     def "a Request with #why is refused naming both components"() {
         when:
-        new StageExecutor.Request(sampleContext(), sampleStage(), sampleWorkspace(), 0, [], check, checkRef, null)
+        new StageExecutor.Request(sampleContext(), sampleStage(), sampleWorkspace(), 0, [], check, checkRef)
 
         then:
         def failure = thrown(IllegalArgumentException)

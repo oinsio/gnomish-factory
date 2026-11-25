@@ -35,11 +35,11 @@ class CheckRoundAdoptionSpec extends Specification {
 
     private static final PendingKey KEY = new PendingKey('recorded-1')
 
-    private static StageExecutor.Request poll(PendingTurn.Origin origin) {
+    private static StageExecutor.Request request() {
         new StageExecutor.Request(new TaskContext('TASK-1', UntrustedText.tracker('t'), UntrustedText.tracker('b'), []),
         new StageDefinition('build', 'p', [], [], new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'm', [:]),
         'i.md', [], new AutonomyLimits(3), AdvancementMode.AUTO), new com.github.oinsio.gnomish.domain.engine.port.Workspace() {}, 0, [],
-        CHECK, CheckRef.of(0, CHECK), new PendingTurn(KEY, origin))
+        CHECK, CheckRef.of(0, CHECK))
     }
 
     private static ExecutorResult pending() {
@@ -53,7 +53,7 @@ class CheckRoundAdoptionSpec extends Specification {
         ExecutorRequest adopted = null
 
         when:
-        def result = new CheckRound(bound, adoption, CHECK).execute(poll(PendingTurn.Origin.RECORDED))
+        def result = new CheckRound(bound, adoption, CHECK).poll(request(), new PendingTurn(KEY, PendingTurn.Origin.RECORDED))
 
         then:
         1 * adoption.adopt(_, KEY) >> { ExecutorRequest r, PendingKey k ->
@@ -73,7 +73,7 @@ class CheckRoundAdoptionSpec extends Specification {
         def adoption = Mock(PendingAdoption)
 
         when:
-        new CheckRound(bound, adoption, CHECK).execute(poll(PendingTurn.Origin.ISSUED))
+        new CheckRound(bound, adoption, CHECK).poll(request(), new PendingTurn(KEY, PendingTurn.Origin.ISSUED))
 
         then:
         0 * adoption.adopt(_, _)
@@ -85,7 +85,7 @@ class CheckRoundAdoptionSpec extends Specification {
         def bound = Mock(Executor)
 
         when:
-        new CheckRound(bound, null, CHECK).execute(poll(PendingTurn.Origin.RECORDED))
+        new CheckRound(bound, null, CHECK).poll(request(), new PendingTurn(KEY, PendingTurn.Origin.RECORDED))
 
         then:
         1 * bound.poll(_, KEY) >> pending()

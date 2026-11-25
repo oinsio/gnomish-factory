@@ -2,8 +2,10 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
-import com.github.oinsio.gnomish.app.port.agent.RoundClose;
+import com.github.oinsio.gnomish.app.port.agent.NoOpenRoundException;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
+import com.github.oinsio.gnomish.app.port.agent.RoundHold;
+import com.github.oinsio.gnomish.app.port.agent.TerminalClose;
 import com.github.oinsio.gnomish.app.port.git.CurrentRound;
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace;
 import com.github.oinsio.gnomish.domain.engine.RoundToken;
@@ -25,9 +27,15 @@ import java.util.Map;
  * roundListener()} returns the push listener built from the request's own facts — worktree root
  * from the {@link DirectoryWorkspace}, taskId from the {@code TaskContext}, stage name, the
  * attempt number as the round, the branch via {@link TaskIdSanitizer#branchName}. {@code
- * openRound} is called exactly once per attempt request, so the listener's documented
- * one-instance-per-round lifecycle falls out of the seam's own cadence; every other {@code
- * Round} method passes through untouched.
+ * openRound} is called exactly once per round — a round's {@code start}; its polls never open it
+ * again, they take the held round from {@link #continueRound} (design D11, D14 of
+ * extract-agent-round-runner, as amended 2026-11-25) — so the listener's documented
+ * one-instance-per-round lifecycle falls out of the seam's own cadence: one token minted, one
+ * listener, from the open to the close or the discard. A second open while a round is held is
+ * refused before anything is minted; a poll with no held round continues the pending round the run's
+ * cell was restored with ({@link RestoredPendingRound}), over the cell's token and the host
+ * environment at the worktree, which stands at the registered commit, with no mint — or is refused.
+ * {@code goPending}, the close and the discard pass through to the host round.
  *
  * <p>The {@code Workspace} cast mirrors the identical cast in {@code
  * com.github.oinsio.gnomish.adapter.agent.HostRoundEnvironmentSource}: host-mode requests carry
@@ -42,7 +50,7 @@ import java.util.Map;
  * this source opens is the round the snapshot closes and the persistence bases its boundary on.
  *
  * <p>Implements FR1, FR2, NFR-O1, NFR-P1 of wire-host-mid-round-push; FR21 of
- * define-executor-contract; M1 of extract-agent-round-runner.
+ * define-executor-contract; M1, FR10 of extract-agent-round-runner.
  */
 public final class MidRoundPushRounds implements RoundEnvironmentSource {
 
@@ -54,6 +62,9 @@ public final class MidRoundPushRounds implements RoundEnvironmentSource {
 
     /** The one minting of a fresh round's token, opening it in {@link #rounds}. */
     private final RoundTokenMint mint;
+
+    /** The open round, from its open to its close or discard (D14 as amended 2026-11-25). */
+    private final RoundHold<PushRound> hold = new RoundHold<>();
 
     /**
      * Shared by every round of this task (FR4 of harden-logging-observability, design D4): the
@@ -83,22 +94,41 @@ public final class MidRoundPushRounds implements RoundEnvironmentSource {
 
     @Override
     public Round openRound(StageExecutor.Request request) {
+        hold.refuseOpenWhileHeld();
         var workspace = (DirectoryWorkspace) request.workspace();
-        String taskId = request.context().taskId();
-        String branch = TaskIdSanitizer.branchName(taskId);
         // A git-mode host round's identity (FR21 of define-executor-contract): the worktree's HEAD as
         // the round opens — a failed resolution fails the round's open rather than recording a round
         // under nothing.
         RoundToken openedOn = mint.open(workspace.root(), "HEAD");
-        Round round = host.openRound(request);
-        var listener = new MidRoundPushListener(
+        return hold.hold(new PushRound(host.openRound(request), listener(request, openedOn)));
+    }
+
+    /**
+     * The held round; else, on a resuming instance, the pending round the run's cell was restored
+     * with, in a host environment over the worktree and with its push listener over the cell's token,
+     * none minted; else refused.
+     */
+    @Override
+    public Round continueRound(StageExecutor.Request request) {
+        var held = hold.held();
+        if (held.isPresent()) {
+            return held.get();
+        }
+        RoundToken restored = RestoredPendingRound.token(hold, rounds)
+                .orElseThrow(() -> new NoOpenRoundException(request.stage().name(), request.attempt()));
+        return hold.hold(new PushRound(host.openRound(request), listener(request, restored)));
+    }
+
+    private MidRoundPushListener listener(StageExecutor.Request request, RoundToken openedOn) {
+        var workspace = (DirectoryWorkspace) request.workspace();
+        String taskId = request.context().taskId();
+        return new MidRoundPushListener(
                 runner,
                 workspace.root(),
                 request.stage().name(),
                 request.attempt(),
                 openedOn,
-                new MidRoundPollContext(taskId, branch, pushSuppressor));
-        return new PushRound(round, listener);
+                new MidRoundPollContext(taskId, TaskIdSanitizer.branchName(taskId), pushSuppressor));
     }
 
     /** The run's round cell, filled by every {@link #openRound}: the engine stamps its token. */
@@ -107,8 +137,19 @@ public final class MidRoundPushRounds implements RoundEnvironmentSource {
         return rounds;
     }
 
-    /** The host round with only {@code roundListener()} overridden; everything else delegates. */
-    private record PushRound(Round host, MidRoundPushListener listener) implements Round {
+    /**
+     * The host round with only {@code roundListener()} overridden; everything else delegates, and the
+     * close and the discard let the decoration's hold go.
+     */
+    private final class PushRound implements Round {
+
+        private final Round host;
+        private final MidRoundPushListener listener;
+
+        private PushRound(Round host, MidRoundPushListener listener) {
+            this.host = host;
+            this.listener = listener;
+        }
 
         @Override
         public com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment environment() {
@@ -131,12 +172,19 @@ public final class MidRoundPushRounds implements RoundEnvironmentSource {
         }
 
         @Override
-        public void closeRound(RoundClose close) {
+        public void goPending() {
+            host.goPending();
+        }
+
+        @Override
+        public void closeRound(TerminalClose close) {
+            hold.release(this);
             host.closeRound(close);
         }
 
         @Override
         public void discard() {
+            hold.release(this);
             host.discard();
         }
     }

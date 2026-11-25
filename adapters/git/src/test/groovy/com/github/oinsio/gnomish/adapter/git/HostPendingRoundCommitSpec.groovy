@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.git.ClosedRound
 import com.github.oinsio.gnomish.domain.engine.PendingSubject
+import com.github.oinsio.gnomish.domain.engine.port.PendingTurn
 import com.github.oinsio.gnomish.pendingkey.PendingKey
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
@@ -62,6 +63,25 @@ class HostPendingRoundCommitSpec extends Specification implements HostSnapshotRo
 
         and: 'the cell holds the round open at its snapshot, with the pending commit as its last registered commit'
         cell.snapshot().get() == new ClosedRound(token, snapshot, pending, RoundClose.PENDING)
+    }
+
+    // FR10, D11 of extract-agent-round-runner: the host chain forwards a poll with its turn, and a
+    //     terminal poll's round takes the verifiable snapshot a start's would (task 6.4b keeps the
+    //     snapshot step as it was; 6.4c/6.4d move a poll onto the open round)
+    def "FR10: a poll goes down the host chain with its turn, and a completed poll is snapshotted verifiable"() {
+        given:
+        def token = cell.opened()
+        def answer = completed()
+
+        when:
+        def result = pollRound(answer, new PendingTurn(new PendingKey('job-7'), PendingTurn.Origin.ISSUED)) {
+            gnomeWorks()
+        }
+
+        then:
+        result.is(answer)
+        subjectOf(cloneDir, tip()) == ServiceCommitMessages.snapshot('implement', ROUND, token)
+        cell.closed().close() == RoundClose.VERIFIABLE
     }
 
     // FR10 (design D11, window K1): a registered pending-round snapshot is never a round to verify

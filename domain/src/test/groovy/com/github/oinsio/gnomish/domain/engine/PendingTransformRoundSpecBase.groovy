@@ -56,9 +56,9 @@ abstract class PendingTransformRoundSpecBase extends Specification {
         final List<Integer> writesBefore = []
 
         @Override
-        ExecutionResult execute(StageExecutor.Request request) {
+        protected ExecutionResult respond(StageExecutor.Request request, PendingTurn turn) {
             writesBefore << persistence.pending.size()
-            super.execute(request)
+            super.respond(request, turn)
         }
     }
 

@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.domain.engine;
 
-import com.github.oinsio.gnomish.domain.engine.port.PendingTurn;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
@@ -57,8 +56,8 @@ final class CheckAsk implements PendingAsk {
     }
 
     @Override
-    public StageExecutor.Request request(@Nullable PendingTurn turn) {
-        return round.request(check, ref, turn);
+    public StageExecutor.Request request() {
+        return round.request(check, ref);
     }
 
     @Override

@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.port.PendingTurn
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -65,6 +66,28 @@ trait HostSnapshotRound implements RegisteredRoundFixture {
         chain.execute(new StageExecutor.Request(
                         new TaskContext(TASK, UntrustedText.tracker('title'), UntrustedText.tracker('body'), []),
                         STAGE, new DirectoryWorkspace(worktree()), ROUND, []))
+    }
+
+    /**
+     * A poll of the round through the same host stage chain, over a stage executor that answers a poll
+     * of {@code turn} with {@code answer} after doing {@code work}, and refuses a start.
+     */
+    ExecutionResult pollRound(ExecutionResult answer, PendingTurn turn, Closure<?> work) {
+        // A map coercion: a trait cannot hold an anonymous class.
+        def stageExecutor = [
+            execute: { StageExecutor.Request request ->
+                throw new IllegalStateException('a poll reached the stage executor as a start')
+            },
+            poll: { StageExecutor.Request request, PendingTurn polled ->
+                assert polled == turn
+                work.call()
+                answer
+            }
+        ] as StageExecutor
+        def chain = new GitHostRounds(runner, new VirtualClock(), ClaimEpochSource.NONE).snapshotting(stageExecutor, cell)
+        chain.poll(new StageExecutor.Request(
+                        new TaskContext(TASK, UntrustedText.tracker('title'), UntrustedText.tracker('body'), []),
+                        STAGE, new DirectoryWorkspace(worktree()), ROUND, []), turn)
     }
 
     /** The round's close through the production persistence over the run's cell. */

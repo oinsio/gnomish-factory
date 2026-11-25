@@ -73,7 +73,7 @@ public final class BuiltInCandidate implements KitSubject {
 
     @Override
     public Described describe() {
-        String written = written(answer);
+        String written = serialized(answer);
         return new Described(
                 answer,
                 tree(written),
@@ -87,7 +87,7 @@ public final class BuiltInCandidate implements KitSubject {
         return new BuiltInRun(kase, workingCopy, binding.bind(kase, workingCopy));
     }
 
-    private static String written(Describe answer) {
+    private static String serialized(Describe answer) {
         try {
             return ExecutorContractJson.writer().writeValueAsString(answer);
         } catch (JsonProcessingException e) {

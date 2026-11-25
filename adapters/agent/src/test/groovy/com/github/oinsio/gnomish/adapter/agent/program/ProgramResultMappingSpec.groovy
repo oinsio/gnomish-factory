@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent.program
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.github.oinsio.gnomish.app.port.agent.RoundClose
+import com.github.oinsio.gnomish.app.port.agent.TerminalClose
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Denial
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
@@ -77,8 +77,9 @@ class ProgramResultMappingSpec extends Specification {
 
     // FR19 of migrate-verify-to-executor-contract (design D22): the round closes verifiable exactly
     // when the one mapping maps the result to completed — a decision request included, a verdict
-    // round with no answer not
-    def "FR19: a #role round answering #status closes #close"() {
+    // round with no answer not; FR10 of extract-agent-round-runner (D11 as amended 2026-11-25): a
+    // transform round answering pending goes pending instead of closing, every other result is terminal
+    def "FR19: a #role round answering #status goes pending: #pending, closes otherwise #close"() {
         given:
         def contract = switch (status) {
                     case Status.COMPLETED -> result(status, null, null, answer)
@@ -87,24 +88,25 @@ class ProgramResultMappingSpec extends Specification {
                 }
 
         expect:
+        ProgramResultMapping.goesPending(role, contract) == pending
         ProgramResultMapping.closeOf(role, contract) == close
 
         where:
-        role | status | answer || close
-        Role.TRANSFORM | Status.COMPLETED | null || RoundClose.VERIFIABLE
-        Role.TRANSFORM | Status.COMPLETED | [kind: 'decision-request', question: 'q?', options: ['a', 'b']] || RoundClose.VERIFIABLE
-        Role.VERDICT | Status.COMPLETED | null || RoundClose.UNVERIFIABLE
-        Role.TRANSFORM | Status.FAILED | null || RoundClose.UNVERIFIABLE
-        Role.TRANSFORM | Status.PENDING | null || RoundClose.PENDING
-        Role.VERDICT | Status.PENDING | null || RoundClose.UNVERIFIABLE
-        Role.DECISION | Status.PENDING | null || RoundClose.UNVERIFIABLE
-        Role.TRANSFORM | Status.COMPLETED | [kind: 'decision-request', question: 'q?', options: ['a']] || RoundClose.UNVERIFIABLE
-        Role.TRANSFORM | Status.COMPLETED | [kind: 'select', chosen: 'a'] || RoundClose.UNVERIFIABLE
-        Role.TRANSFORM | Status.COMPLETED | VERDICT_ANSWER || RoundClose.UNVERIFIABLE
-        Role.VERDICT | Status.COMPLETED | VERDICT_ANSWER || RoundClose.VERIFIABLE
-        Role.VERDICT | Status.COMPLETED | [kind: 'verdict', sarif: [version: '1.0']] || RoundClose.VERIFIABLE
-        Role.VERDICT | Status.COMPLETED | [kind: 'decision-request', question: 'q?', options: ['a', 'b']] || RoundClose.UNVERIFIABLE
-        Role.VERDICT | Status.FAILED | null || RoundClose.UNVERIFIABLE
+        role | status | answer || pending | close
+        Role.TRANSFORM | Status.COMPLETED | null || false | TerminalClose.VERIFIABLE
+        Role.TRANSFORM | Status.COMPLETED | [kind: 'decision-request', question: 'q?', options: ['a', 'b']] || false | TerminalClose.VERIFIABLE
+        Role.VERDICT | Status.COMPLETED | null || false | TerminalClose.UNVERIFIABLE
+        Role.TRANSFORM | Status.FAILED | null || false | TerminalClose.UNVERIFIABLE
+        Role.TRANSFORM | Status.PENDING | null || true | TerminalClose.UNVERIFIABLE
+        Role.VERDICT | Status.PENDING | null || false | TerminalClose.UNVERIFIABLE
+        Role.DECISION | Status.PENDING | null || false | TerminalClose.UNVERIFIABLE
+        Role.TRANSFORM | Status.COMPLETED | [kind: 'decision-request', question: 'q?', options: ['a']] || false | TerminalClose.UNVERIFIABLE
+        Role.TRANSFORM | Status.COMPLETED | [kind: 'select', chosen: 'a'] || false | TerminalClose.UNVERIFIABLE
+        Role.TRANSFORM | Status.COMPLETED | VERDICT_ANSWER || false | TerminalClose.UNVERIFIABLE
+        Role.VERDICT | Status.COMPLETED | VERDICT_ANSWER || false | TerminalClose.VERIFIABLE
+        Role.VERDICT | Status.COMPLETED | [kind: 'verdict', sarif: [version: '1.0']] || false | TerminalClose.VERIFIABLE
+        Role.VERDICT | Status.COMPLETED | [kind: 'decision-request', question: 'q?', options: ['a', 'b']] || false | TerminalClose.UNVERIFIABLE
+        Role.VERDICT | Status.FAILED | null || false | TerminalClose.UNVERIFIABLE
     }
 
     // FR19 (design D22, human decision 2026-11-12): the close is decided from the contract result
@@ -115,7 +117,7 @@ class ProgramResultMappingSpec extends Specification {
         def contract = result(Status.COMPLETED, null, null, answer)
 
         expect:
-        (ProgramResultMapping.closeOf(role, contract) == RoundClose.VERIFIABLE) ==
+        (ProgramResultMapping.closeOf(role, contract) == TerminalClose.VERIFIABLE) ==
                 (ProgramResultMapping.toEngine('acme', role, KEY, contract, []).status() instanceof ExecutionResult.Completed)
 
         where:

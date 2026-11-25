@@ -34,7 +34,10 @@ class RoundDefaultListenerSpec extends Specification {
         }
 
         @Override
-        void closeRound(RoundClose close) {}
+        void goPending() {}
+
+        @Override
+        void closeRound(TerminalClose close) {}
 
         @Override
         void discard() {}

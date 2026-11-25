@@ -116,11 +116,14 @@ class PendingPollResumeSpec extends PendingPollSpecBase {
         orchestrator(poll(executor)).verify(VerifyingStages.of([first, second]), CONTEXT, WORKSPACE, KEY, state, TOKEN)
 
         then:
-        executor.requests.collect {
+        [
+            executor.requests,
+            executor.turns
+        ].transpose().collect { request, turn ->
             [
-                it.check(),
-                it.checkRef(),
-                it.pending()?.origin()
+                request.check(),
+                request.checkRef(),
+                turn?.origin()
             ]
         } == [
             [first, ref(0, first), null],

@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent.program;
 
-import com.github.oinsio.gnomish.app.port.agent.RoundClose;
+import com.github.oinsio.gnomish.app.port.agent.TerminalClose;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.domain.engine.Denial;
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult;
@@ -28,8 +28,8 @@ import org.jspecify.annotations.Nullable;
  * {@code ExecutionResult} (domain) ↔ {@code Status} + {@code FailureClass} + {@code PendingState}
  * (contract) rests on — the answer through the contract's one answer reading, the usage ({@link
  * ProgramUsage}), and the denials: the environment's, then the executor's. What a class means for the
- * attempt is the engine's classifier's to decide; how the round closes is this mapping's ({@link
- * #closeOf}).
+ * attempt is the engine's classifier's to decide; whether the round goes pending ({@link
+ * #goesPending}) and how it closes otherwise ({@link #closeOf}) is this mapping's.
  *
  * <p>The answer a completed round takes follows its role, and is {@link ProgramCompletedAnswer}'s.
  *
@@ -76,24 +76,35 @@ public final class ProgramResultMapping {
     }
 
     /**
-     * How the round closes (D22): verifiable exactly when {@code result} maps to {@code completed} —
-     * decided from the contract result before it is mapped, by the same {@link
-     * ProgramCompletedAnswer#refusal} the mapping refuses a completed answer by, so the close never reads the engine's status (G4 of
-     * define-executor-contract, human decision 2026-11-12); pending exactly when a {@code transform}
-     * round answered {@code pending}, so its snapshot carries the pending-round subject its pending
-     * round commit lands on (design D11 of extract-agent-round-runner); unverifiable otherwise.
+     * Whether the round stays open (design D11 of extract-agent-round-runner, as amended 2026-11-25):
+     * exactly when a {@code transform} round answered {@code pending} — the engine polls it in the
+     * same round, so it is not closed; a {@code start}'s pending answer registers the pending-round
+     * snapshot its pending round commit lands on. Any other result is terminal and closes the round
+     * ({@link #closeOf}).
      *
      * @param role the role the round was requested in; never null
      * @param result the contract result the run produced; never null
-     * @return the round's close; never null
+     * @return whether the round goes, or stays, pending
      */
-    public static RoundClose closeOf(Role role, ExecutorResult result) {
-        if (result.status() == Status.PENDING && role == Role.TRANSFORM) {
-            return RoundClose.PENDING;
-        }
+    public static boolean goesPending(Role role, ExecutorResult result) {
+        return result.status() == Status.PENDING && role == Role.TRANSFORM;
+    }
+
+    /**
+     * How a terminal round closes (D22): verifiable exactly when {@code result} maps to {@code
+     * completed} — decided from the contract result before it is mapped, by the same {@link
+     * ProgramCompletedAnswer#refusal} the mapping refuses a completed answer by, so the close never
+     * reads the engine's status (G4 of define-executor-contract, human decision 2026-11-12);
+     * unverifiable otherwise. A result that {@linkplain #goesPending goes pending} is not closed.
+     *
+     * @param role the role the round was requested in; never null
+     * @param result the contract result the run produced; never null
+     * @return the round's terminal close; never null
+     */
+    public static TerminalClose closeOf(Role role, ExecutorResult result) {
         return result.status() == Status.COMPLETED && ProgramCompletedAnswer.refusal(role, result) == null
-                ? RoundClose.VERIFIABLE
-                : RoundClose.UNVERIFIABLE;
+                ? TerminalClose.VERIFIABLE
+                : TerminalClose.UNVERIFIABLE;
     }
 
     /** The engine's failure class of a contract class, one to one. */

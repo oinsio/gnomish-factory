@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
+import com.github.oinsio.gnomish.domain.engine.port.PendingTurn
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
@@ -24,9 +25,9 @@ class PendingPollPersistSpec extends PendingPollSpecBase {
         def writesBefore = []
         def executor = new ScriptedExecutor([pending('k-1'), passed()]) {
             @Override
-            ExecutionResult execute(StageExecutor.Request request) {
+            protected ExecutionResult respond(StageExecutor.Request request, PendingTurn turn) {
                 writesBefore << persistence.pending.size()
-                super.execute(request)
+                super.respond(request, turn)
             }
         }
         def ci = check()

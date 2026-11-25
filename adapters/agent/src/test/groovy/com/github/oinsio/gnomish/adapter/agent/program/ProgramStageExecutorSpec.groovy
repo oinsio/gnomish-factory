@@ -3,8 +3,8 @@ package com.github.oinsio.gnomish.adapter.agent.program
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.describe.ProgramBounds
-import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
+import com.github.oinsio.gnomish.app.port.agent.TerminalClose
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.Denial
@@ -112,7 +112,7 @@ class ProgramStageExecutorSpec extends Specification {
 
         then:
         1 * rounds.openRound(_) >> round
-        1 * round.closeRound(RoundClose.VERIFIABLE)
+        1 * round.closeRound(TerminalClose.VERIFIABLE)
         0 * round.discard()
         result.status() instanceof ExecutionResult.Completed
         result.denials() == [EGRESS]
@@ -143,11 +143,9 @@ class ProgramStageExecutorSpec extends Specification {
 
         where:
         answer | close | status
-        'completed' | RoundClose.VERIFIABLE | 'Completed'
-        'quality' | RoundClose.UNVERIFIABLE | 'Failed'
-        'limit' | RoundClose.UNVERIFIABLE | 'Failed'
-        // FR10 of extract-agent-round-runner (D11): a pending transform round closes under the pending-round subject
-        'pending' | RoundClose.PENDING | 'Pending'
+        'completed' | TerminalClose.VERIFIABLE | 'Completed'
+        'quality' | TerminalClose.UNVERIFIABLE | 'Failed'
+        'limit' | TerminalClose.UNVERIFIABLE | 'Failed'
     }
 
     // FR9 (task 7.1, obligation 4), FR4: the request carries the one merge of the settings, the model and the prior findings
@@ -191,7 +189,7 @@ class ProgramStageExecutorSpec extends Specification {
 
         then:
         1 * round.discard()
-        0 * round.closeRound(RoundClose.VERIFIABLE)
+        0 * round.closeRound(TerminalClose.VERIFIABLE)
         def failed = result.status() as ExecutionResult.Failed
         failed.failureClass() == ExecutionResult.FailureClass.INFRASTRUCTURE
         failed.reason().contains('egress guard is not running')
@@ -238,7 +236,7 @@ class ProgramStageExecutorSpec extends Specification {
                 .execute(ProgramFixtures.round(workspace))
 
         then:
-        1 * round.closeRound(RoundClose.VERIFIABLE) >> {
+        1 * round.closeRound(TerminalClose.VERIFIABLE) >> {
             throw new IllegalStateException('snapshot commit refused')
         }
         1 * round.discard()

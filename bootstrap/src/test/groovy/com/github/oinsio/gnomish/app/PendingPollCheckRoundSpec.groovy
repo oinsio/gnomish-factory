@@ -29,6 +29,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
+import com.github.oinsio.gnomish.domain.engine.port.PendingTurn
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.pipeline.Threshold
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
@@ -87,11 +88,21 @@ class PendingPollCheckRoundSpec extends Specification {
     /** The check's answer through the pending poll over {@code bound}; each round's result noted with its instant. */
     private VerdictAnswer answer(Executor bound, VerifyCheck.Executor check, List<List<Object>> rounds) {
         def checkRound = new CheckRound(bound, null, check)
-        def noting = { StageExecutor.Request request ->
-            def result = checkRound.execute(request)
+        def note = { ExecutionResult result ->
             rounds << [clock.instant(), result]
             result
-        } as StageExecutor
+        }
+        def noting = new StageExecutor() {
+                    @Override
+                    ExecutionResult execute(StageExecutor.Request request) {
+                        note(checkRound.execute(request))
+                    }
+
+                    @Override
+                    ExecutionResult poll(StageExecutor.Request request, PendingTurn turn) {
+                        note(checkRound.poll(request, turn))
+                    }
+                }
         def poll = new PendingPoll(noting, new InMemoryAttemptPersistence(), AttemptDelivery.assumedDelivered(),
                 VirtualTimeEquipment.on(clock, sleeper), new RecordingEventListener())
         def round = new PendingRound(VerifyingStages.of([check]), new TaskContext('TASK-1', UntrustedText.tracker('t'),

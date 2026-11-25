@@ -7,8 +7,8 @@ import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.describe.ProgramBounds
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
-import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
+import com.github.oinsio.gnomish.app.port.agent.TerminalClose
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource
 import com.github.oinsio.gnomish.app.port.check.FreshBoxSource
 import com.github.oinsio.gnomish.app.port.git.LastRegisteredCommit
@@ -87,7 +87,7 @@ class AgentStageRoundsSpec extends AgentEntrySpecBase {
 
         then:
         1 * rounds.openRound(_) >> round
-        1 * round.closeRound(RoundClose.VERIFIABLE)
+        1 * round.closeRound(TerminalClose.VERIFIABLE)
         0 * round.discard()
         result.status() instanceof ExecutionResult.Completed
         agentLaunches*.command() == [['fake-agent', 'transform']]
@@ -144,7 +144,7 @@ class AgentStageRoundsSpec extends AgentEntrySpecBase {
         agentLaunches.first().environment()['GNOMISH_ANSWER_FILE'] == ANSWER.toString()
 
         and: 'the round closed verifiable, and its result is the decision request the agent wrote'
-        1 * round.closeRound(RoundClose.VERIFIABLE)
+        1 * round.closeRound(TerminalClose.VERIFIABLE)
         result.status() instanceof ExecutionResult.Completed
         def asked = result.answer() as ExecutionResult.DecisionRequest
         asked.question().raw() == 'Refactor or patch?'

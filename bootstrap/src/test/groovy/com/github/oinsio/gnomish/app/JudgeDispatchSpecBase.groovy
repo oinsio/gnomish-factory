@@ -99,7 +99,7 @@ abstract class JudgeDispatchSpecBase extends Specification {
     static StageExecutor.Request request(VerifyCheck.Judge judge, Workspace workspace, int index = 0) {
         def stage = new StageDefinition('review', 'purpose', [], [], new StageDefinition.Executor(ExecutorType.API, 'm', [:]),
         'instructions.md', [judge], new AutonomyLimits(1), AdvancementMode.AUTO)
-        new StageExecutor.Request(CONTEXT, stage, workspace, 0, [], judge.asExecutorCheck(), CheckRef.of(index, judge), null)
+        new StageExecutor.Request(CONTEXT, stage, workspace, 0, [], judge.asExecutorCheck(), CheckRef.of(index, judge))
     }
 
     static ExecutionResult run(CheckDispatch dispatch, VerifyCheck.Judge judge, Workspace workspace, int index = 0) {

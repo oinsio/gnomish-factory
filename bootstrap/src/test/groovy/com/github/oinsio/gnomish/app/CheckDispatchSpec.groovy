@@ -55,11 +55,11 @@ class CheckDispatchSpec extends Specification {
         HandAssembledCheckDispatch.dispatch(definition, workingCopy)
     }
 
-    private static StageExecutor.Request request(VerifyCheck.Executor check = FILES, PendingTurn turn = null) {
+    private static StageExecutor.Request request(VerifyCheck.Executor check = FILES) {
         new StageExecutor.Request(new TaskContext('TASK-1', UntrustedText.tracker('t'), UntrustedText.tracker('b'), []),
         new StageDefinition('build', 'p', [], [], new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'm', [:]),
         'i.md', [], new AutonomyLimits(3), AdvancementMode.AUTO), new com.github.oinsio.gnomish.domain.engine.port.Workspace() {}, 2, [],
-        check, CheckRef.of(0, check), turn)
+        check, CheckRef.of(0, check))
     }
 
     def "FR1, FR13: the files-exist check runs bound to its own working copy, not the round's, and its verdict crosses the port"() {
@@ -85,7 +85,7 @@ class CheckDispatchSpec extends Specification {
         reply.results()*.level() == [ResultLevel.ERROR]
     }
 
-    def "FR2, D14: with no pending turn the round starts the bound executor and never polls it"() {
+    def "FR2, D14: an execute starts the bound executor and never polls it"() {
         given:
         def bound = Mock(Executor)
 
@@ -107,7 +107,7 @@ class CheckDispatchSpec extends Specification {
         ExecutorRequest sent = null
 
         when:
-        def result = new CheckRound(bound, null, FILES).execute(request(FILES, new PendingTurn(new PendingKey('run-1'), origin)))
+        def result = new CheckRound(bound, null, FILES).poll(request(FILES), new PendingTurn(new PendingKey('run-1'), origin))
 
         then:
         0 * bound.start(_)

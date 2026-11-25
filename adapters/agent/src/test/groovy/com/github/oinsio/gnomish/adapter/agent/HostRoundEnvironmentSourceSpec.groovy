@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentInvocation
-import com.github.oinsio.gnomish.app.port.agent.RoundClose
+import com.github.oinsio.gnomish.app.port.agent.TerminalClose
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
@@ -41,18 +41,19 @@ class HostRoundEnvironmentSourceSpec extends Specification {
         round.discard()
     }
 
-    // FR9: every round gets a path of its own, so no round reads a request an earlier one left
+    // FR9: every round gets a path of its own, so no round reads a request an earlier one left;
+    //     the rounds are sequential, the source holding one at a time (D14 as amended 2026-11-25)
     def "FR9: two rounds get distinct answer files"() {
         when:
         def first = source.openRound(StageExecutorRequests.request(workspaceDir))
+        first.closeRound(TerminalClose.VERIFIABLE)
         def second = source.openRound(StageExecutorRequests.request(workspaceDir))
 
         then:
         first.answerFilePath() != second.answerFilePath()
 
         cleanup:
-        first.discard()
-        second.discard()
+        second?.discard()
     }
 
     // FR21 of define-executor-contract: undecorated, the host source serves the git-less in-place
@@ -83,7 +84,7 @@ class HostRoundEnvironmentSourceSpec extends Specification {
         !round.answerFilePath().startsWith(workspaceDir)
 
         when:
-        ending == 'close' ? round.closeRound(RoundClose.VERIFIABLE) : round.discard()
+        ending == 'close' ? round.closeRound(TerminalClose.VERIFIABLE) : round.discard()
 
         then:
         !Files.exists(scratch)
@@ -107,7 +108,7 @@ class HostRoundEnvironmentSourceSpec extends Specification {
         Files.exists(round.answerFilePath())
 
         when:
-        round.closeRound(RoundClose.VERIFIABLE)
+        round.closeRound(TerminalClose.VERIFIABLE)
 
         then:
         !Files.exists(round.answerFilePath())

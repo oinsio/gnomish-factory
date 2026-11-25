@@ -86,10 +86,10 @@ abstract class PendingPollSpecBase extends Specification {
 
     /** The turns the executor was asked with, in order: null for a start, else origin and key. */
     static List<List<Object>> turns(ScriptedExecutor executor) {
-        executor.requests.collect {
-            it.pending() == null ? null : [
-                it.pending().origin(),
-                it.pending().key().value()
+        executor.turns.collect {
+            it == null ? null : [
+                it.origin(),
+                it.key().value()
             ]
         }
     }

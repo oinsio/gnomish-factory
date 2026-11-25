@@ -80,6 +80,6 @@ class CheckDispatchPinSpec extends Specification implements GitObjectsFixture {
     private static StageExecutor.Request request(def workspace) {
         new StageExecutor.Request(new TaskContext('TASK-1', UntrustedText.tracker('t'), UntrustedText.tracker('b'), []),
         new StageDefinition('build', 'p', [], [], new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'm', [:]),
-        'i.md', [], new AutonomyLimits(3), AdvancementMode.AUTO), workspace, 0, [], actions(), CheckRef.of(0, actions()), null)
+        'i.md', [], new AutonomyLimits(3), AdvancementMode.AUTO), workspace, 0, [], actions(), CheckRef.of(0, actions()))
     }
 }

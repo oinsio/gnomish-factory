@@ -41,3 +41,17 @@ describe exit 0
 start exec-sh steps/executor-run.sh
 poll result data/executor-result#malformed-answer
 poll exit 0
+
+[transform-scripted]
+# A pollable transform program whose run lives outside its working copy (design D11 of
+# extract-agent-round-runner, task 6.4a): describe lists the role transform alone, with poll
+# (data/executor-describe#transform-poll); each start and poll answers the next line of the spec's
+# `<link>.script` and logs to `<link>.heads` (steps/scripted-verdict.sh), as `[verdict-scripted]`.
+* export SCRIPT_FILE @script
+* export HEADS_FILE @heads
+describe result data/executor-describe#transform-poll
+describe exit 0
+start run steps/scripted-verdict.sh
+start exit 0
+poll run steps/scripted-verdict.sh
+poll exit 0

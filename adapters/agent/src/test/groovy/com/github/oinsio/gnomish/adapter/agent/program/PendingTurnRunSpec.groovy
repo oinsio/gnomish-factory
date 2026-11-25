@@ -76,7 +76,7 @@ class PendingTurnRunSpec extends Specification {
     }
 
     // FR10 of extract-agent-round-runner (D11): a stage round carrying the engine's issued turn is a
-    //     poll of the round's key, not a second start
+    //     poll of the round's key in the open round, not a second start
     def "the stage round wrapper polls the key a pending round's request names"() {
         given:
         def environment = Stub(TaskExecutionEnvironment) {
@@ -86,7 +86,7 @@ class PendingTurnRunSpec extends Specification {
             environment() >> environment
         }
         def rounds = Stub(RoundEnvironmentSource) {
-            openRound(_) >> round
+            continueRound(_) >> round
         }
         def factory = new RoundExecutorFactory() {
                     @Override
@@ -105,11 +105,10 @@ class PendingTurnRunSpec extends Specification {
                     }
                 }
         def start = ProgramFixtures.round(Path.of('.'))
-        def poll = new StageExecutor.Request(start.context(), start.stage(), start.workspace(), 0, [],
-        new PendingTurn(KEY, PendingTurn.Origin.ISSUED))
+        def request = new StageExecutor.Request(start.context(), start.stage(), start.workspace(), 0, [])
 
         when:
-        def result = new ProgramStageExecutor(factory, rounds).execute(poll)
+        def result = new ProgramStageExecutor(factory, rounds).poll(request, new PendingTurn(KEY, PendingTurn.Origin.ISSUED))
 
         then:
         1 * executor.poll(_, KEY) >> COMPLETED

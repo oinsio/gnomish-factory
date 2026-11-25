@@ -7,8 +7,10 @@ import com.github.oinsio.gnomish.app.port.check.FreshBoxSource
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.app.workspace.fake.AttemptCommitWorkspaces
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.port.PendingTurn
 import com.github.oinsio.gnomish.executorcontract.Policy
 import com.github.oinsio.gnomish.executorcontract.Role
+import com.github.oinsio.gnomish.pendingkey.PendingKey
 import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import java.nio.file.Files
@@ -70,5 +72,16 @@ class JudgeCheckDispatchSpec extends JudgeDispatchSpecBase {
         agentLaunches.isEmpty()
         def verdict = derived(result) as Verdict.CannotVerify
         verdict.reason().forLog().contains("'missing.md' is unreadable")
+
+        when: 'the refused binding is polled (D11 of extract-agent-round-runner: a check\'s poll is a round of its own)'
+        def judge = JudgeChecks.agent('missing.md', 'opus')
+        def workspace = AttemptCommitWorkspaces.at('a' * 40)
+        def round = request(judge, workspace)
+        def polled = dispatch(checks, runners, PipelineLaw.ofContent([:])).bind(round.check(), round.checkRef(), workspace)
+        .poll(round, new PendingTurn(new PendingKey('k-1'), PendingTurn.Origin.ISSUED))
+
+        then: 'the poll answers the same refusal, and still nothing is launched'
+        agentLaunches.isEmpty()
+        (derived(polled) as Verdict.CannotVerify).reason() == verdict.reason()
     }
 }

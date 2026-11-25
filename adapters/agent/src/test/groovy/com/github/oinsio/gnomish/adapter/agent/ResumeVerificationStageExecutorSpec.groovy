@@ -14,12 +14,14 @@ import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
+import com.github.oinsio.gnomish.domain.engine.port.PendingTurn
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.executorcontract.ResultSource
+import com.github.oinsio.gnomish.pendingkey.PendingKey
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.charset.StandardCharsets
 import java.time.Duration
@@ -95,6 +97,33 @@ class ResumeVerificationStageExecutorSpec extends Specification {
         result.trace() == new ToolTrace(new AttemptKey('T-1', 'work', 2), [])
         result.usage() == new ExecutorUsage(Duration.ZERO, [], [:])
         result.denials().isEmpty()
+    }
+
+    // FR10, D11 of extract-agent-round-runner (as amended 2026-11-25): a poll continues a round whose
+    //     start already went through execute, so it is forwarded as it is, never recognised
+    def "a poll is forwarded to the chain with its turn, returning the delegate's exact result"() {
+        given:
+        def delegate = Mock(StageExecutor)
+        def cell = new CurrentRound()
+        def executor = new ResumeVerificationStageExecutor(delegate, cell, pending())
+        def turn = new PendingTurn(new PendingKey('job-1'), PendingTurn.Origin.ISSUED)
+        def polled = completed()
+        def request = request('work', 2)
+
+        when:
+        def result = executor.poll(request, turn)
+
+        then:
+        1 * delegate.poll(request, turn) >> polled
+        0 * delegate.execute(_)
+        result.is(polled)
+
+        when: 'the matching start comes after it'
+        executor.execute(request)
+
+        then: 'the pending verification was left for it: recovered, no delegation'
+        0 * delegate._
+        cell.opened() == RECORDED
     }
 
     def "the pending verification is consumed exactly once — the next matching request delegates"() {

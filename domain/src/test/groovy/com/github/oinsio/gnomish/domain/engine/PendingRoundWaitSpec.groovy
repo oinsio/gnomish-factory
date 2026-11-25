@@ -149,7 +149,7 @@ class PendingRoundWaitSpec extends PendingTransformRoundSpecBase {
         def run = poll.resumeRound(ask, entry)
 
         then: 'polled at once with the recorded key and no start; ten minutes were left, not an hour'
-        executor.requests*.pending() == [
+        executor.turns == [
             new PendingTurn(new PendingKey('job-42'), PendingTurn.Origin.RECORDED)
         ]
         (listener.events.find {
@@ -189,6 +189,6 @@ class PendingRoundWaitSpec extends PendingTransformRoundSpecBase {
             ]
         ]
         executor.writesBefore == [0, 1, 2]
-        executor.requests[2].pending() == new PendingTurn(new PendingKey('job-43'), PendingTurn.Origin.ISSUED)
+        executor.turns[2] == new PendingTurn(new PendingKey('job-43'), PendingTurn.Origin.ISSUED)
     }
 }

@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.domain.engine;
 
-import com.github.oinsio.gnomish.domain.engine.port.PendingTurn;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import java.time.Instant;
@@ -31,13 +30,12 @@ interface PendingAsk {
     String executor();
 
     /**
-     * The request of one turn: no turn for a {@code start}, otherwise the {@code poll} of the turn's
-     * key.
+     * The request of the subject's rounds: the {@code start} takes it alone, each poll beside its
+     * turn ({@link StageExecutor#poll}).
      *
-     * @param turn the pending turn, or {@code null} for a {@code start}
      * @return the request; never null
      */
-    StageExecutor.Request request(@Nullable PendingTurn turn);
+    StageExecutor.Request request();
 
     /**
      * The wait of an entry recorded pending at {@code since}: its interval and its deadline.

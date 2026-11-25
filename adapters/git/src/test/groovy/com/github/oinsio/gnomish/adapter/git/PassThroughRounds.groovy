@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
-import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
+import com.github.oinsio.gnomish.app.port.agent.TerminalClose
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
@@ -24,6 +24,12 @@ final class PassThroughRounds implements RoundEnvironmentSource {
         round
     }
 
+    /** The round opened most recently, as a poll continues it. */
+    @Override
+    Round continueRound(StageExecutor.Request request) {
+        round
+    }
+
     /** The bare host source's identity: the decorator under test names its own. */
     @Override
     RoundIdentity identity() {
@@ -36,6 +42,7 @@ final class PassThroughRounds implements RoundEnvironmentSource {
         /** Identity only — a spec asserts the decorator hands back this very instance. */
         final TaskExecutionEnvironment environment = [:] as TaskExecutionEnvironment
         boolean closed
+        boolean wentPending
         boolean discarded
 
         @Override
@@ -54,7 +61,12 @@ final class PassThroughRounds implements RoundEnvironmentSource {
         }
 
         @Override
-        void closeRound(RoundClose close) {
+        void goPending() {
+            wentPending = true
+        }
+
+        @Override
+        void closeRound(TerminalClose close) {
             closed = true
         }
 

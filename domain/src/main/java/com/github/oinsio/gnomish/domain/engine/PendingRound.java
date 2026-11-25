@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.domain.engine;
 
-import com.github.oinsio.gnomish.domain.engine.port.PendingTurn;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
@@ -135,17 +134,16 @@ final class PendingRound {
 
     /**
      * The check round's request: the round's context, stage, working copy and attempt, the check as
-     * its subject with its identity in the round, and the turn it continues — none for a {@code
-     * start}.
+     * its subject with its identity in the round; a poll takes the turn beside it ({@link
+     * StageExecutor#poll}).
      *
      * @param check the check the round judges; never null
      * @param ref the check's identity in the round, the subject its pending runs are keyed by; never
      *     null
-     * @param turn the pending turn, or {@code null} for a {@code start}
      * @return the request; never null
      */
-    StageExecutor.Request request(VerifyCheck.Executor check, CheckRef ref, @Nullable PendingTurn turn) {
-        return new StageExecutor.Request(context, stage, workspace, key.attempt(), List.of(), check, ref, turn);
+    StageExecutor.Request request(VerifyCheck.Executor check, CheckRef ref) {
+        return new StageExecutor.Request(context, stage, workspace, key.attempt(), List.of(), check, ref);
     }
 
     private boolean ours(PendingPollRecord entry) {

@@ -1,9 +1,11 @@
 package com.github.oinsio.gnomish.app.port.agent.contract
 
 import com.github.oinsio.gnomish.app.describe.ProgramChannel
-import com.github.oinsio.gnomish.app.port.agent.RoundClose
+import com.github.oinsio.gnomish.app.port.agent.NoOpenRoundException
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
+import com.github.oinsio.gnomish.app.port.agent.TerminalClose
 import com.github.oinsio.gnomish.domain.engine.RoundToken
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import java.nio.file.Files
 import java.nio.file.Path
@@ -23,7 +25,11 @@ import spock.lang.Specification
  * RoundEnvironmentSourceContractCoverageSpec} in {@code :bootstrap} asserts every main-source
  * implementation has such a subclass.
  *
- * <p>Implements FR18, M9 of extract-agent-round-runner.
+ * <p>As amended 2026-11-25 (D11, D14), the source holds its open round: a second open while one is
+ * open is refused, a poll with no open round is refused, and a poll's round names the identity, the
+ * environment and the answer path the round opened with.
+ *
+ * <p>Implements FR18, M9, FR10 of extract-agent-round-runner.
  */
 abstract class RoundEnvironmentSourceContract extends Specification {
 
@@ -52,6 +58,13 @@ abstract class RoundEnvironmentSourceContract extends Specification {
      * subclass shows it by the owner's own handle, never by assumption.
      */
     protected abstract boolean environmentOutlivesRound(RoundEnvironmentSource.Round round)
+
+    /**
+     * Moves the tip a round of the subject would open on — a commit on the worktree or the task
+     * branch — so a token minted after it differs from the one the round opened with; nothing for the
+     * in-place source, which mints none.
+     */
+    protected abstract void moveTip()
 
     // M9: the run is named after the implementation it pins, so the coverage gate's name match is real
     def "M9: the subject is the implementation this contract run is named after"() {
@@ -90,7 +103,7 @@ abstract class RoundEnvironmentSourceContract extends Specification {
         def scratch = round.environment().scratchRoot()
 
         when:
-        round.closeRound(RoundClose.VERIFIABLE)
+        round.closeRound(TerminalClose.VERIFIABLE)
         def afterClose = scratchPresent(scratch)
 
         then:
@@ -117,6 +130,94 @@ abstract class RoundEnvironmentSourceContract extends Specification {
 
         then:
         environmentOutlivesRound(round) || !scratchPresent(scratch)
+    }
+
+    // FR10, D14 as amended 2026-11-25: the source holds its open round; a second open is refused
+    //     before anything is minted
+    def "FR10: a second open while a round is open is refused, and nothing is minted for it"() {
+        given:
+        def source = subject()
+        def expected = tokenAtOpen()
+        def round = source.openRound(roundRequest())
+        moveTip()
+
+        when:
+        source.openRound(roundRequest())
+
+        then:
+        thrown(IllegalStateException)
+        source.identity().takeToken() == expected
+
+        cleanup:
+        round?.discard()
+    }
+
+    // FR10, D14 as amended 2026-11-25: a poll never opens a round, so with none open it is refused
+    def "FR10: a poll with no open round is refused, and no round is opened for it"() {
+        given:
+        def source = subject()
+
+        when:
+        source.continueRound(roundRequest())
+
+        then:
+        thrown(NoOpenRoundException)
+        tokenOrNone(source.identity()) == Optional.empty()
+    }
+
+    // FR10, D14 as amended 2026-11-25: the round goes pending and a poll is handed that very round
+    def "FR10: a poll's round names the identity, the environment and the answer path the round opened with"() {
+        given:
+        def source = subject()
+        def expected = tokenAtOpen()
+        def round = source.openRound(roundRequest())
+        round.goPending()
+        moveTip()
+
+        when:
+        def polled = source.continueRound(roundRequest())
+
+        then:
+        polled.environment().is(round.environment())
+        polled.answerFilePath() == round.answerFilePath()
+        polled.answerEnvFragment() == round.answerEnvFragment()
+        polled.roundListener().is(round.roundListener())
+        source.identity().takeToken() == expected
+
+        cleanup:
+        polled?.discard()
+    }
+
+    // FR10, D14: a closed round is let go, so a later poll has no round to continue
+    def "FR10: after the close a poll is refused and a new round may open"() {
+        given:
+        def source = subject()
+        def round = source.openRound(roundRequest())
+        round.closeRound(TerminalClose.VERIFIABLE)
+
+        when:
+        source.continueRound(roundRequest())
+
+        then:
+        thrown(NoOpenRoundException)
+
+        when:
+        def next = source.openRound(roundRequest())
+
+        then:
+        next != null
+
+        cleanup:
+        next?.discard()
+    }
+
+    /** The identity's token, or empty when no round was ever opened in it. */
+    private static Optional<RoundToken> tokenOrNone(RoundIdentity identity) {
+        try {
+            identity.takeToken()
+        } catch (IllegalStateException ignored) {
+            Optional.empty()
+        }
     }
 
     private static boolean scratchPresent(String scratchRoot) {

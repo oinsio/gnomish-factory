@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.port.PendingTurn
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.engine.port.contract.StageExecutorContract
 import java.nio.file.Files
@@ -55,8 +56,16 @@ class ClaudeStageContractSpec extends StageExecutorContract {
 
         @Override
         ExecutionResult execute(Request request) {
-            def substituted = new Request(request.context(), request.stage(), workspace, request.attempt(), request.feedback())
-            delegate.execute(substituted)
+            delegate.execute(substituted(request))
+        }
+
+        @Override
+        ExecutionResult poll(Request request, PendingTurn turn) {
+            delegate.poll(substituted(request), turn)
+        }
+
+        private Request substituted(Request request) {
+            new Request(request.context(), request.stage(), workspace, request.attempt(), request.feedback())
         }
     }
 }

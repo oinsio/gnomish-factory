@@ -92,6 +92,14 @@ class SandboxRoundEnvironmentSourceContractSpec extends RoundEnvironmentSourceCo
         rounds.snapshot().map { it.token() } == Optional.of(rounds.opened())
     }
 
+    /** A commit on the task branch in the factory clone, the tip a box round's token is minted from. */
+    @Override
+    protected void moveTip() {
+        def tip = 'refs/heads/' + BRANCH
+        def moved = gitOutput(cloneDir, 'commit-tree', '-p', tip, '-m', 'moved', tip + '^{tree}')
+        gitOutput(cloneDir, 'update-ref', tip, moved)
+    }
+
     /** The box is the lease's for the stage: its files die with the box, not with the round. */
     @Override
     protected boolean environmentOutlivesRound(RoundEnvironmentSource.Round round) {

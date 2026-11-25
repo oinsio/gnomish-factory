@@ -40,6 +40,11 @@ class HostRoundEnvironmentSourceContractSpec extends RoundEnvironmentSourceContr
         !Files.exists(Path.of(scratchRoot))
     }
 
+    /** The in-place source mints no token, so there is no tip to move. */
+    @Override
+    protected void moveTip() {
+    }
+
     @Override
     protected boolean environmentOutlivesRound(RoundEnvironmentSource.Round round) {
         false
