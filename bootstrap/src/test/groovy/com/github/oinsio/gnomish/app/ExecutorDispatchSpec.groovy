@@ -101,12 +101,18 @@ class ExecutorDispatchSpec extends Specification {
     }
 
     // FR10, D11 of extract-agent-round-runner (as amended 2026-11-25): a poll takes the start's route —
-    //     the entry its name resolves to, through the shared round wrapper and the run's round source
+    //     the entry its name resolves to, through the shared round wrapper and the run's round source,
+    //     where it continues the open round and opens none
     def "FR10: a poll of a program stage reaches the resolved entry's round wrapper, and answers what the wrapper answered"() {
-        given: 'a round source whose round has nothing behind it, so the wrapper ends the round itself'
+        given: 'a round source whose open round has nothing behind it, so the wrapper ends the round itself'
         def build = request(stage(ExecutorType.PROGRAM, 'acme'))
+        def continued = []
         def opened = []
         rounds = Stub(RoundEnvironmentSource) {
+            continueRound(_) >> { StageExecutor.Request request ->
+                continued << request
+                Stub(RoundEnvironmentSource.Round)
+            }
             openRound(_) >> { StageExecutor.Request request ->
                 opened << request
                 Stub(RoundEnvironmentSource.Round)
@@ -118,7 +124,8 @@ class ExecutorDispatchSpec extends Specification {
         .poll(build, new PendingTurn(new PendingKey('job-1'), PendingTurn.Origin.ISSUED))
 
         then:
-        opened == [build]
+        continued == [build]
+        opened == []
         result != null
         result.trace().key() == new AttemptKey('TASK-1', 'build', 0)
     }

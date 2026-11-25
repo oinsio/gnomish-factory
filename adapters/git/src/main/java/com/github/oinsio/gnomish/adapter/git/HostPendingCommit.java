@@ -34,7 +34,8 @@ import java.util.Optional;
  * without a compare-and-swap behind it ({@code lock-scope.md}, "Writers from different
  * processes"): the private index is the library's own, and the ref transaction is the first lock two
  * writers share. A run that committed moved the branch, so the compare-and-swap refuses and nothing
- * lands.
+ * lands. The worktree is left lagging the commit; the persistence settles that lag after a pending
+ * round commit only, when nothing of the round runs there ({@link PendingStateLag#afterLanding}).
  *
  * <p>The clone's {@code .git} is the worktree's common directory, asked of git once per write.
  *

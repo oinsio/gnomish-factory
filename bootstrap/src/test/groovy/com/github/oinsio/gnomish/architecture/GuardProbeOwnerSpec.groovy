@@ -112,15 +112,19 @@ class GuardProbeOwnerSpec extends Specification {
         owner.count('refusedBefore()') == 3
         owner.count('checkedAfter(') == 3
 
-        and: "the round-executor factory's binding of the open round is taken only as the decorator's argument"
+        and: "the factory's binding of the open round is taken only as the decorator's argument and as its adoption role (D11)"
+        def flat = stage.replaceAll(/\s+/, ' ')
         stage.count('executors.executor(') == 1
-        stage.replaceAll(/\s+/, ' ').contains('GuardedExecutor.over(subject, name, round.environment(), executors.executor(round));')
+        flat.contains('Executor bound = executors.executor(round);')
+        flat.contains('GuardedExecutor.over(subject, name, round.environment(), bound);')
+        flat.contains('PendingAdoption adoption = bound instanceof PendingAdoption role ? role : null;')
+        stage.findAll(/\bbound\b/).size() == 3
 
         and: 'the decorated executor alone is sent the request, by the one choice of start or poll (D11)'
         stage.count('.start(') == 0
         stage.count('.poll(') == 0
         stage.count('PendingTurnRun.run(') == 1
-        stage.contains('PendingTurnRun.run(executor, null, contractRequest, turn)')
+        stage.contains('PendingTurnRun.run(executor, adoption, contractRequest, turn)')
 
         and: 'the choice sends to the executor it is handed and to nothing else'
         def turnRun = code(TURN_RUN)

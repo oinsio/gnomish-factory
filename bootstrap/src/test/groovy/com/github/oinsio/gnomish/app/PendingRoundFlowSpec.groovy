@@ -23,7 +23,6 @@ import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import spock.lang.PendingFeature
 
 /**
  * The flow spec of a pending {@code transform} round (FR10, NFR-R4 of extract-agent-round-runner; design
@@ -55,7 +54,6 @@ class PendingRoundFlowSpec extends RoundFlowSpecBase {
     }
 
     // Scenario: pipeline/stage-engine / A poll that answers pending writes nothing
-    @PendingFeature(reason = '6.4d: each poll opens, mints and closes a round of its own, and the close is refused as a boundary violation (D11 as amended 2026-11-25)')
     def "FR10: in #mode mode, a poll of a pending round that answers pending writes nothing and runs in the start's environment"() {
         when:
         def outcome = mode == 'host' ? runHost() : runBox()
@@ -82,7 +80,7 @@ class PendingRoundFlowSpec extends RoundFlowSpecBase {
     }
 
     // Scenario: pipeline/stage-engine / Every commit of a pending round names one token
-    @PendingFeature(reason = '6.4d: the polls close under a token of their own and the closing commit is refused, so no closing snapshot lands (D11 as amended 2026-11-25)')
+    // Scenario: git/git-task-persistence / Only the start of a round registers a pending-round snapshot
     def "FR10: in #mode mode, every commit of a round polled twice and closed by a completed poll names the token the round opened with"() {
         given:
         def token = RoundToken.of(created)

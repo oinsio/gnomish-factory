@@ -152,7 +152,7 @@ class UnverifiedSnapshotResumeSpec extends Specification implements BareGitRepoF
             reruns++
             ExecutionResult.completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey(TASK, 'build', r.attempt()), []), [])
         } as StageExecutor
-        new ResumeVerificationStageExecutor(stageExecutor, new CurrentRound(), pending.orElse(null)).execute(request())
+        new ResumeVerificationStageExecutor(stageExecutor, pending.orElse(null)).execute(request())
 
         then: 'it is no interrupted verification: the stage executor runs the round again'
         pending.isEmpty()

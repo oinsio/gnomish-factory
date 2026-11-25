@@ -511,7 +511,7 @@ Old way: `Request.pending()`; `rounds.openRound(request)` and `round.closeRound(
   still do what `execute` did with a turn, so the task's specs are the existing ones, green. The
   port's javadoc ("One `execute(Request)` call is one attempt", `StageExecutor.java:18`) states
   the two operations and what a poll must never do (D11, D8)
-- [ ] 6.4c The round sources, both ends of the pair and the host decoration in one task: a source
+- [x] 6.4c The round sources, both ends of the pair and the host decoration in one task: a source
   holds its open round until the close or the discard; a second `openRound` while one is open is
   refused; a new port operation hands a poll the open round — the one this source opened, or the
   one the run's cell was restored with — and refuses when there is none, with no mint; going
@@ -524,7 +524,7 @@ Old way: `Request.pending()`; `rounds.openRound(request)` and `round.closeRound(
   the registry row of the pair, `MidRoundPushRounds`' javadoc ("exactly once per attempt
   request") and `ProgramStageExecutor`'s ("one round is one start — or … one poll") say the new
   rule; feature for "A poll with no open round is refused", marker included (FR10, D11, D14, D7)
-- [ ] 6.4d The closing snapshot of a pending round, both ends of the persistence pair in one
+- [x] 6.4d The closing snapshot of a pending round, both ends of the persistence pair in one
   task: its only parent is the round's last registered commit, its subject carries the round's
   token, the gnome range is judged from that parent, and the `state.json` lag of the pending
   round commits is settled before the judgement and the staging (`PendingStateLag`) — on the host

@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.agent.AnswerFileRead
 import com.github.oinsio.gnomish.app.port.agent.AnswerFileReading
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.git.PendingVerification
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -138,7 +139,7 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
         def found = new SnapshotTipCheck(runner, clone).inspect(TASK)
 
         then:
-        found.get() == new PendingVerification(snapshot, 'implement', 3, token, new AnswerFileReading.Absent(), pending, [pending, snapshot])
+        found.get() == new PendingVerification(snapshot, 'implement', 3, token, RoundClose.VERIFIABLE, new AnswerFileReading.Absent(), pending, [pending, snapshot])
     }
 
     def "FR20: a registered snapshot is its own registered commit"() {
@@ -174,6 +175,66 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
         found.chain() == history.subList(0, history.indexOf(snapshot) + 1)
     }
 
+    // FR11, NFR-R3 of extract-agent-round-runner (design D11, "Resume"): the bottom of a registered
+    //     chain names its kind — a pending-round snapshot below pending round commits is a pending round
+    // Scenario: git/git-task-persistence / A pending commit above a pending-round snapshot is a pending round
+    def "FR11: a pending round commit above a pending-round snapshot is read as a pending round with its token"() {
+        given: 'a round whose start went pending, its key rotated once'
+        def token = RoundToken.of(tip())
+        tipWithSubject(ServiceCommitMessages.pendingSnapshot('implement', 3, token))
+        def snapshot = tip()
+        def first = registeredCommitOn(ServiceCommitMessages.pending('implement', 3, token), snapshot)
+        def rotated = registeredCommitOn(ServiceCommitMessages.pending('implement', 3, token), first)
+
+        when:
+        def found = new SnapshotTipCheck(runner, clone).inspect(TASK)
+
+        then: 'a pending round, never an interrupted verification: the kind, the token and the chain the one walk passed'
+        found.get() == new PendingVerification(snapshot, 'implement', 3, token, RoundClose.PENDING, new AnswerFileReading.Absent(),
+                rotated, [rotated, first, snapshot])
+    }
+
+    // FR11, NFR-R3 of extract-agent-round-runner (design D11, K1): a pending-round snapshot with no
+    //     pending round commit above it is handed back to the round, with a line naming the re-driven start
+    // Scenario: git/git-task-persistence / A pending-round snapshot alone is a round to re-drive
+    def "FR11: a registered pending-round snapshot alone is no interrupted round, and its re-driven start is named"() {
+        given:
+        def token = RoundToken.of(tip())
+        tipWithSubject(ServiceCommitMessages.pendingSnapshot('implement', 3, token))
+        def logs = LogCaptureSupport.attach(SnapshotTipCheck, Level.DEBUG)
+
+        when:
+        def found = new SnapshotTipCheck(runner, clone).inspect(TASK)
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then: 'nothing is re-verified: the resume takes the ordinary path, whose round starts again'
+        found.isEmpty()
+
+        and: 'one INFO line, naming the branch, the round, its token and the re-driven start'
+        events.size() == 1
+        events[0].level == Level.INFO
+        def line = events[0].formattedMessage
+        line.contains(BRANCH) && line.contains('implement round 3') && line.contains(token.commit())
+        line.contains('start is re-driven')
+    }
+
+    def "FR11: a pending-round snapshot subject without a readable round is traced as malformed, and names no re-drive"() {
+        given:
+        tipWithSubject('gnomish: pending-snapshot implement#latest 0a1b')
+        def logs = LogCaptureSupport.attach(SnapshotTipCheck, Level.DEBUG)
+
+        when:
+        def found = new SnapshotTipCheck(runner, clone).inspect(TASK)
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then:
+        found.isEmpty()
+        events*.level == [Level.DEBUG]
+        events[0].formattedMessage.contains('unreadable stage#round token')
+    }
+
     def "FR15, FR20: the request a snapshot carries is read through the pending commit above it"() {
         given:
         def token = RoundToken.of(tip())
@@ -198,6 +259,8 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
             'an unverified snapshot': ServiceCommitMessages.unverifiedSnapshot('implement', 3, token),
             'a round commit': 'gnomish: round implement#3',
             'a pending commit of another token': ServiceCommitMessages.pending('implement', 3, other),
+            'a pending-round snapshot of another token': ServiceCommitMessages.pendingSnapshot('implement', 3, other),
+            'a pending-round snapshot of another round': ServiceCommitMessages.pendingSnapshot('implement', 2, token),
         ]
         tipWithSubject(below[variant])
         registeredCommitOn(ServiceCommitMessages.pending('implement', 3, token), tip())
@@ -221,7 +284,9 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
             'another stage',
             'an unverified snapshot',
             'a round commit',
-            'a pending commit of another token'
+            'a pending commit of another token',
+            'a pending-round snapshot of another token',
+            'a pending-round snapshot of another round'
         ]
     }
 

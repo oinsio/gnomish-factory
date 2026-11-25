@@ -126,7 +126,7 @@ final class RequestSnapshotKillPoints {
             agentRounds.incrementAndGet()
             throw new AssertionError('no agent round may run for a pending verification')
         } as StageExecutor
-        def result = new ResumeVerificationStageExecutor(agent, new CurrentRound(), pending.get())
+        def result = new ResumeVerificationStageExecutor(agent, pending.get())
                 .execute(request(world, pending.get().round()))
         if (result.answer() instanceof ExecutionResult.DecisionRequest) {
             world.store.recordOutcome(world.taskId, new TaskOutcome.Escalated(TaskState.atStageStart(STAGE),

@@ -9,13 +9,16 @@ import com.github.oinsio.gnomish.adapter.check.http.HttpRunContext;
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw;
 import com.github.oinsio.gnomish.app.describe.ProgramBounds;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
+import com.github.oinsio.gnomish.app.port.git.CurrentRound;
 import com.github.oinsio.gnomish.app.port.git.LastRegisteredCommit;
+import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.app.port.git.RunRound;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces;
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Binds the {@link StageExecutor} {@link RunAssembler} wires into {@code EnginePorts} — the one
@@ -117,19 +120,36 @@ final class ExecutorAdapterSelector {
         StageExecutor dispatch = new ExecutorDispatch(registry, rounds);
         StageExecutor executor;
         if (sandbox != null) {
-            executor = new ResumeVerificationStageExecutor(dispatch, sandbox.rounds(), sandbox.pendingVerification());
+            restore(sandbox.rounds(), sandbox.pendingVerification());
+            executor = new ResumeVerificationStageExecutor(dispatch, sandbox.pendingVerification());
         } else if (hostRun != null) {
+            restore(hostRun.rounds(), hostRun.pending());
             // The host snapshot of a completed round sits outside the dispatch, so every entry is
             // covered, and inside the resume re-verification decorator, so a resumed round is not
             // snapshotted again; the decorator re-verifies the interrupted verification the
             // no-salvage owner found, over the run's one cell (design D22 of
             // migrate-verify-to-executor-contract).
             executor = new ResumeVerificationStageExecutor(
-                    assembly.hostGitPush.snapshotting(dispatch, hostRun.rounds()), hostRun.rounds(), hostRun.pending());
+                    assembly.hostGitPush.snapshotting(dispatch, hostRun.rounds()), hostRun.pending());
         } else {
             executor = dispatch;
         }
         return new StageRounds(executor, rounds.identity(), new CheckDispatch(registry, pins, VerdictInput.of(law)));
+    }
+
+    /**
+     * Restores the run's round cell from the round the resume recognised at the register, here at the
+     * run's assembly and nowhere else (design D11 of extract-agent-round-runner, "Resume";
+     * crash-consistency item 14): through the transitions of the live path over the value the
+     * recogniser parsed from the subjects the live path writes, before the engine's first request —
+     * nothing opens a round between the assembly and that request — so the engine judges a pending
+     * round's entry against the restored token, and an interrupted verification and a pending round
+     * have one recovery producer of the cell.
+     */
+    private static void restore(CurrentRound cell, @Nullable PendingVerification pending) {
+        if (pending != null) {
+            cell.restore(pending);
+        }
     }
 
     /**

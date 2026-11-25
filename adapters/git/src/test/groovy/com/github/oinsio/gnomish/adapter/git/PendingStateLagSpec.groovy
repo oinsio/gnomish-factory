@@ -22,7 +22,7 @@ class PendingStateLagSpec extends Specification {
     static final Path WORKTREE = Path.of('/work')
     static final List<String> CHAIN = [P2, P1, SNAP]
 
-    private static ScriptedGit worktreeHolding(String index, String tree) {
+    static ScriptedGit worktreeHolding(String index, String tree) {
         new ScriptedGit()
                 .answer([
                     'rev-parse',
@@ -38,7 +38,7 @@ class PendingStateLagSpec extends Specification {
                 ], 0, tree + '\n')
     }
 
-    private static ScriptedGit carrying(ScriptedGit git, String commit, String blob) {
+    static ScriptedGit carrying(ScriptedGit git, String commit, String blob) {
         git.answer([
             'rev-parse',
             '--verify',
@@ -47,7 +47,7 @@ class PendingStateLagSpec extends Specification {
         ], 0, blob + '\n')
     }
 
-    private static ScriptedGit chain(ScriptedGit git) {
+    static ScriptedGit chain(ScriptedGit git) {
         carrying(carrying(carrying(git, P2, OTHER), P1, OTHER), SNAP, LAGGED)
     }
 
@@ -64,7 +64,7 @@ class PendingStateLagSpec extends Specification {
         def git = new ScriptedGit()
 
         expect:
-        new PendingStateLag(git, WORKTREE, 'T-1').settle(registered).isEmpty()
+        new PendingStateLag(WorkingCopyGit.host(git, WORKTREE)).settle(registered).isEmpty()
         git.calls().isEmpty()
 
         where:
@@ -79,14 +79,14 @@ class PendingStateLagSpec extends Specification {
                 .answer(['restore'], 0)
 
         when:
-        def failure = new PendingStateLag(git, WORKTREE, 'T-1').settle(CHAIN)
+        def failure = new PendingStateLag(WorkingCopyGit.host(git, WORKTREE)).settle(CHAIN)
 
         then:
         failure.isEmpty()
         git.calls(['restore'])*.command() == [
             [
                 'restore',
-                '--source=refs/gnomish-factory/T-1',
+                '--source=' + P2,
                 '--staged',
                 '--worktree',
                 '--',
@@ -106,7 +106,7 @@ class PendingStateLagSpec extends Specification {
                 ], 0, P1 + '\n')
 
         expect: 'only the recorded commits are asked, so the lag is not the round\'s'
-        new PendingStateLag(git, WORKTREE, 'T-1').settle([P2, SNAP]).isEmpty()
+        new PendingStateLag(WorkingCopyGit.host(git, WORKTREE)).settle([P2, SNAP]).isEmpty()
         git.calls(['restore']).isEmpty()
         parentReads(git).isEmpty()
         git.calls([
@@ -123,7 +123,7 @@ class PendingStateLagSpec extends Specification {
                 .answer(['restore'], 0)
 
         expect:
-        new PendingStateLag(git, WORKTREE, 'T-1').settle(CHAIN).isEmpty()
+        new PendingStateLag(WorkingCopyGit.host(git, WORKTREE)).settle(CHAIN).isEmpty()
         git.calls(['restore']).size() == 1
         git.calls([
             'rev-parse',
@@ -138,7 +138,7 @@ class PendingStateLagSpec extends Specification {
         def git = chain(worktreeHolding(index, tree))
 
         expect:
-        new PendingStateLag(git, WORKTREE, 'T-1').settle(CHAIN).isEmpty()
+        new PendingStateLag(WorkingCopyGit.host(git, WORKTREE)).settle(CHAIN).isEmpty()
         git.calls(['restore']).isEmpty()
 
         where:
@@ -160,7 +160,7 @@ class PendingStateLagSpec extends Specification {
                 .answer(['restore'], 0)
 
         expect:
-        new PendingStateLag(git, WORKTREE, 'T-1').settle(CHAIN).isEmpty()
+        new PendingStateLag(WorkingCopyGit.host(git, WORKTREE)).settle(CHAIN).isEmpty()
         git.calls(['restore']).size() == 1
     }
 
@@ -170,6 +170,6 @@ class PendingStateLagSpec extends Specification {
                 .answer(['restore'], 1, '', 'fatal: locked')
 
         expect:
-        new PendingStateLag(git, WORKTREE, 'T-1').settle(CHAIN).get().contains('locked')
+        new PendingStateLag(WorkingCopyGit.host(git, WORKTREE)).settle(CHAIN).get().contains('locked')
     }
 }

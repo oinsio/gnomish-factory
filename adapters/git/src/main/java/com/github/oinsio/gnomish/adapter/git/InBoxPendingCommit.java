@@ -21,7 +21,8 @@ import java.util.List;
  *
  * <ol>
  *   <li>The {@code state.json} bytes go to the box's scratch area, never the working copy, so the
- *       working tree and the index keep what they had — the lag the working-copy check recognises.
+ *       working tree and the index keep what they had — the lag the working-copy check recognises,
+ *       settled after a pending round commit only ({@link PendingStateLag#afterLanding}).
  *   <li>In the box, a private index ({@code GIT_INDEX_FILE}) is read from the round's last
  *       registered commit and only {@code state.json} is added: a check that staged a path in the
  *       box's own index cannot put it into the commit. Then {@code commit-tree -p <registered>}, and

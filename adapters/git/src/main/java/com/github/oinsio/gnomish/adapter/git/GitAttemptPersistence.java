@@ -53,7 +53,9 @@ import java.time.InstantSource;
  * same transaction, its subject rule held by {@link PendingWrite} (design D21 of migrate-verify-to-executor-contract;
  * D7, D11 of extract-agent-round-runner): {@code gnomish: pending <stage>#<round> <token>} for either entry subject, a
  * check's entry above the round's {@code gnomish: snapshot}, the round's own (a pending round commit) above its {@code
- * gnomish: pending-snapshot} (here closed by {@link SnapshottingStageExecutor}, there by the box's round close).
+ * gnomish: pending-snapshot} (here closed by {@link SnapshottingStageExecutor}, there by the box's round close); and
+ * settle the working copy's {@code state.json} lag right after a pending round commit lands, never after a check's,
+ * through the one {@link PendingStateLag#afterLanding} (here the worktree, there the box's working copy).
  *
  * <p>Kill windows: the durability point of each write is its ref transaction. Before it, the branch and the register
  * name the previous closing commit; between it and the push, "closed locally, not pushed", which the next push of the
@@ -100,7 +102,7 @@ public final class GitAttemptPersistence implements AttemptPersistence {
         this.bestEffortPush = BestEffortPush.closing(runner);
         this.rounds = rounds;
         this.pendingCommit = new HostPendingCommit(runner, worktreeRoot, epochs, clock);
-        this.lag = new PendingStateLag(runner, worktreeRoot, taskId);
+        this.lag = new PendingStateLag(WorkingCopyGit.host(runner, worktreeRoot));
     }
 
     /**
@@ -116,9 +118,7 @@ public final class GitAttemptPersistence implements AttemptPersistence {
         AttemptKey key = trace.key();
         Path gnomishTaskRoot = worktreeRoot.resolve(EnvelopePaths.DIR_NAME);
         // The round's base (design D22): its last registered commit, or the tip it opened on.
-        String base = rounds.snapshot()
-                .map(ClosedRound::registered)
-                .orElseGet(() -> rounds.opened().commit());
+        String base = SnapshotOrder.base(rounds.registeredChain(), rounds.opened());
 
         verifyBoundary(taskId, key, base);
 
@@ -153,6 +153,7 @@ public final class GitAttemptPersistence implements AttemptPersistence {
         AttemptKey key = write.key();
         bestEffortPush.pushBestEffort(
                 taskId, key.stage(), key.attempt(), worktreeRoot, branch, boundary.probe(), round.registered());
+        lag.afterLanding(write, rounds.registeredChain());
     }
 
     /** The boundary: committed half, the pending lag, uncommitted half, then the owned paths' restore. */
@@ -160,9 +161,7 @@ public final class GitAttemptPersistence implements AttemptPersistence {
         verdict(taskId, key, boundary.committed(base));
         // The factory's own pending commits are no envelope edit (design D21), judged over the round's
         // registered chain as the cell holds it — never walked again (D14; crash-consistency item 14).
-        lag.settle(rounds.registeredChain()).ifPresent(failure -> {
-            throw new GitPersistFailedException(taskId, key.stage(), key.attempt(), "pending-commit lag", failure);
-        });
+        lag.settled(key, rounds.registeredChain());
         RangeVerdict uncommitted = boundary.uncommitted();
         boundary.restore().ifPresent(failure -> {
             throw new GitPersistFailedException(

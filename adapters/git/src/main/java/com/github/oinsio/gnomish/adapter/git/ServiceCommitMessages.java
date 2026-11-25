@@ -42,6 +42,9 @@ public final class ServiceCommitMessages {
      */
     static final String PENDING_PREFIX = PREFIX + "pending ";
 
+    /** The pending-round snapshot subject's prefix, package-visible as {@link #SNAPSHOT_PREFIX} is (D11). */
+    static final String PENDING_SNAPSHOT_PREFIX = PREFIX + "pending-snapshot ";
+
     private ServiceCommitMessages() {}
 
     /**
@@ -108,12 +111,12 @@ public final class ServiceCommitMessages {
     /**
      * The snapshot message of a {@code transform} round that answered {@code pending}, under its
      * pending round commit: {@code gnomish: pending-snapshot <stage>#<round> <token>} (design D11 of
-     * extract-agent-round-runner). It starts with neither {@link #SNAPSHOT_PREFIX} nor {@link
-     * #PENDING_PREFIX}, so {@link SnapshotTipCheck} never reads it as a round to verify; parameters
-     * as {@link #unverifiedSnapshot}.
+     * extract-agent-round-runner). {@link SnapshotTipCheck} never reads it as a round to verify: a
+     * pending commit above it is a pending round, and it alone a round to re-drive; parameters as
+     * {@link #unverifiedSnapshot}.
      */
     public static String pendingSnapshot(String stage, int round, RoundToken token) {
-        return PREFIX + "pending-snapshot " + stage + "#" + round + " " + token.commit();
+        return PENDING_SNAPSHOT_PREFIX + stage + "#" + round + " " + token.commit();
     }
 
     /**

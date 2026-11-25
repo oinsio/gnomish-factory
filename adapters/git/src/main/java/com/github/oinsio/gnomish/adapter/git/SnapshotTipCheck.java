@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.agent.AnswerFileRead;
 import com.github.oinsio.gnomish.app.port.agent.AnswerFileReading;
+import com.github.oinsio.gnomish.app.port.agent.RoundClose;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
@@ -16,8 +17,6 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,10 +36,14 @@ import org.slf4j.LoggerFactory;
  * 2026-11-13). A malformed subject, or a pending commit standing on no snapshot of its round, is
  * refused.
  *
+ * <p>A pending-round snapshot (D11 of extract-agent-round-runner, "Resume") parses the same way: a
+ * pending commit above it is a pending round ({@link RoundClose#PENDING}); alone it is window K1,
+ * handed back to the ordinary path with a line naming the re-driven {@code start}, never re-verified.
+ *
  * <p>The token, with the stage and round, fixes the one path the round's answer file could live at
  * ({@link EnvelopePaths#answerFile}), so a round killed after asking re-raises its question (FR15,
- * NFR-R4 of make-checkpoint-gate-durable); it travels on through {@link RoundToken#of}, reused,
- * never minted, so the round is restored from the record (FR13 of make-checkpoint-gate-durable).
+ * NFR-R4 of make-checkpoint-gate-durable); it is parsed by the one {@link RoundSubject}, reused, never
+ * minted, so the round is restored from the record (FR13 of make-checkpoint-gate-durable).
  *
  * <p>Reads only commit subjects and one blob as bare-object queries in the factory clone — no
  * checkout, no hooks (FR17); the subjects are a parsing contract ({@link ServiceCommitMessages#snapshot}).
@@ -61,12 +64,7 @@ public final class SnapshotTipCheck {
 
     private static final String PENDING_PREFIX = ServiceCommitMessages.PENDING_PREFIX;
 
-    /**
-     * What follows the prefix: {@code <stage>#<round> <token>}. The stage is everything before the
-     * last {@code #}; the token has {@link RoundToken}'s own shape, so a subject the writer could
-     * not have produced — the token-less form included — is refused here rather than half-read.
-     */
-    private static final Pattern STAGE_ROUND_TOKEN = Pattern.compile("(.+)#([0-9]+) ([0-9a-f]+)");
+    private static final String PENDING_SNAPSHOT_PREFIX = ServiceCommitMessages.PENDING_SNAPSHOT_PREFIX;
 
     private final GitRunner runner;
     private final Path cloneDir;
@@ -117,51 +115,51 @@ public final class SnapshotTipCheck {
         String line = subjectLine.stdout().forParsing().strip();
         if (line.startsWith(SNAPSHOT_PREFIX)) {
             return round(taskId, branch, line.substring(SNAPSHOT_PREFIX.length()))
-                    .map(round -> verification(registered, List.of(registered.id()), round));
+                    .map(round -> verification(
+                            registered, new PendingChain.Walk(List.of(registered.id()), RoundClose.VERIFIABLE), round));
         }
         if (line.startsWith(PENDING_PREFIX)) {
             return round(taskId, branch, line.substring(PENDING_PREFIX.length()))
                     .flatMap(round -> chain.snapshotBelow(branch, registered, round.key(), round.token())
-                            .map(chain -> verification(registered, chain, round)));
+                            .map(walk -> verification(registered, walk, round)));
+        }
+        if (line.startsWith(PENDING_SNAPSHOT_PREFIX)) {
+            round(taskId, branch, line.substring(PENDING_SNAPSHOT_PREFIX.length()))
+                    .ifPresent(round -> log.info(
+                            "the register of {} names the pending-round snapshot of {} round {} (token {}) with no"
+                                    + " pending round commit above it: its start is re-driven, nothing is re-verified (K1)",
+                            branch,
+                            round.key().stage(),
+                            round.key().attempt(),
+                            round.token().commit()));
         }
         return Optional.empty();
     }
 
-    /** The round a well-formed subject names: its stage and number, and its token. */
-    private record Round(AttemptKey key, RoundToken token) {}
-
-    /** The round {@code rest}, a subject past its prefix, names, or empty (traced) when malformed. */
-    private static Optional<Round> round(String taskId, String branch, String rest) {
-        Matcher subject = STAGE_ROUND_TOKEN.matcher(rest);
-        if (!subject.matches()) {
+    /** The round {@code rest}, a subject past its prefix, names through the one parse, or empty (traced). */
+    private static Optional<RoundSubject> round(String taskId, String branch, String rest) {
+        Optional<RoundSubject> round = RoundSubject.parse(taskId, rest);
+        if (round.isEmpty()) {
             warnMalformed(branch, rest);
-            return Optional.empty();
         }
-        try {
-            var key = new AttemptKey(taskId, subject.group(1), Integer.parseInt(subject.group(2)));
-            return Optional.of(new Round(key, RoundToken.of(subject.group(3))));
-        } catch (IllegalArgumentException e) {
-            // A blank stage or a round past int range: the shape matched, the values did not.
-            warnMalformed(branch, rest);
-            return Optional.empty();
-        }
+        return round;
     }
 
     /**
-     * The interrupted verification of {@code round} judged at the snapshot that ends {@code chain}, the
-     * registered chain from the register down, whose answer file is read
-     * at the register: a pending commit's tree is its snapshot's with only {@code state.json} replaced
-     * (its admission refuses any other path), so the round's answer path reads the same blob there.
+     * The interrupted round {@code round} names, of the kind the bottom of {@code walk}'s chain names,
+     * its answer file read at the register: a pending commit's tree is its snapshot's with only {@code
+     * state.json} replaced (its admission refuses any other path), so the answer path reads the same blob.
      */
-    private PendingVerification verification(RegisteredCommit registered, List<String> chain, Round round) {
+    private PendingVerification verification(RegisteredCommit registered, PendingChain.Walk walk, RoundSubject round) {
         return new PendingVerification(
-                chain.getLast(),
+                walk.chain().getLast(),
                 round.key().stage(),
                 round.key().attempt(),
                 round.token(),
+                walk.close(),
                 answer(registered, round.key(), round.token()),
                 registered.id(),
-                chain);
+                walk.chain());
     }
 
     /**

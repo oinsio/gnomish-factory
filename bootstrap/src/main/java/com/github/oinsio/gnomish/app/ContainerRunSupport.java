@@ -66,7 +66,7 @@ final class ContainerRunSupport implements SandboxRunSupport {
     final ContainerEnvironments environments;
     final EnvironmentLease lease;
     // The run's one round cell (design D10 of make-checkpoint-gate-durable): the round source
-    // opens each round in it, the snapshot closes it, the resume executor restores an interrupted
+    // opens each round in it, the snapshot closes it, the run's assembly restores an interrupted
     // one; the persistence and the check workspace read the closed round from it.
     final CurrentRound rounds = new CurrentRound();
     final GitObjects gitObjects;

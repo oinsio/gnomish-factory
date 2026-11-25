@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app.port.git;
 
 import com.github.oinsio.gnomish.app.port.agent.AnswerFileRead;
 import com.github.oinsio.gnomish.app.port.agent.AnswerFileReading;
+import com.github.oinsio.gnomish.app.port.agent.RoundClose;
 import com.github.oinsio.gnomish.domain.engine.RoundToken;
 import java.util.List;
 
@@ -27,7 +28,7 @@ import java.util.List;
  * extract-agent-round-runner, design D15: recovery parses through the live path's read).
  *
  * <p>The round's token travels on the value, typed, as the snapshot subject recorded it: the
- * resuming executor {@linkplain CurrentRound#restore restores} the round from it, so the pickup's
+ * run's assembly {@linkplain CurrentRound#restore restores} the round from it, so the pickup's
  * state commit is judged against the identity the round opened under and never against a re-read
  * tip (FR13, FR15 of make-checkpoint-gate-durable, design D10 as amended 2026-10-07).
  *
@@ -39,14 +40,23 @@ import java.util.List;
  * 2026-11-13): {@code registered} first, {@code attemptCommit} last — so the run's round cell holds
  * the chain from the record and nothing walks it again (crash-consistency item 14).
  *
- * <p>Implements FR21 of add-sandbox-core; FR3, FR20 of migrate-verify-to-executor-contract; FR21 of
- * extract-agent-round-runner.
+ * <p>The bottom of the chain names its kind (design D11 of extract-agent-round-runner, "Resume"): a
+ * snapshot is an interrupted verification ({@link RoundClose#VERIFIABLE}), a pending-round snapshot
+ * below at least one pending round commit a pending round ({@link RoundClose#PENDING}), which the run's
+ * assembly restores into the round cell as such and the engine continues with a {@code poll} — never
+ * re-verified, never answered {@code Completed}. A pending-round snapshot alone is no value of this
+ * type: its round is re-driven.
+ *
+ * <p>Implements FR21 of add-sandbox-core; FR3, FR20 of migrate-verify-to-executor-contract; FR11,
+ * FR21, NFR-R3 of extract-agent-round-runner.
  *
  * @param attemptCommit the sha of the snapshot (attempt) commit to verify; never null
  * @param stage the stage the interrupted round belonged to; never null
  * @param round the interrupted round's number within that stage
  * @param token the identity the interrupted round opened under, from its snapshot subject; never
  *     null
+ * @param close the kind the chain's bottom names: {@link RoundClose#VERIFIABLE} for a snapshot,
+ *     {@link RoundClose#PENDING} for a pending-round snapshot; never {@link RoundClose#UNVERIFIABLE}
  * @param answer the reading of the answer file the snapshot's tree holds under the round's token:
  *     absent when the round wrote none; never null
  * @param registered the round's last registered commit: {@code attemptCommit} when the register
@@ -59,14 +69,29 @@ public record PendingVerification(
         String stage,
         int round,
         RoundToken token,
+        RoundClose close,
         AnswerFileReading answer,
         String registered,
         List<String> chain) {
 
-    /** Copies the chain, and refuses one that does not run from {@code registered} to the snapshot. */
+    /**
+     * Copies the chain, and refuses one that does not run from {@code registered} to the snapshot, an
+     * unverifiable kind, and a pending round with no pending commit above its pending-round snapshot.
+     */
     public PendingVerification {
         chain = List.copyOf(chain);
         requireSpans(chain, registered, attemptCommit);
+        requireKind(close, chain);
+    }
+
+    private static void requireKind(RoundClose close, List<String> chain) {
+        if (close == RoundClose.UNVERIFIABLE) {
+            throw new IllegalArgumentException("an unverified snapshot is resumed by no one");
+        }
+        if (close == RoundClose.PENDING && chain.size() < 2) {
+            throw new IllegalArgumentException(
+                    "a pending round stands on a pending round commit; a pending-round snapshot alone is re-driven");
+        }
     }
 
     private static void requireSpans(List<String> chain, String registered, String attemptCommit) {

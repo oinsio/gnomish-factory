@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -28,7 +29,7 @@ class PendingChainSpec extends Specification {
 
     def git = new ScriptedGit()
 
-    private Optional<List<String>> walk() {
+    private Optional<PendingChain.Walk> walk() {
         new PendingChain(git, Path.of('clone')).snapshotBelow('gnomish/TIP-1', new RegisteredCommit(PENDING), KEY, TOKEN)
     }
 
@@ -80,7 +81,7 @@ class PendingChainSpec extends Specification {
         git.answer(LOG + PARENT, 0, 'd' * 40 + '\n' + ServiceCommitMessages.snapshot('implement', 3, TOKEN) + '\n')
 
         expect:
-        walk() == Optional.of([PENDING, PARENT])
+        walk() == Optional.of(new PendingChain.Walk([PENDING, PARENT], RoundClose.VERIFIABLE))
         git.calls()*.command() == [LOG + PENDING, LOG + PARENT]
     }
 
@@ -93,10 +94,25 @@ class PendingChainSpec extends Specification {
         git.answer(LOG + PARENT, 0, 'd' * 40 + '\n' + ServiceCommitMessages.snapshot('implement', 3, TOKEN) + '\n')
 
         when:
-        def chain = walk().get()
+        def chain = walk().get().chain()
 
         then:
         chain == [PENDING, middle, PARENT]
         git.calls()*.command() == chain.collect { LOG + it }
+    }
+
+    // FR11 of extract-agent-round-runner (design D11, "Resume"): the bottom of the chain names its kind
+    def "FR11: a walk ending on the round's #bottom answers #close"() {
+        given:
+        git.answer(LOG + PENDING, 0, PARENT + '\n' + ServiceCommitMessages.pending('implement', 3, TOKEN) + '\n')
+        git.answer(LOG + PARENT, 0, 'd' * 40 + '\n' + subject + '\n')
+
+        expect:
+        walk() == Optional.of(new PendingChain.Walk([PENDING, PARENT], close))
+
+        where:
+        bottom | subject || close
+        'snapshot' | ServiceCommitMessages.snapshot('implement', 3, TOKEN) || RoundClose.VERIFIABLE
+        'pending-round snapshot' | ServiceCommitMessages.pendingSnapshot('implement', 3, TOKEN) || RoundClose.PENDING
     }
 }

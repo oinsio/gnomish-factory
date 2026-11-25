@@ -144,7 +144,8 @@ class RoundTokenIdentitySpec extends Specification implements BareGitRepoFixture
         } as StageExecutor
 
         when: 'the pickup re-verifies without an agent round and persists, as the engine does'
-        def result = new ResumeVerificationStageExecutor(noAgent, rounds, pending).execute(request)
+        rounds.restore(pending)
+        def result = new ResumeVerificationStageExecutor(noAgent, pending).execute(request)
         persistRound(pickupBox, pickupClone, rounds)
 
         then: 'the request is re-raised from the snapshot, and the state commit landed on the snapshot itself'

@@ -17,11 +17,13 @@ import org.jspecify.annotations.Nullable;
  * {@code RoundTokenMint} in {@code adapters/git}, which both branch-mode round sources call), {@link #snapshotted} where the one round snapshot step lands the round's
  * snapshot, {@link #pendingRegistered} where a persistence lands a pending commit on it (design D21 of
  * migrate-verify-to-executor-contract), and {@link #restore} on the resume path, which runs those
- * same transitions over the durable record of an interrupted round. <b>Readers</b> get distinct
+ * same transitions over the durable record of an interrupted round, at the run's assembly (D11 of
+ * extract-agent-round-runner, "Resume"). <b>Readers</b> get distinct
  * types: {@link #opened()} yields the {@link RoundToken}, {@link #closed()} a {@link ClosedRound},
  * {@link #snapshot()} the same while the round may still be open, so a consumer of a closed round
  * cannot compile against an open one; {@link #takeToken()}, the domain port, yields the open round's
- * token once per opened round for its record (FR14, FR21 of define-executor-contract); the read-only
+ * token once per opened round for its record (FR14, FR21 of define-executor-contract), {@link
+ * #pendingToken()} a restored pending round's untaken token; the read-only
  * role {@link LastRegisteredCommit} yields the round's registered commits.
  *
  * <p>Why a cell: it bridges ports that cannot carry a round identity ({@code
@@ -94,15 +96,15 @@ public final class CurrentRound implements RoundIdentity, LastRegisteredCommit {
 
     /**
      * Restores the interrupted round a resume found at the register: {@link #open} over its recorded
-     * token, {@link #snapshotted} over its snapshot commit, then {@link #pendingRegistered} over each
-     * pending commit of its registered chain, bottom up — the same transitions a live round runs, none
-     * of the last kind when the register names the snapshot itself (design D21, D14 as amended
-     * 2026-11-13, of migrate-verify-to-executor-contract).
+     * token, {@link #snapshotted} over its snapshot commit with the kind its subject names, then {@link
+     * #pendingRegistered} over each pending commit of its registered chain, bottom up — the same
+     * transitions a live round runs, none of the last kind when the register names the snapshot itself
+     * (design D21, D14 as amended 2026-11-13, of migrate-verify-to-executor-contract); a pending round
+     * as its {@code start} left it, pending (design D11 of extract-agent-round-runner, "Resume").
      */
     public void restore(PendingVerification pending) {
         open(pending.token());
-        // Only a snapshot subject is resumed as an interrupted verification: it closed verifiable.
-        snapshotted(pending.attemptCommit(), RoundClose.VERIFIABLE);
+        snapshotted(pending.attemptCommit(), pending.close());
         List<String> above = pending.chain().subList(0, pending.chain().size() - 1);
         for (String commit : above.reversed()) {
             pendingRegistered(commit);
@@ -133,6 +135,17 @@ public final class CurrentRound implements RoundIdentity, LastRegisteredCommit {
         }
         state = new State(s.token(), s.snapshot(), true);
         return Optional.of(s.token());
+    }
+
+    /** {@inheritDoc} Set by {@link #restore}: a live round's token is taken before its pending commit lands. */
+    @Override
+    public Optional<RoundToken> pendingToken() {
+        State s = state;
+        if (s == null || s.taken()) {
+            return Optional.empty();
+        }
+        Snapshot snapshot = s.snapshot();
+        return snapshot != null && snapshot.close() == RoundClose.PENDING ? Optional.of(s.token()) : Optional.empty();
     }
 
     /**

@@ -128,7 +128,7 @@ class AnswerReadIdentitySpec extends Specification implements BareGitRepoFixture
         def noAgent = { StageExecutor.Request r ->
             throw new AssertionError('a pending verification runs no agent round')
         } as StageExecutor
-        new ResumeVerificationStageExecutor(noAgent, new CurrentRound(), pending).execute(request)
+        new ResumeVerificationStageExecutor(noAgent, pending).execute(request)
     }
 
     /** A created task in a factory clone of its own, with a bare origin beside it ({@code origin.git}). */

@@ -1,10 +1,12 @@
 package com.github.oinsio.gnomish.adapter.agent
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentInvocation
 import com.github.oinsio.gnomish.app.port.agent.TerminalClose
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -112,5 +114,27 @@ class HostRoundEnvironmentSourceSpec extends Specification {
 
         then:
         !Files.exists(round.answerFilePath())
+    }
+
+    // FR10, D14 as amended 2026-11-25: a second open while a round is held is refused before a
+    //     second environment is materialized, so no scratch area is allocated for it
+    def "FR10: a second open while a round is held materializes no environment"() {
+        given:
+        def first = source.openRound(StageExecutorRequests.request(workspaceDir))
+        def logs = LogCaptureSupport.attach(HostTaskExecutionEnvironment, Level.DEBUG)
+
+        when:
+        source.openRound(StageExecutorRequests.request(workspaceDir))
+
+        then:
+        def refused = thrown(IllegalStateException)
+        refused.message.contains('a second open is refused')
+        !logs.list.any {
+            it.formattedMessage.startsWith('host environment materialized')
+        }
+
+        cleanup:
+        logs?.detach()
+        first?.discard()
     }
 }

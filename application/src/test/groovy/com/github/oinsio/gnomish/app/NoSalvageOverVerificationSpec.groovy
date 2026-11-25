@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.port.agent.AnswerFileReading
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.git.PendingVerification
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager
@@ -22,7 +23,7 @@ class NoSalvageOverVerificationSpec extends Specification {
     static final Path WORKTREE = Path.of('/tmp/worktree')
 
     static final PendingVerification SNAPSHOT =
-    new PendingVerification('snap', 'build', 0, RoundToken.of('0a1b2c'), new AnswerFileReading.Absent(), 'pending', ['pending', 'snap'])
+    new PendingVerification('snap', 'build', 0, RoundToken.of('0a1b2c'), RoundClose.VERIFIABLE, new AnswerFileReading.Absent(), 'pending', ['pending', 'snap'])
 
     WorktreeSalvager salvager = Mock()
 

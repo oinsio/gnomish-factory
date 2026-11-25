@@ -57,6 +57,11 @@ class InBoxPendingRoundCommitSpec extends Specification implements InBoxPendingR
         entries.first().token() == token
         entries.first().key() == new PendingKey('job-7')
 
+        and: 'the box\'s working copy no longer lags it: its index and working tree carry its state.json (D11, F1)'
+        gitOutput(box.workingCopy, 'rev-parse', 'HEAD') == pending
+        gitOutput(box.workingCopy, 'rev-parse', ':' + STATE) == gitOutput(cloneDir, 'rev-parse', pending + ':' + STATE)
+        gitOutput(box.workingCopy, 'hash-object', '--no-filters', '--', STATE) == gitOutput(cloneDir, 'rev-parse', pending + ':' + STATE)
+
         and: 'the cell holds the round open at its snapshot, with the pending commit as its last registered commit'
         rounds.snapshot().get() == new ClosedRound(token, snapshot, pending, RoundClose.PENDING)
     }
@@ -84,5 +89,69 @@ class InBoxPendingRoundCommitSpec extends Specification implements InBoxPendingR
         registered() == stateCommit
         parentsOf(stateCommit) == pending
         !gitOutput(cloneDir, 'show', stateCommit + ':' + STATE).contains('job-7')
+    }
+
+    // Scenario: git/git-task-persistence / The closing snapshot sits on the last pending round commit
+    def "FR10: the terminal poll of a pending box round snapshots it on its last pending round commit under the round's token"() {
+        given: 'the round\'s pending round commit is registered above its pending-round snapshot'
+        def token = rounds.opened()
+        persistence().persistPending(TASK, roundPendingState('job-7'))
+        def pending = tip()
+
+        when: 'the round closes after its terminal poll'
+        def closing = snapshotStep.snapshot(TASK, 'implement', 1, RoundClose.VERIFIABLE)
+
+        then: 'the closing snapshot is admitted with its register, its only parent the pending round commit'
+        tip() == closing
+        registered() == closing
+        parentsOf(closing) == pending
+
+        and: 'its subject names the token of the round\'s pending-round snapshot'
+        gitOutput(cloneDir, 'log', '-1', '--format=%s', snapshot) == ServiceCommitMessages.pendingSnapshot('implement', 1, token)
+        gitOutput(cloneDir, 'log', '-1', '--format=%s', closing) == ServiceCommitMessages.snapshot('implement', 1, token)
+        rounds.closed() == new ClosedRound(token, closing, closing, RoundClose.VERIFIABLE)
+
+        and: 'the box\'s state.json lag was settled before the staging, so the snapshot changes nothing'
+        changedIn(closing).isEmpty()
+
+        when: 'the round\'s state commit lands'
+        def key = new AttemptKey(TASK, 'implement', 1)
+        persistence().persist(TASK, RoundStates.recorded(key), new ToolTrace(key, []))
+
+        then:
+        parentsOf(tip()) == closing
+    }
+
+    // Scenario: git/git-task-persistence / The factory's own commits of a pending round are no gnome commits
+    def "FR10: a pending box round whose executor committed during a poll is admitted from its last pending round commit"() {
+        given:
+        persistence().persistPending(TASK, roundPendingState('job-7'))
+        def pending = tip()
+
+        when: 'the executor commits in the box during the terminal poll, and the round closes'
+        commit(box.workingCopy, 'polled.txt', 'polled')
+        def closing = snapshotStep.snapshot(TASK, 'implement', 1, RoundClose.VERIFIABLE)
+
+        then: 'the admitted range is the executor\'s commit and the closing snapshot above the pending round commit'
+        registered() == closing
+        gitOutput(cloneDir, 'log', '--format=%s', "${pending}..${closing}").readLines() == [
+            ServiceCommitMessages.snapshot('implement', 1, rounds.opened()),
+            'polled.txt'
+        ]
+
+        and: 'no boundary violation is reported for the box\'s state.json at the round\'s close'
+        def key = new AttemptKey(TASK, 'implement', 1)
+        persistence().persist(TASK, RoundStates.recorded(key), new ToolTrace(key, []))
+        parentsOf(tip()) == closing
+    }
+
+    // FR10 (design D11 as amended 2026-11-25): the box medium settles the lag through the one
+    //     PendingStateLag, run in the box, and hands back a restore it could not make
+    def "FR10: the box medium reports a lag it recognised and could not restore"() {
+        given: 'a chain whose last registered commit cannot be read, above the snapshot the box\'s index carries'
+        def order = new SnapshotOrder(new AttemptKey(TASK, 'implement', 1), rounds.opened(), 'unused', ['f' * 40, snapshot])
+
+        expect:
+        new InBoxSnapshot(box, runner, cloneDir).settle(order).isPresent()
     }
 }

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.adapter.agent.program.AnswerOutcome;
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramResultMapping;
+import com.github.oinsio.gnomish.app.port.agent.RoundClose;
 import com.github.oinsio.gnomish.app.port.git.CurrentRound;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
@@ -24,10 +25,11 @@ import org.slf4j.LoggerFactory;
  * ({@link PendingVerification}), the factory died between
  * the snapshot and the state commit — the gnome's round completed, only its
  * verification was lost. The first {@link #execute} matching that snapshot's
- * stage and round therefore skips the agent entirely: it restores the interrupted
- * round into the run's {@link CurrentRound} — the token its snapshot recorded and the
- * snapshot itself, through the same two transitions a live round runs (design D10 of
- * make-checkpoint-gate-durable, as amended 2026-10-07) — and returns a {@link
+ * stage and round therefore skips the agent entirely: the run's assembly has already restored the
+ * interrupted round into the run's {@link CurrentRound} — the token its snapshot recorded and the
+ * snapshot itself, through the same transitions a live round runs (design D10 of
+ * make-checkpoint-gate-durable, as amended 2026-10-07; D11 of extract-agent-round-runner, "Resume":
+ * the cell has one recovery producer, never this decorator) — and it returns a {@link
  * ExecutionResult#completed} result with empty telemetry (the original round's trace died
  * with the unrecorded state commit), so the engine proceeds straight to verification of exactly the
  * harvested attempt commit — no agent re-run, no attempt burned. Every other
@@ -50,6 +52,11 @@ import org.slf4j.LoggerFactory;
  * chain on the state the pickup read at the register — this decorator stays the one owner that skips
  * the executor.
  *
+ * <p>A pending round ({@link RoundClose#PENDING}: a pending round commit above the round's pending-round
+ * snapshot, design D11 of extract-agent-round-runner) is recognised by the same recogniser but is no
+ * interrupted verification: the engine continues its entry with a {@code poll} and never calls {@link
+ * #execute} for it, so this decorator answers nothing for it and never a {@code Completed}.
+ *
  * <p>It wraps the stage chain of both branch modes (design D22 of
  * migrate-verify-to-executor-contract): the container's, and the git-mode host's over the run's one
  * cell, above the host snapshot step so a resumed round is not snapshotted again. A host snapshot
@@ -69,21 +76,18 @@ public final class ResumeVerificationStageExecutor implements StageExecutor {
     private static final Usage RECOVERED = new Usage(UsageProvenance.ABSENT, 0L, Map.of(), List.of());
 
     private final StageExecutor delegate;
-    private final CurrentRound rounds;
 
     private @Nullable PendingVerification pending;
 
     /**
      * @param delegate the real executor every non-matching round runs through; never null
-     * @param rounds the run's round cell the pending round is restored into
-     * @param pending the interrupted verification found at the branch tip, or null for none —
-     *     consumed by the first matching round
+     * @param pending the interrupted round found at the branch tip, or null for none — an interrupted
+     *     verification is consumed by the first matching round; a pending round is answered by no
+     *     {@code execute}
      */
-    public ResumeVerificationStageExecutor(
-            StageExecutor delegate, CurrentRound rounds, @Nullable PendingVerification pending) {
+    public ResumeVerificationStageExecutor(StageExecutor delegate, @Nullable PendingVerification pending) {
         this.delegate = delegate;
-        this.rounds = rounds;
-        this.pending = pending;
+        this.pending = pending != null && pending.close() == RoundClose.VERIFIABLE ? pending : null;
     }
 
     @Override
@@ -91,7 +95,6 @@ public final class ResumeVerificationStageExecutor implements StageExecutor {
         PendingVerification p = pending;
         if (p != null && p.stage().equals(request.stage().name()) && p.round() == request.attempt()) {
             pending = null;
-            rounds.restore(p);
             log.info(
                     "resuming interrupted verification of {} round {} at attempt commit {} — no agent re-run,"
                             + " no attempt burned (FR21)",

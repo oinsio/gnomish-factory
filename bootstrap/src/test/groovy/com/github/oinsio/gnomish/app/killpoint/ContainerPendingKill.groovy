@@ -137,7 +137,9 @@ final class ContainerPendingKill {
         } as StageExecutor
         // The round's clock starts at the entries' `since`, so a recorded deadline is the check's own.
         def clock = new VirtualClock()
-        def resume = new ResumeVerificationStageExecutor(counted, cell, found.orElse(null))
+        // As the run's assembly does, before the engine's first request (D11, "Resume").
+        found.ifPresent(cell.&restore)
+        def resume = new ResumeVerificationStageExecutor(counted, found.orElse(null))
         def port = programs != null ? programs.port(resume, world, cell)
                 : HandAssembledCheckDispatch.routed(resume, world.definition, world.repoDir, BuiltInEntriesFixture.of(clock, [:], ['loopback']))
         // A program's fresh box reads the attempt commit off the run's cell, as the container run's workspace does.
