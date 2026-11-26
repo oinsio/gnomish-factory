@@ -30,10 +30,11 @@ class RoundLogLineSpec extends Specification {
         MdcEventListener.clearAttemptScope()
     }
 
-    def lineOf(RoundExecutor executor, ExecutionResult.Status status) {
+    def lineOf(RoundExecutor executor, ExecutionResult.Status status, UntrustedText pendingKey = null, UntrustedText resumedKey = null) {
         def events = MdcAwareThread.taskScope(KEY.taskId()).withCloseable {
             LogCaptureSupport.capture(LoggingEventListener, Level.INFO) {
-                listeners.onEvent(new EngineEvent.ExecutionFinished(KEY, Participants.transform('agent-cli', ExecutorUsage.none()), executor, status))
+                listeners.onEvent(new EngineEvent.ExecutionFinished(KEY, Participants.transform('agent-cli', ExecutorUsage.none()), executor, status,
+                pendingKey, resumedKey))
             }
         }
         assert events.size() == 1
@@ -71,6 +72,33 @@ class RoundLogLineSpec extends Specification {
         line.formattedMessage.contains('status=completed')
         line.formattedMessage.contains('class=-')
         line.formattedMessage.contains('bound=-')
+        line.formattedMessage.contains('pendingKey=-, resumedKey=-,')
+    }
+
+    // UX3, NFR-C2 of extract-agent-round-runner: a run has no ledger, so its round line names the key a start went pending with, or the one a resume took
+    def "a pending round's line names the key its start went pending with, or the key a resume took, neutralized"() {
+        when:
+        def line = lineOf(new RoundExecutor('service', UntrustedText.subprocess('1')), new ExecutionResult.Completed(),
+                pending == null ? null : UntrustedText.subprocess(pending), resumed == null ? null : UntrustedText.subprocess(resumed))
+
+        then:
+        line.formattedMessage.contains("pendingKey=${shownPending}, resumedKey=${shownResumed},")
+
+        where:
+        pending | resumed || shownPending | shownResumed
+        'job-7' | null || 'job-7' | '-'
+        null | 'job-7' || '-' | 'job-7'
+    }
+
+    // NFR-S2: a key is the executor's own text, so it reaches the line through its log exit
+    def "a pending key carrying control characters reaches the line neutralized"() {
+        when:
+        def line = lineOf(new RoundExecutor('service', null), new ExecutionResult.Completed(),
+                UntrustedText.subprocess("job\u001b[31m\nforged"), UntrustedText.subprocess("job\u001b[31m\nforged"))
+
+        then:
+        !line.formattedMessage.contains('\u001b')
+        !line.formattedMessage.contains('\n')
     }
 
     // NFR-O2, NFR-S2: the executor's own text leaves through its log exit — one line, no control bytes

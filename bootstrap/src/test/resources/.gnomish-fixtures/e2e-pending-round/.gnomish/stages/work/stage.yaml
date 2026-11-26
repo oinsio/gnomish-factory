@@ -1,0 +1,12 @@
+purpose: hand the work to a remote service through a pollable program and keep the change it makes
+executor:
+  type: program
+  name: service
+instructions: stages/work/instructions.md
+verify:
+  - type: builtin
+    name: files_exist
+    params:
+      files:
+        - new-1.txt
+advancement: auto

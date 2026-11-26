@@ -55,3 +55,32 @@ start run steps/scripted-verdict.sh
 start exit 0
 poll run steps/scripted-verdict.sh
 poll exit 0
+
+[transform-service-holding]
+# The fixture service of the packaged-jar journey of a pending transform round (task 7.1 of
+# extract-agent-round-runner, M5): a pollable transform program (data/executor-describe#transform-poll)
+# whose run lives in the service, never in its working copy. Every request is recorded in the per-run
+# `<link>.log` with the key it polls, so the log is the service's count of `start`s; `start` submits
+# the job and answers pending with its key (data/executor-result#pending). A poll holds the job: it
+# becomes a sleep a kill ends, so its record tells the spec the pending round commit was pushed (a poll
+# follows the push). The spec re-points the link at [transform-service] for the next instance.
+* record GNOMISH_PENDING_KEY
+describe result data/executor-describe#transform-poll
+describe exit 0
+start result data/executor-result#pending
+start exit 0
+poll stall 900
+
+[transform-service]
+# The same service with the job finished: `start` answers pending with the same key, and a poll writes
+# the job's change into the working copy it runs in (`new-1.txt`, steps/working-copy-edit.sh) and
+# answers completed (data/executor-result#transform). Recorded as [transform-service-holding].
+* record GNOMISH_PENDING_KEY
+describe result data/executor-describe#transform-poll
+describe exit 0
+start result data/executor-result#pending
+start exit 0
+poll export EDIT files-1
+poll run steps/working-copy-edit.sh
+poll result data/executor-result#transform
+poll exit 0

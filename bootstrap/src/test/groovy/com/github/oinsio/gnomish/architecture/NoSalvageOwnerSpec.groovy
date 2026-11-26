@@ -8,7 +8,8 @@ import spock.lang.Specification
  * interrupted-verification resume": the one owner of "no salvage over an interrupted verification"
  * is {@code NoSalvageOverVerification}. Every path that settles an interrupted round's leftovers —
  * both media's resume preparation and both revocation stops — reaches the salvage and the discard
- * through it, so none can salvage over a registered snapshot or pending commit again. Before it,
+ * through it, so none can salvage over a registered snapshot or pending commit again; the in-box
+ * reset over a pending round (D11 of extract-agent-round-runner, "Resume") is reached the same way. Before it,
  * {@code GitResumeContinuation}, {@code TakeResumeRunner}, {@code RevocationHandler} and {@code
  * ContainerRunSupport.revocationSalvageAndPush} each salvaged unconditionally.
  *
@@ -32,9 +33,13 @@ class NoSalvageOwnerSpec extends Specification {
         ],
         discard: [
             (OWNER): 'the owner: the host discard over an interrupted verification or under --discard-work',
+            (BOX): 'discardLeftovers itself, the in-box reset the owner calls over a pending round',
         ],
         salvageLeftovers: [
             (OWNER): 'the owner: the in-box salvage when the register names no interrupted verification',
+        ],
+        discardLeftovers: [
+            (OWNER): 'the owner: the in-box reset over a pending round, so its resumed poll runs at the register (D11 of extract-agent-round-runner)',
         ],
     ]
 
@@ -42,6 +47,7 @@ class NoSalvageOwnerSpec extends Specification {
         salvage: /\.\s*salvage\s*\(/,
         discard: /\.\s*discard\s*\(\s*\)/,
         salvageLeftovers: /\.\s*salvageLeftovers\s*\(/,
+        discardLeftovers: /\.\s*discardLeftovers\s*\(/,
     ]
 
     // FR19: the leftovers of an interrupted round are settled through the one owner only
@@ -69,7 +75,8 @@ class NoSalvageOwnerSpec extends Specification {
         shape << [
             'salvage',
             'discard',
-            'salvageLeftovers'
+            'salvageLeftovers',
+            'discardLeftovers'
         ]
     }
 
@@ -88,5 +95,7 @@ class NoSalvageOwnerSpec extends Specification {
         'a discard of something else' | 'discard' | 'round.discardLater();' || false
         'an in-box salvage' | 'salvageLeftovers' | 'support.salvageLeftovers(taskId);' || true
         'its declaration' | 'salvageLeftovers' | 'void salvageLeftovers(String taskId);' || false
+        'an in-box reset' | 'discardLeftovers' | 'support.discardLeftovers();' || true
+        'its declaration' | 'discardLeftovers' | 'public void discardLeftovers() {' || false
     }
 }

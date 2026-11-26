@@ -533,7 +533,7 @@ Old way: `Request.pending()`; `rounds.openRound(request)` and `round.closeRound(
   snapshot of a pending round", markers included; the `@PendingFeature` of 6.4a removed and
   `PendingRoundFlowSpec` green on both media; `scripts/linux-specs.sh` for the host half, whose
   subject is real git (FR10, NFR-R4, D11)
-- [ ] 6.5 One path, live and resumed (D11, "Resume"). Premise check first, with `file:line`:
+- [x] 6.5 One path, live and resumed (D11, "Resume"). Premise check first, with `file:line`:
   nothing opens a round between the run's assembly and the engine's first request — a refuted
   premise is a blocker under `spec-mismatch.md`. Then: `SnapshotTipCheck` and `PendingChain` read
   the pending-round snapshot subject, so a pending commit above one is a pending round and a
@@ -550,12 +550,12 @@ Old way: `Request.pending()`; `rounds.openRound(request)` and `round.closeRound(
   a pending round", markers included; identity spec `PendingRoundIdentitySpec` on a real bare
   origin — the round token, the usage participants and the ledger lines of a round closed by a
   second instance equal those of the round that went pending (FR11, NFR-R3, NFR-R4, D11)
-- [ ] 6.6 Key rotation for a round (FR12, reuse): `migrate-verify-to-executor-contract` owns the
+- [x] 6.6 Key rotation for a round (FR12, reuse): `migrate-verify-to-executor-contract` owns the
   rule (its FR10, D12; proposal Q3, closed 2026-11-02); this task adds only the `Round` subject's
   case — the new key lands in a pending round commit through the persistence pair of 6.4, the
   attempt stays open — with a feature for the `pipeline/stage-engine` scenario "A changed key of a
   pending round lands in a pending round commit", marker included; no second rotation path
-- [ ] 6.7 Kill-point specs on a real bare origin for windows K1–K5 and after the round close
+- [x] 6.7 Kill-point specs on a real bare origin for windows K1–K5 and after the round close
   (design D11), each resumed by a second instance, each followed by a second recovery pass that
   changes nothing; K1 — killed before the snapshot, and with the pending-round snapshot registered
   but no pending commit — asserts the re-driven `start` is in the ledger; K3 and K4 assert no `start`
@@ -566,7 +566,7 @@ Old way: `Request.pending()`; `rounds.openRound(request)` and `round.closeRound(
   (`pipeline/stage-engine` "Kill after the terminal snapshot re-verifies without a poll",
   `lifecycle/task-branch-contract` "A closing snapshot above pending round commits is an
   interrupted verification", markers included) (NFR-R3, NFR-C2)
-- [ ] 6.8 Owner gate and sweep: `ExecutorPollOwnerSpec` (`:bootstrap`) — `.poll(` on an `Executor`
+- [x] 6.8 Owner gate and sweep: `ExecutorPollOwnerSpec` (`:bootstrap`) — `.poll(` on an `Executor`
   in `domain`/`application` main sources only in `PendingPoll`, the allowlist asserted reached;
   sweep `grep -rn "cannot poll\|PendingRuns\|\.poll(" --include='*.java' */src/main
   adapters/*/src/main` and report each hit as routed, removed or exempt with its reason (D8);
@@ -575,9 +575,9 @@ Old way: `Request.pending()`; `rounds.openRound(request)` and `round.closeRound(
   the two minting sources, the allowlist asserted reached — with its sweep
   `grep -rn "openRound(\|closeRound(\|\.pending()\|mint\.open(" --include='*.java' */src/main
   adapters/*/src/main`, each hit reported the same way (D8 row "The round's continuation")
-- [ ] 6.9 Glossary: "pending key" entry (from `migrate-verify-to-executor-contract`) extended to
+- [x] 6.9 Glossary: "pending key" entry (from `migrate-verify-to-executor-contract`) extended to
   the `transform` round; new entries "pending round commit" and "pending-round snapshot"
-- [ ] 6.9a Rules, each with this failure as its record (`process-invariants.md`, "A rule has one
+- [x] 6.9a Rules, each with this failure as its record (`process-invariants.md`, "A rule has one
   owner"): in `design-decisions.md`, a section "A continuation is an operation of its own" — a
   step that continues an open unit (a poll of a round, a re-attach, a resume) gets its own entry
   point on the port, and a design that reaches it by re-entering the unit's whole entry point
@@ -588,7 +588,7 @@ Old way: `Request.pending()`; `rounds.openRound(request)` and `round.closeRound(
 
 ## 7. Integration
 
-- [ ] 7.1 Packaged-jar end-to-end of M5: a `program` transform executor declaring `poll` against a
+- [x] 7.1 Packaged-jar end-to-end of M5: a `program` transform executor declaring `poll` against a
   fixture service, killed after the pending commit and resumed by a second instance (one
   `start`, the round closes with the service's changes, second recovery a no-op), and killed
   before it (two `start`s, both in the ledger) (M5, G5)

@@ -64,6 +64,42 @@ class PendingTransformRoundSpec extends PendingTransformRoundSpecBase {
         poll.attempt() == 0
     }
 
+    // FR12 (reuse of FR10, D12 of migrate-verify-to-executor-contract): a poll that names another key
+    //     rotates the round's own entry through the one rotation path — a second pending write carrying
+    //     the new key, made before the next poll, which polls the new key; no attempt is recorded
+    // Scenario: pipeline/stage-engine / A changed key of a pending round lands in a pending round commit
+    def "a poll of a pending round that answers a new key writes the rotated round entry before the next poll"() {
+        given:
+        executor.scripted << pending('job-42') << pending('job-43') << completed()
+        checks.scripted << new Verdict.Pass(null, [])
+        def startedAt = clock.instant()
+
+        when:
+        def outcome = run()
+
+        then: 'two pending writes: the start\'s entry, then its rotation — same subject, attempt, token and since'
+        persistence.pending*.state == [
+            TaskState.atStageStart('build').withPendingPolls([
+                new PendingPollRecord(PendingSubject.ROUND, 0, TOKEN, new PendingKey('job-42'), startedAt)
+            ]),
+            TaskState.atStageStart('build').withPendingPolls([
+                new PendingPollRecord(PendingSubject.ROUND, 0, TOKEN, new PendingKey('job-43'), startedAt)
+            ])
+        ]
+
+        and: 'the rotation landed before the next poll, which polls the new key'
+        executor.writesBefore == [0, 1, 2]
+        executor.turns[2] == new PendingTurn(new PendingKey('job-43'), PendingTurn.Origin.ISSUED)
+
+        and: 'the attempt stayed open until the terminal poll closed the round, under the one token'
+        persistence.pending*.state*.attempts().every { it.isEmpty() }
+        outcome instanceof TaskOutcome.Completed
+        persistence.entries.size() == 1
+        persistence.entries[0].state.pendingPolls().isEmpty()
+        persistence.entries[0].state.attempts()[0].roundToken() == TOKEN
+        taken == 1
+    }
+
     // FR10, item 12 of crash-consistency: no verify check starts while the round is pending, and the
     //     round's close is the only write that records an attempt
     def "no check runs and no attempt is recorded while the round is pending"() {

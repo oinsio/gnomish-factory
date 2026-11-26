@@ -1,0 +1,9 @@
+schemaVersion: "1"
+autonomy:
+  attemptLimit: 3
+# The fixture service's program (the stand-in preset [transform-service-holding], then
+# [transform-service]): its link lives in the spec's temporary folder, known only once the spec has
+# made it, so the spec appends the `program:` line below before it publishes the law.
+executors:
+  service:
+    type: program

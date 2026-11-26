@@ -1,0 +1,25 @@
+purpose: a transform round of the Claude executor, checked by a file and by one judge verdict
+inputs:
+  - kind: source
+outputs:
+  - id: work-diff
+executor:
+  type: agent-cli
+  model: work-model
+  settings:
+    maxTurns: 10
+instructions: stages/work/instructions.md
+verify:
+  - type: builtin
+    name: files_exist
+    params:
+      files:
+        - output.txt
+  - type: judge
+    criteriaFile: stages/work/acceptance.md
+    executor:
+      type: agent-cli
+      model: judge-model
+      settings:
+        maxTurns: 3
+advancement: auto

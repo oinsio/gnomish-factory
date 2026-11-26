@@ -936,4 +936,21 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         hasLeftovers
         docker.starts.any { it.contains('git status --porcelain') }
     }
+
+    // FR11, NFR-R3 of extract-agent-round-runner (design D11, "Resume"): the box of a resumed pending
+    //     round is reset in the leased environment, so its poll runs at the registered commit.
+    def "discardLeftovers resets the currently leased environment's working copy to its HEAD"() {
+        given:
+        def support = support()
+        createTask(support)
+        support.lease().environmentFor('build')
+
+        when:
+        support.discardLeftovers()
+
+        then:
+        docker.starts.any {
+            it.contains('git reset --hard HEAD && git clean -fd')
+        }
+    }
 }

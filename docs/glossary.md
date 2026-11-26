@@ -340,22 +340,63 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   task branch's tip, never on the worktree's `HEAD`. *Not:* a gnome commit,
   which never moves the register.
 - **Pending commit** — the closing commit that records an open round's
-  pending checks before the factory polls any of them: exactly `state.json`,
+  pending checks, or its own pending `transform` round (a **pending round
+  commit**), before the factory polls any of them: exactly `state.json`,
   whose list of the round's entries (one per check that answered `pending`,
-  each with its key, attempt, round token and `since`) is the only change; its
-  tree is the round's last registered commit's with that one file replaced, its
-  only parent that commit (the snapshot for the round's first, the previous
-  pending commit after), subject `gnomish: pending <stage>#<round> <token>`.
+  or the round's one entry, each with its key, attempt, round token and
+  `since`) is the only change; its tree is the round's last registered
+  commit's with that one file replaced, its only parent that commit (the
+  snapshot, or the **pending-round snapshot**, for the round's first, the
+  previous pending commit after), subject `gnomish: pending <stage>#<round> <token>`.
   It lands with its register in one ref transaction and is pushed. On the host
   it is built from objects in the clone's `.git` (no worktree, no index); in
   the box through a private index, then harvested and admitted. It moves the
   working copy's `HEAD` and leaves the index's and the working tree's
   `state.json` behind it — the lag the working-copy check and the host round
   close recognise by identity (the round's last registered commit), never by
-  content. Writers: `AttemptPersistence.persistPending`, through
+  content; after a pending round commit the working copy's `state.json` is
+  settled to it at once (`PendingStateLag.afterLanding`), since nothing of
+  the round runs there until its terminal poll. Writers: `AttemptPersistence.persistPending`, through
   `HostPendingCommit` and `InBoxPendingCommit` (introduced by
   `migrate-verify-to-executor-contract`, design D21). *Not:* a round commit —
   it records no outcome, and a pickup of it may poll and nothing more.
+- **Pending round commit** — the **pending commit** of a `transform` round
+  whose `start` answered `pending`: its `state.json` list holds one entry for
+  the round itself (subject `Round`, with its key, attempt, round token and
+  `since`), and its only parent is the round's **pending-round snapshot** for
+  the first, the previous pending round commit after a key was replaced. Its
+  subject, register, push and tree are the pending commit's.
+  `PendingWrite.landsOn` refuses, before any write, a `Round` entry above
+  anything but a pending-round snapshot and a `Check` entry above anything but
+  a verifiable snapshot, so no pickup verifies a pending round or polls a finished one. It is written once
+  when the `start` goes pending and again only when a poll returns another key;
+  a poll otherwise writes nothing. It closes no attempt: the position is
+  unchanged, no verify check runs and no stage advances on it. A pickup whose
+  register names it resumes the round through `PendingPoll` by polling the
+  recorded key, never by `start`. The terminal poll's snapshot sits on the last
+  pending round commit; a register naming that snapshot is an interrupted
+  verification, re-verified with no poll, and the round's close drops the
+  entry. Writer: `AttemptPersistence.persistPending`, as for every pending
+  commit (introduced by `extract-agent-round-runner`, design D7, D11).
+  *Not:* a **round commit** — it records no outcome.
+- **Pending-round snapshot** — the snapshot commit that registers a
+  `transform` round's working copy when its `start` answers `pending`, subject
+  `gnomish: pending-snapshot <stage>#<round> <token>`, on both media (close
+  `RoundClose.PENDING`; host: `SnapshottingStageExecutor` over the worktree;
+  box: the round source's going-pending step, with its harvest). It is
+  registered once per round, on the `start`'s result only: a poll that answers
+  `pending` takes no snapshot, and going pending closes nothing — the round's
+  environment, scratch area and listeners are kept. It is the bottom of a
+  pending round's registered chain, the commit the first **pending round
+  commit** lands on. A pickup recognises it by its subject (`SnapshotTipCheck`,
+  `PendingChain`) and never verifies it: a pending commit whose first parents
+  reach it with the same stage, round and token is a pending round, resumed by
+  poll; alone at the register (killed before the pending round commit was
+  pushed, window K1 of design D11) it is a round whose `start` is re-driven,
+  with a line saying so (introduced by `extract-agent-round-runner`, design
+  D11, D14). *Not:* an **unverified snapshot**, which closes a round that did
+  not complete; nor the snapshot the terminal poll takes above the round's
+  pending round commits, which carries the ordinary snapshot subject.
 - **Harvest quarantine** — the ref `refs/gnomish-quarantine/<task>`, in the
   factory clone only, that every harvest of a box's task branch fetches into;
   what the gnome committed exists factory-side as objects and this one scratch
@@ -479,10 +520,11 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   by `define-executor-contract`, design D13). *Not:* a parsing contract —
   readers take a round's identity from its record, never from the subject.
 - **Unverified snapshot** — the snapshot commit of a round whose executor did
-  not complete (a program that answered `failed` or `pending`), subject
+  not complete (a program that answered `failed`), subject
   `gnomish: unverified-snapshot <stage>#<round> <token>`. The round's close names
-  its outcome (`RoundClose`: `VERIFIABLE` or `UNVERIFIABLE`) and the one round
-  snapshot step chooses the subject by it. A registered unverified snapshot is
+  its outcome (`RoundClose`: `VERIFIABLE`, `UNVERIFIABLE`, or `PENDING` for a
+  **pending-round snapshot**) and the one round snapshot step chooses the
+  subject by it. A registered unverified snapshot is
   not an interrupted verification: `SnapshotTipCheck` does not read it, and a
   pickup re-runs the round's stage executor with no attempt burned. It is still
   in the `gnomish: ` namespace, so a gnome commit carrying it is a boundary
@@ -760,14 +802,26 @@ external; the decisions are ADR 0020.
   instance polls the recorded key and never calls `start` again; a `program`
   executor adopts a recorded key it never issued, and only over a working copy
   unchanged against its `HEAD`. The key is capped in size; an oversized key is
-  cannot-verify. A `pending` from a role whose caller cannot poll (`transform`,
-  until `extract-agent-round-runner`) is an infrastructure failure naming the
-  limitation. Type: `PendingKey`, in the JDK-only `:pendingkey` leaf both the
-  engine and the executor contract carry (one type on every layer, design D20
+  cannot-verify. For a `transform` round whose executor declares `poll` the
+  engine owns the wait the same way, through the same `PendingPoll`: the
+  entry's subject is the round itself (`PendingSubject`: `Check` for a verify
+  check, `Round` for the round), it lands in the **pending round commit** above
+  the round's **pending-round snapshot**, and the polls continue the round the
+  `start` opened — one round token, one close, no new round per poll. A poll
+  writes nothing on the task branch except the pending round commit of a key it
+  replaced; the wait runs at the factory's pending interval and ceiling
+  (default 30 s and 24 h, counted from `since`), set by neither the law nor
+  describe. A resumed round polls its recorded key and never calls `start`. A
+  `pending` from a `transform` executor whose describe declares no `poll` is an
+  infrastructure failure naming the limitation. Type: `PendingKey`, in the
+  JDK-only `:pendingkey` leaf both the engine and the executor contract carry
+  (one type on every layer, design D20
   of `migrate-verify-to-executor-contract`); the keys a run issued or adopted are held by
   `PendingRuns`. Introduced by `define-executor-contract` (design D2, D3, D4,
   D6); ADR 0020, decisions 2 and 4; persisted, rotated, retained and adopted
-  by `migrate-verify-to-executor-contract` (design D2, D7, D11, D12, D14).
+  by `migrate-verify-to-executor-contract` (design D2, D7, D11, D12, D14);
+  extended to the `transform` round by `extract-agent-round-runner` (design
+  D11, D14).
   *Not:* a **continuation key**, which resumes after an answer rather than
   waiting on an unfinished run.
 - **Wait hint** — the optional `pollAfterMillis` of a `pending` result: the
