@@ -25,6 +25,9 @@ class NoSalvageOverVerificationSpec extends Specification {
     static final PendingVerification SNAPSHOT =
     new PendingVerification('snap', 'build', 0, RoundToken.of('0a1b2c'), RoundClose.VERIFIABLE, new AnswerFileReading.Absent(), 'pending', ['pending', 'snap'])
 
+    static final PendingVerification PENDING_ROUND =
+    new PendingVerification('psnap', 'build', 0, RoundToken.of('0a1b2c'), RoundClose.PENDING, new AnswerFileReading.Absent(), 'pending', ['pending', 'psnap'])
+
     WorktreeSalvager salvager = Mock()
 
     TaskWorktreeGit worktrees(Optional<PendingVerification> registered) {
@@ -78,12 +81,27 @@ class NoSalvageOverVerificationSpec extends Specification {
 
         then:
         salvages * support.salvageLeftovers('PROJ-1')
+        0 * support.discardLeftovers()
         pending == registered.orElse(null)
 
         where:
         registered || salvages
         Optional.empty() || 1
         Optional.of(SNAPSHOT) || 0
+    }
+
+    // Scenario: lifecycle/task-branch-contract / A pending round is resumed by the same owner
+    def "FR11, NFR-R3: the box over a pending round salvages nothing and is reset, so its resumed poll runs at the register"() {
+        given:
+        def support = Mock(SandboxRunSupport)
+
+        when:
+        def pending = NoSalvageOverVerification.inBox(support, Optional.of(PENDING_ROUND), 'PROJ-1')
+
+        then:
+        0 * support.salvageLeftovers(_)
+        1 * support.discardLeftovers()
+        pending.is(PENDING_ROUND)
     }
 
     def "FR19: a revocation stop in the box reads the register and says whether it kept the leftovers out"() {

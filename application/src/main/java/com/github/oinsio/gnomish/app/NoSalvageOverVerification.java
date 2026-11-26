@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.port.agent.RoundClose;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport;
@@ -14,7 +15,8 @@ import org.jspecify.annotations.Nullable;
  * pending commit ({@link PendingVerification}) means the gnome's work is in the snapshot and the
  * leftovers are what the killed verification wrote, so nothing is salvaged over it: the host
  * discards them, with or without {@code --discard-work}, and the container keeps them in the box,
- * out of every commit. Any other register is a round killed before its snapshot, whose leftovers
+ * out of every commit — over a pending round it resets the box instead, since that round's terminal
+ * snapshot is still to come and would stage them. Any other register is a round killed before its snapshot, whose leftovers
  * are salvaged as before (or discarded under {@code --discard-work}).
  *
  * <p>A salvage over such a register would commit the killed checks' residue: the register would
@@ -61,7 +63,10 @@ public final class NoSalvageOverVerification {
 
     /**
      * The rule in the task's box: the leftovers are salvaged in-box only when the register names
-     * no interrupted verification; otherwise they stay in the box, out of every commit.
+     * no interrupted verification; otherwise they stay in the box, out of every commit — except over
+     * a pending round ({@link RoundClose#PENDING}), whose terminal snapshot would stage them: there the
+     * box is reset to its {@code HEAD}, so a resumed poll runs at the registered commit as the host's
+     * discarded worktree does (design D11 of extract-agent-round-runner, "Resume").
      *
      * @param support the sandboxed run support of the task, its box live; never null
      * @param registered what the support's recogniser read at the register before the box was made
@@ -73,6 +78,8 @@ public final class NoSalvageOverVerification {
             SandboxRunSupport support, Optional<PendingVerification> registered, String taskId) {
         if (registered.isEmpty()) {
             support.salvageLeftovers(taskId);
+        } else if (registered.get().close() == RoundClose.PENDING) {
+            support.discardLeftovers();
         }
         return registered.orElse(null);
     }

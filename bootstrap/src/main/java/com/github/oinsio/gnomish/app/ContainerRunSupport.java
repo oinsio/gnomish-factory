@@ -218,6 +218,12 @@ final class ContainerRunSupport implements SandboxRunSupport {
         push.pushBestEffort(cloneDir, taskId);
     }
 
+    /** The in-box discard over the leased environment (D11 of extract-agent-round-runner, "Resume"). */
+    @Override
+    public void discardLeftovers() {
+        salvage().discard();
+    }
+
     /** The snapshot-without-state classifier of resume (FR21, D15). */
     @Override
     public Optional<PendingVerification> pendingVerification() {
