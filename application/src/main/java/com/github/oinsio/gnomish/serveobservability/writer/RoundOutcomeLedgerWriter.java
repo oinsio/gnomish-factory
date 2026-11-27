@@ -15,12 +15,16 @@ import org.slf4j.LoggerFactory;
  * The serve daemon's write point for the ledger's {@code roundOutcome} line (NFR-O2, UX3 of
  * define-executor-contract): an engine event listener that appends one line per {@link
  * EngineEvent.ExecutionFinished} — the event every executed round emits — and one per {@link
- * EngineEvent.CheckFinished} of an executor check, role {@code verdict}, naming the check, the status
- * its rounds ended on and the key a resume took up (NFR-O1, UX3 of migrate-verify-to-executor-contract),
- * through the shared {@link RotatingLedgerAppender}, in the words {@link RoundOutcomeWords} owns.
- * A stage round's line names the key it went pending with or was resumed by, when it did (UX3 of
- * extract-agent-round-runner). Every other event, a judge check's finish included, is not this
- * writer's business. One instance
+ * EngineEvent.CheckFinished} of an executor check — a {@code judge} check's included, since its round
+ * is a check round (design D2 of extract-agent-round-runner) — role {@code verdict}, naming the check,
+ * the status its rounds ended on and the key a resume took up (NFR-O1, UX3 of
+ * migrate-verify-to-executor-contract), through the shared {@link RotatingLedgerAppender}, in the
+ * words {@link RoundOutcomeWords} owns. Both arms write the executor and its version as the event
+ * carries them, named by the engine's one owner ({@code DescribedExecutors}): a stage round's and a
+ * check's line alike read {@code claude@built-in} or {@code <program>@<version>} (NFR-O1 of
+ * extract-agent-round-runner). A stage round's line names the key it went pending with or was resumed
+ * by, when it did (UX3 of extract-agent-round-runner). Every other event is not this writer's
+ * business. One instance
  * serves every slot of the daemon: it holds no per-run state, and the appender serializes the writes.
  *
  * <p>Write failures never propagate (NFR-R1 of add-serve-observability): an {@link IOException}
@@ -28,7 +32,7 @@ import org.slf4j.LoggerFactory;
  * never fail a round.
  *
  * <p>Implements NFR-O2, UX3 of define-executor-contract; NFR-O1, UX3 of
- * migrate-verify-to-executor-contract; UX3 of extract-agent-round-runner.
+ * migrate-verify-to-executor-contract; NFR-O1, UX3 of extract-agent-round-runner.
  */
 public final class RoundOutcomeLedgerWriter implements EngineEventListener {
 
@@ -84,8 +88,8 @@ public final class RoundOutcomeLedgerWriter implements EngineEventListener {
                         key.taskId(),
                         key.stage(),
                         key.attempt(),
-                        outcome.executor(),
-                        null,
+                        outcome.executor().name(),
+                        outcome.executor().version(),
                         RoundOutcomeWords.CHECK_ROLE,
                         RoundOutcomeWords.statusWithClass(outcome.status()),
                         finished.result().checkRef().index(),

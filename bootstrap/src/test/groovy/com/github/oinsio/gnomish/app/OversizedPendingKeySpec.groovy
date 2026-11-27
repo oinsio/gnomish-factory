@@ -77,7 +77,7 @@ class OversizedPendingKeySpec extends Specification {
         def persistence = new InMemoryAttemptPersistence()
         def listener = new RecordingEventListener()
         def chain = new VerifyOrchestrator(new PendingPoll(new CheckRound(bound, null, ci), persistence,
-                AttemptDelivery.assumedDelivered(), VirtualTimeEquipment.on(clock, sleeper), listener), clock, listener)
+                AttemptDelivery.assumedDelivered(), VirtualTimeEquipment.on(clock, sleeper), listener), DescribedExecutors.none(), clock, listener)
 
         when:
         def result = chain.verify(VerifyingStages.of([ci]), new TaskContext('TASK-1', UntrustedText.tracker('t'),

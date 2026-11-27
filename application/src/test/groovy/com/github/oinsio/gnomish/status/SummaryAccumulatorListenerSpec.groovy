@@ -163,7 +163,7 @@ class SummaryAccumulatorListenerSpec extends Specification {
                         ExecutionResult.FailureClass.QUALITY, UntrustedText.factory('timed out'), [], null)))
         listener.onEvent(new EngineEvent.CheckFinished(key,
                 new CheckResult(new CheckRef(0, UntrustedText.manifest('files_exist')), new Verdict.Pass(null, []), Duration.ZERO), null))
-        listener.onEvent(new EngineEvent.ExecutionFinished(key, Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed()))
+        listener.onEvent(new EngineEvent.ExecutionFinished(key, Participants.transform('ghost', ExecutorUsage.none()), new RoundExecutor('ghost', null), new ExecutionResult.Completed()))
         listener.onEvent(new EngineEvent.AttemptFinished(key, state(), new ToolTrace(key, [])))
         listener.onEvent(new EngineEvent.TaskFinished(TASK_ID, new TaskOutcome.Completed(state())))
 

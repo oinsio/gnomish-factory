@@ -58,7 +58,7 @@ class EngineEventTaskIdSpec extends Specification {
         description | event
         'RunStarted' | new EngineEvent.RunStarted('t1', new Position.AtStage('build'), 0)
         'AttemptStarted' | new EngineEvent.AttemptStarted(sampleKey())
-        'ExecutionFinished' | new EngineEvent.ExecutionFinished(sampleKey(), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed())
+        'ExecutionFinished' | new EngineEvent.ExecutionFinished(sampleKey(), Participants.transform('ghost', ExecutorUsage.none()), new RoundExecutor('ghost', null), new ExecutionResult.Completed())
         'CheckStarted' | new EngineEvent.CheckStarted(sampleKey(), sampleCheckRef())
         'PendingPolled' | samplePolled()
         'PendingTimedOut' | sampleTimedOut()
@@ -78,7 +78,7 @@ class EngineEventTaskIdSpec extends Specification {
         where:
         description | event
         'AttemptStarted' | new EngineEvent.AttemptStarted(new AttemptKey('t1', 'build', 0))
-        'ExecutionFinished' | new EngineEvent.ExecutionFinished(new AttemptKey('t1', 'build', 0), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed())
+        'ExecutionFinished' | new EngineEvent.ExecutionFinished(new AttemptKey('t1', 'build', 0), Participants.transform('ghost', ExecutorUsage.none()), new RoundExecutor('ghost', null), new ExecutionResult.Completed())
         'CheckStarted' | new EngineEvent.CheckStarted(new AttemptKey('t1', 'build', 0), sampleCheckRef())
         'PendingPolled' | samplePolled(new AttemptKey('t1', 'build', 0))
         'PendingTimedOut' | sampleTimedOut(new AttemptKey('t1', 'build', 0))
@@ -95,7 +95,7 @@ class EngineEventTaskIdSpec extends Specification {
         description | event
         'RunStarted' | new EngineEvent.RunStarted('t1', new Position.AtStage('build'), 0)
         'AttemptStarted' | new EngineEvent.AttemptStarted(sampleKey())
-        'ExecutionFinished' | new EngineEvent.ExecutionFinished(sampleKey(), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed())
+        'ExecutionFinished' | new EngineEvent.ExecutionFinished(sampleKey(), Participants.transform('ghost', ExecutorUsage.none()), new RoundExecutor('ghost', null), new ExecutionResult.Completed())
         'CheckStarted' | new EngineEvent.CheckStarted(sampleKey(), sampleCheckRef())
         'PendingPolled' | samplePolled()
         'PendingTimedOut' | sampleTimedOut()

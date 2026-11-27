@@ -43,6 +43,7 @@ final class VerifyOrchestrator {
     private static final Logger log = LoggerFactory.getLogger(VerifyOrchestrator.class);
 
     private final PendingPoll checkRounds;
+    private final DescribedExecutors described;
     private final InstantSource clock;
     private final EngineEventListener listener;
 
@@ -52,11 +53,15 @@ final class VerifyOrchestrator {
      * EngineEventListener} it emits to. All immutable (NFR-R1).
      *
      * @param checkRounds the owner of a check's rounds on the engine's port; never null
+     * @param described the run's one owner of the executor a check's outcome and participant entry
+     *     name (NFR-O1 of extract-agent-round-runner); never null
      * @param clock the injected time source timing each check; never null
      * @param listener the observer the per-check events are emitted to; never null
      */
-    VerifyOrchestrator(PendingPoll checkRounds, InstantSource clock, EngineEventListener listener) {
+    VerifyOrchestrator(
+            PendingPoll checkRounds, DescribedExecutors described, InstantSource clock, EngineEventListener listener) {
         this.checkRounds = checkRounds;
+        this.described = described;
         this.clock = clock;
         this.listener = listener;
     }
@@ -116,7 +121,7 @@ final class VerifyOrchestrator {
      * VerifyCheck.Judge#asExecutorCheck() check-round view} — one {@code verdict} request through
      * the same check rounds (design D2 of extract-agent-round-runner), whose reported token usage is
      * appended to {@code votes} as the round's next {@code verdict} participant entry, named by the
-     * executor the check's block resolved to ({@link VerifyCheck.Executor#executorName()}) and
+     * executor the check's block resolved to ({@link DescribedExecutors#executorOf(VerifyCheck.Executor)}) and
      * numbered by its 0-based ordinal among the round's judge requests (NFR-C1; FR15 of
      * define-executor-contract; FR4 of extract-agent-round-runner). The whole dispatch is wrapped so any {@link
      * RuntimeException} a check adapter throws is caught, logged at ERROR at the point of capture,
@@ -139,11 +144,12 @@ final class VerifyOrchestrator {
                     case VerifyCheck.Executor e -> e;
                     case VerifyCheck.Judge j -> j.asExecutorCheck();
                 };
+        var ran = described.executorOf(executorCheck);
         try {
-            var polled = checkRounds.answer(executorCheck, ref, round);
+            var polled = checkRounds.answer(executorCheck, ran, ref, round);
             var verdict = VerdictDerivation.derive(polled.answer(), executorCheck.threshold());
             if (check instanceof VerifyCheck.Judge) {
-                votes.add(Participants.verdict(executorCheck.executorName(), votes.size(), polled.byModel()));
+                votes.add(Participants.verdict(ran.name(), votes.size(), polled.byModel()));
                 warnIfCannotVerify(ref, verdict);
             }
             return new Ran(verdict, polled.outcome());
@@ -160,7 +166,7 @@ final class VerifyOrchestrator {
                     StackTraces.render(ex));
             return new Ran(
                     VerdictDerivation.derive(CheckRoundAnswers.of(failed), Threshold.DEFAULT),
-                    new CheckOutcome(executorCheck.executorName(), failed, null));
+                    new CheckOutcome(ran, failed, null));
         }
     }
 

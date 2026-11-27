@@ -1,8 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine;
 
-import com.github.oinsio.gnomish.domain.pipeline.ExecutorType;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -22,20 +20,10 @@ public final class Participants {
     private Participants() {}
 
     /**
-     * The law's own spelling of an executor type — {@code agent-cli}, {@code api} — the name a round
-     * carries when no described executor names it (task 4.5 of define-executor-contract).
-     *
-     * @param type the stage's executor type; never null
-     * @return the type's word; never blank
-     */
-    public static String typeWord(ExecutorType type) {
-        return type.name().toLowerCase(Locale.ROOT).replace('_', '-');
-    }
-
-    /**
      * The {@code transform} entry of the executor that ran a round.
      *
-     * @param executor the executor's name; never blank
+     * @param executor the registry entry that ran the round, as {@link DescribedExecutors#executorOf}
+     *     names it; never blank
      * @param usage what the executor reported for the round; never null
      * @return the entry, with the provenance the carrier holds
      */

@@ -70,16 +70,18 @@ final class PendingPoll {
      * collapses to at the timeout, with what the rounds came to.
      *
      * @param check the executor check; never null
+     * @param ran the executor the check names, as {@link DescribedExecutors} names it — what the
+     *     check's outcome carries; never null
      * @param ref the check's identity in the round; never null
      * @param round the open round the check verifies; never null
      * @return the answer the check's rounds collapse to and their outcome; never null
      */
-    PolledCheck answer(VerifyCheck.Executor check, CheckRef ref, PendingRound round) {
+    PolledCheck answer(VerifyCheck.Executor check, RoundExecutor ran, CheckRef ref, PendingRound round) {
         if (check.polled()
                 && delivery.ensureDelivered(round.workspace())
                         instanceof AttemptDelivery.Outcome.Undeliverable(UntrustedText reason, UntrustedText details)) {
             return CheckRoundAnswers.polled(
-                    check,
+                    ran,
                     new ExecutionResult.Failed(ExecutionResult.FailureClass.INFRASTRUCTURE, reason, List.of(), details),
                     null);
         }
@@ -87,14 +89,14 @@ final class PendingPoll {
         var recorded = round.entryOf(ref);
         if (recorded.isPresent()) {
             var run = waitFor(ask, recorded.get(), null);
-            return CheckRoundAnswers.polled(check, run.result(), run.resumedKey());
+            return CheckRoundAnswers.polled(ran, run.result(), run.resumedKey());
         }
         var started = executor.execute(ask.request());
         if (ExecutorOutcomeClassifier.pending(started).isEmpty()) {
-            return CheckRoundAnswers.polled(check, started, null);
+            return CheckRoundAnswers.polled(ran, started, null);
         }
         var run = continueStarted(ask, started);
-        return CheckRoundAnswers.polled(check, run.result(), run.resumedKey());
+        return CheckRoundAnswers.polled(ran, run.result(), run.resumedKey());
     }
 
     /**

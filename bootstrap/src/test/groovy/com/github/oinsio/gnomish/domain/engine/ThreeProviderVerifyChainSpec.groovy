@@ -185,6 +185,7 @@ class ThreeProviderVerifyChainSpec extends Specification {
         def orchestrator = new VerifyOrchestrator(
                 new PendingPoll(rounds, new InMemoryAttemptPersistence(), AttemptDelivery.assumedDelivered(), time,
                 listener),
+                DescribedExecutors.none(),
                 clock,
                 listener)
         def ref = ClosedRounds.at(sha)

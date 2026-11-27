@@ -82,7 +82,7 @@ class HeartbeatProgressSpec extends Specification {
         where:
         stage | attempt | event
         'implement' | 3 | new EngineEvent.AttemptStarted(key('implement', 3))
-        'implement' | 1 | new EngineEvent.ExecutionFinished(key('implement', 1), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed())
+        'implement' | 1 | new EngineEvent.ExecutionFinished(key('implement', 1), Participants.transform('ghost', ExecutorUsage.none()), new RoundExecutor('ghost', null), new ExecutionResult.Completed())
         'build' | 0 | new EngineEvent.CheckStarted(key('build', 0), new CheckRef(0, UntrustedText.manifest('builtin:files_exist')))
         'build' | 4 | new EngineEvent.CheckFinished(key('build', 4), passResult(), null)
         'build' | 5 | new EngineEvent.PendingPolled(key('build', 5), new PendingSubject.Check(new CheckRef(0, UntrustedText.manifest('executor:ci'))), 'scm-status', UntrustedText.subprocess('k-1'), PendingTurn.Origin.ISSUED, Duration.ofSeconds(30), Duration.ofMinutes(9))

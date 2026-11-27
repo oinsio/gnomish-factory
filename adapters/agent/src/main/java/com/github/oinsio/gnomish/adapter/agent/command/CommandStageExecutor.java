@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.github.oinsio.gnomish.adapter.agent.runner.RoundBounds;
 import com.github.oinsio.gnomish.adapter.command.CommandRun;
 import com.github.oinsio.gnomish.app.describe.ProgramBounds;
+import com.github.oinsio.gnomish.domain.pipeline.BuiltInExecutors;
 import com.github.oinsio.gnomish.executorcontract.Describe;
 import com.github.oinsio.gnomish.executorcontract.EnforcementLevel;
 import com.github.oinsio.gnomish.executorcontract.Executor;
@@ -75,7 +76,7 @@ public final class CommandStageExecutor implements Executor {
     public static Describe describeAnswer() {
         return new Describe(
                 Describe.SPOKEN_PROTOCOL_VERSION,
-                UntrustedText.factory("built-in"),
+                UntrustedText.factory(BuiltInExecutors.VERSION),
                 List.of(Role.TRANSFORM),
                 List.of(),
                 JsonNodeFactory.instance.objectNode().put("type", "object"),

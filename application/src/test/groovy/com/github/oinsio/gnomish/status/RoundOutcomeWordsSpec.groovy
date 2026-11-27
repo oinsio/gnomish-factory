@@ -64,14 +64,14 @@ class RoundOutcomeWordsSpec extends Specification {
         RoundOutcomeWords.protocolVersion(new RoundExecutor('lint-bot', UntrustedText.subprocess('2'))) ==
                 Describe.SPOKEN_PROTOCOL_VERSION
         Describe.SPOKEN_PROTOCOL_VERSION == 1
-        RoundOutcomeWords.protocolVersion(new RoundExecutor('agent-cli', null)) == null
+        RoundOutcomeWords.protocolVersion(new RoundExecutor('ghost', null)) == null
     }
 
     // UX3: the log plane's executor reference, and the stage role
     def "the executor is name@version, or the name alone, and a stage round is a transform"() {
         expect:
         RoundOutcomeWords.executorForLog(new RoundExecutor('lint-bot', UntrustedText.subprocess('2.3.1'))) == 'lint-bot@2.3.1'
-        RoundOutcomeWords.executorForLog(new RoundExecutor('agent-cli', null)) == 'agent-cli'
+        RoundOutcomeWords.executorForLog(new RoundExecutor('ghost', null)) == 'ghost'
         RoundOutcomeWords.STAGE_ROLE == 'transform'
     }
 

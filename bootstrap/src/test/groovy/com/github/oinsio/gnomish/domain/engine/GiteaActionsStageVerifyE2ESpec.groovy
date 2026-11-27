@@ -193,6 +193,7 @@ class GiteaActionsStageVerifyE2ESpec extends Specification implements BareGitRep
         new VerifyOrchestrator(
                 new PendingPoll(rounds, new InMemoryAttemptPersistence(), AttemptDelivery.assumedDelivered(), time,
                 listener),
+                DescribedExecutors.none(),
                 clock,
                 listener)
     }

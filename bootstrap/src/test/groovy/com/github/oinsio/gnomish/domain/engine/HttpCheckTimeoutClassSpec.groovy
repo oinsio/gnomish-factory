@@ -74,7 +74,7 @@ class HttpCheckTimeoutClassSpec extends Specification {
         UntrustedText.tracker('b'), []), workspace, new AttemptKey('TO-1', 'verify', 0), TaskState.atStageStart('verify'), null)
 
         when:
-        def verdict = poll.answer(check, CheckRef.of(0, check), round).answer()
+        def verdict = poll.answer(check, DescribedExecutors.none().executorOf(check), CheckRef.of(0, check), round).answer()
 
         then: 'the wait really polled the stuck gate over TLS before resolving on the deadline'
         platform.wireMock.verify(moreThanOrExactly(1), getRequestedFor(urlPathEqualTo(STUCK_QUALITY_GATE)))

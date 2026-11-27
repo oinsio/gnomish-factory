@@ -41,6 +41,15 @@ public final class BuiltInExecutors {
      */
     public static final String CLAUDE = "claude";
 
+    /**
+     * The describe version of every built-in (design D12 of extract-agent-round-runner, "The version
+     * of a built-in"): one fact, "compiled into this factory". Each built-in's describe reads it, and
+     * {@code DescribedExecutors} answers it for a built-in's rounds and checks, so a record reads
+     * {@code claude@built-in}. Shown, never pinned: the build that ran is the {@code factoryVersion}
+     * every ledger line carries. {@code BuiltInVersionOwnerSpec} keeps this the word's one spelling.
+     */
+    public static final String VERSION = "built-in";
+
     /** The seven names, in the order an operator reads them. */
     public static final List<String> NAMES =
             List.of(FILES_EXIST, SHELL, GITHUB_ACTIONS, SCM_STATUS, HTTP, COMMAND, CLAUDE);

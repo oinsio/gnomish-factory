@@ -33,7 +33,7 @@ class RoundLogLineSpec extends Specification {
     def lineOf(RoundExecutor executor, ExecutionResult.Status status, UntrustedText pendingKey = null, UntrustedText resumedKey = null) {
         def events = MdcAwareThread.taskScope(KEY.taskId()).withCloseable {
             LogCaptureSupport.capture(LoggingEventListener, Level.INFO) {
-                listeners.onEvent(new EngineEvent.ExecutionFinished(KEY, Participants.transform('agent-cli', ExecutorUsage.none()), executor, status,
+                listeners.onEvent(new EngineEvent.ExecutionFinished(KEY, Participants.transform(executor.name(), ExecutorUsage.none()), executor, status,
                 pendingKey, resumedKey))
             }
         }
@@ -64,10 +64,10 @@ class RoundLogLineSpec extends Specification {
     // NFR-O2: an executor with no describe has no version and no protocol; a completed round no class or bound
     def "an undescribed executor's completed round line spells the absent values as a dash"() {
         when:
-        def line = lineOf(new RoundExecutor('agent-cli', null), new ExecutionResult.Completed())
+        def line = lineOf(new RoundExecutor('ghost', null), new ExecutionResult.Completed())
 
         then:
-        line.formattedMessage.contains('executor=agent-cli,')
+        line.formattedMessage.contains('executor=ghost,')
         line.formattedMessage.contains('protocolVersion=-')
         line.formattedMessage.contains('status=completed')
         line.formattedMessage.contains('class=-')
@@ -114,7 +114,7 @@ class RoundLogLineSpec extends Specification {
     // NFR-O2: a quality failure names its class and no bound
     def "a quality failure names its class and reaches no bound"() {
         when:
-        def line = lineOf(new RoundExecutor('agent-cli', null),
+        def line = lineOf(new RoundExecutor('ghost', null),
                 new ExecutionResult.Failed(ExecutionResult.FailureClass.QUALITY, UntrustedText.subprocess('red'), [], null))
 
         then:

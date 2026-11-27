@@ -23,9 +23,11 @@ import org.jspecify.annotations.Nullable;
  * boxes, or the host environment in a run that has none (design D2, the judge's one exemption). This is
  * the one production construction of the runner ({@code ExecutorRegistryOwnerSpec}).
  *
- * <p>The dialect's describe names its version {@code built-in}, as every built-in's describe does: the
- * entry is compiled into the factory, the CLI's own version is not probed in process, and the task's
- * executor version pin needs a value that does not move between runs. {@code
+ * <p>The dialect's describe names its version {@link BuiltInExecutors#VERSION}, as every built-in's
+ * describe does: the entry is compiled into the factory and the CLI's own version is not probed in
+ * process. The version is shown on the entry's records ({@code claude@built-in}) and never pinned: the
+ * task's executor versions hold described programs only (design D12 of extract-agent-round-runner,
+ * "The version of a built-in"). {@code
  * externalize-claude-executor} (proposal NG1) turns the entry into a described program, whose describe
  * reports the CLI's version.
  *
@@ -34,7 +36,7 @@ import org.jspecify.annotations.Nullable;
 final class ClaudeEntry {
 
     /** The version the in-process dialect describes, as every built-in's describe does. */
-    static final UntrustedText VERSION = UntrustedText.factory("built-in");
+    static final UntrustedText VERSION = UntrustedText.factory(BuiltInExecutors.VERSION);
 
     private ClaudeEntry() {}
 

@@ -69,7 +69,7 @@ abstract class EngineEventListenerContract extends Specification implements Port
         [
             new EngineEvent.RunStarted('TASK-1', new Position.AtStage('build'), 0),
             new EngineEvent.AttemptStarted(key),
-            new EngineEvent.ExecutionFinished(key, Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed()),
+            new EngineEvent.ExecutionFinished(key, Participants.transform('ghost', ExecutorUsage.none()), new RoundExecutor('ghost', null), new ExecutionResult.Completed()),
             new EngineEvent.CheckStarted(key, new CheckRef(0, UntrustedText.manifest('files_exist'))),
             new EngineEvent.PendingPolled(key, new PendingSubject.Check(new CheckRef(0, UntrustedText.manifest('files_exist'))), 'scm-status',
             UntrustedText.subprocess('k-1'), PendingTurn.Origin.ISSUED, Duration.ofSeconds(30), Duration.ofMinutes(9)),

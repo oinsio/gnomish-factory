@@ -88,7 +88,7 @@ public final class HttpExecutor implements Executor {
     public static Describe describeAnswer() {
         return new Describe(
                 Describe.SPOKEN_PROTOCOL_VERSION,
-                UntrustedText.factory("built-in"),
+                UntrustedText.factory(BuiltInExecutors.VERSION),
                 List.of(Role.VERDICT),
                 List.of(Capability.POLL),
                 HttpSettings.schema(),

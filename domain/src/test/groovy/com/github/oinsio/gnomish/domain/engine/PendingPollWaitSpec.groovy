@@ -21,7 +21,7 @@ class PendingPollWaitSpec extends PendingPollSpecBase {
         ])
 
         when:
-        def answer = poll(executor).answer(ci, ref(0, ci), round([ci])).answer()
+        def answer = poll(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci])).answer()
 
         then:
         answer == new VerdictAnswer.Sarif([], null)
@@ -46,7 +46,7 @@ class PendingPollWaitSpec extends PendingPollSpecBase {
         ])
 
         when:
-        def answer = poll(executor).answer(ci, ref(0, ci), round([ci])).answer()
+        def answer = poll(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci])).answer()
 
         then: 'the wait ends at the deadline, and no poll follows the hint'
         turns(executor) == [null, [ISSUED, 'k-1']]
@@ -70,7 +70,7 @@ class PendingPollWaitSpec extends PendingPollSpecBase {
         ])
 
         when:
-        def answer = poll(executor).answer(ci, ref(0, ci), round([ci])).answer()
+        def answer = poll(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci])).answer()
 
         then:
         sleeper.slept == [TIMEOUT]
@@ -84,7 +84,7 @@ class PendingPollWaitSpec extends PendingPollSpecBase {
         def executor = new ScriptedExecutor((1..4).collect { pending('k-1') })
 
         when:
-        def answer = poll(executor).answer(ci, ref(0, ci), round([ci])).answer()
+        def answer = poll(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci])).answer()
 
         then: 'polls at 0, 4, 8 and 12 minutes; the last one past the 10-minute deadline ends the wait'
         sleeper.slept == [Duration.ofMinutes(4)] * 3
@@ -105,7 +105,7 @@ class PendingPollWaitSpec extends PendingPollSpecBase {
         ])
 
         expect:
-        poll(executor).answer(ci, ref(0, ci), round([ci])).answer() == new VerdictAnswer.QualityFailure([
+        poll(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci])).answer() == new VerdictAnswer.QualityFailure([
             new Finding('red', null, null)
         ])
     }

@@ -108,7 +108,7 @@ class PendingPollCheckRoundSpec extends Specification {
         def round = new PendingRound(VerifyingStages.of([check]), new TaskContext('TASK-1', UntrustedText.tracker('t'),
         UntrustedText.tracker('b'), []), AttemptCommitWorkspaces.at(SHA), new AttemptKey('TASK-1', 'build', 0),
         TaskState.atStageStart('build'), RoundToken.of('c' * 40))
-        poll.answer(check, CheckRef.of(0, check), round).answer()
+        poll.answer(check, DescribedExecutors.none().executorOf(check), CheckRef.of(0, check), round).answer()
     }
 
     private ScmStatusReader reader() {

@@ -81,7 +81,7 @@ abstract class PendingPollSpecBase extends Specification {
 
     /** The verify chain with {@code poll} as the owner of its executor checks' rounds. */
     VerifyOrchestrator orchestrator(PendingPoll poll) {
-        new VerifyOrchestrator(poll, clock, new RecordingEventListener())
+        new VerifyOrchestrator(poll, DescribedExecutors.none(), clock, new RecordingEventListener())
     }
 
     /** The turns the executor was asked with, in order: null for a start, else origin and key. */

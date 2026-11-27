@@ -44,7 +44,7 @@ class TokenUsageCostSpec extends Specification {
         ]
 
         and: "the round's transform entry carries the same per-model usage"
-        Participants.transform('agent-cli', usage).byModel() == usage.byModel()
+        Participants.transform('claude', usage).byModel() == usage.byModel()
     }
 
     // NG10: an integral cost and a reported zero are figures the CLI wrote; they are kept exactly.

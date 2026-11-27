@@ -167,7 +167,8 @@ public final class Engine {
         // of extract-agent-round-runner).
         var poll = new PendingPoll(
                 ports.executor(), ports.persistence(), ports.attemptDelivery(), ports.time(), ports.listener());
-        var verifyOrchestrator = new VerifyOrchestrator(poll, ports.time().clock(), ports.listener());
+        var verifyOrchestrator = new VerifyOrchestrator(
+                poll, ports.describedExecutors(), ports.time().clock(), ports.listener());
         var loop = new StageAttemptLoop(ports, verifyOrchestrator, poll, definition);
         var currentState = state;
         var currentStage = stage;

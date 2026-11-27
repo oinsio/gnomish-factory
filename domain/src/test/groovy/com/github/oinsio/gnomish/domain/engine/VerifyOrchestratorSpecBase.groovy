@@ -69,6 +69,6 @@ abstract class VerifyOrchestratorSpecBase extends Specification {
             AttemptDelivery attemptDelivery = AttemptDelivery.assumedDelivered()) {
         def rounds = CheckRouting.byExecutor(builtinRunner, commandRunner, externalClient, judges)
         new VerifyOrchestrator(new PendingPoll(rounds, persistence, attemptDelivery, VirtualTimeEquipment.on(clock, sleeper),
-                listener), clock, listener)
+                listener), DescribedExecutors.none(), clock, listener)
     }
 }

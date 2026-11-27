@@ -84,7 +84,7 @@ class RoundOutcomeLedgerWriterSpec extends Specification implements RotatingLedg
         }
     }
 
-    /** Runs the lint stage, naming {@code executorName} when given (a program stage), else agent-cli. */
+    /** Runs the lint stage, naming {@code executorName} when given (a program stage), else the agent entry claude. */
     private TaskOutcome runLintStage(DescribedExecutors described, String executorName = null,
             InMemoryAttemptPersistence persistence = new InMemoryAttemptPersistence()) {
         def mechanism = executorName == null
@@ -135,7 +135,7 @@ class RoundOutcomeLedgerWriterSpec extends Specification implements RotatingLedg
             resumedKey : null,
             pendingKey : null
         ]
-        lines[1] == lines[0] + [executor: VerifyCheck.Executor.FILES_EXIST, role: 'verdict', check: 0]
+        lines[1] == lines[0] + [executor: VerifyCheck.Executor.FILES_EXIST + '@built-in', role: 'verdict', check: 0]
     }
 
     // Scenario: pipeline/stage-engine / Completed poll closes the round
@@ -190,12 +190,12 @@ class RoundOutcomeLedgerWriterSpec extends Specification implements RotatingLedg
         } == [
             [
                 0,
-                'agent-cli',
+                'claude@built-in',
                 'failed/quality'
             ],
             [
                 1,
-                'agent-cli',
+                'claude@built-in',
                 'failed/infrastructure'
             ]
         ]
@@ -212,8 +212,8 @@ class RoundOutcomeLedgerWriterSpec extends Specification implements RotatingLedg
         given: 'a regular file where the ledger directory belongs, so every append fails'
         Files.writeString(serveDir(), 'not a directory')
         def logs = LogCaptureSupport.attach(RoundOutcomeLedgerWriter)
-        def finished = new EngineEvent.ExecutionFinished(new AttemptKey('TASK-9', 'lint', 0), Participants.transform('agent-cli', ExecutorUsage.none()),
-                new RoundExecutor('agent-cli', null), new ExecutionResult.Completed())
+        def finished = new EngineEvent.ExecutionFinished(new AttemptKey('TASK-9', 'lint', 0), Participants.transform('ghost', ExecutorUsage.none()),
+                new RoundExecutor('ghost', null), new ExecutionResult.Completed())
 
         when:
         writer().onEvent(finished)

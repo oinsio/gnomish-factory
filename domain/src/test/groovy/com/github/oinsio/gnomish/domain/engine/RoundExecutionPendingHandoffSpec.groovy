@@ -28,7 +28,7 @@ class RoundExecutionPendingHandoffSpec extends PendingPollSpecBase {
                 { Optional.of(TOKEN) } as RoundIdentity)
         def listener = new RecordingEventListener()
         def poll = new PendingPoll(executor, persistence, AttemptDelivery.assumedDelivered(), time, listener)
-        def chain = new VerifyOrchestrator(poll, clock, listener)
+        def chain = new VerifyOrchestrator(poll, DescribedExecutors.none(), clock, listener)
 
         when:
         def outcome = new RoundExecution(ports, chain, poll).execute(CONTEXT, STATE, WORKSPACE, VerifyingStages.of([ci]), clock.instant())

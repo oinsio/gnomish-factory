@@ -22,6 +22,8 @@ import java.time.Duration
  */
 class PendingPollObservabilitySpec extends PendingPollSpecBase {
 
+    static final RoundExecutor SCM_STATUS = new RoundExecutor('scm-status', UntrustedText.factory('built-in'))
+
     private List<EngineEvent.PendingPolled> polls() {
         events.events.findAll {
             it instanceof EngineEvent.PendingPolled
@@ -46,7 +48,7 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         ])
 
         when:
-        poll(executor).answer(ci, ref(0, ci), round([ci]))
+        poll(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci]))
 
         then: 'one event per poll, the start not among them, the issued key shown as a subprocess capture'
         polls() == [
@@ -64,10 +66,10 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         def ci = check()
 
         when:
-        def polled = poll(new ScriptedExecutor([passed()])).answer(ci, ref(0, ci), round([ci]))
+        def polled = poll(new ScriptedExecutor([passed()])).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci]))
 
         then:
-        polled.outcome() == new CheckOutcome('scm-status', new ExecutionResult.Completed(), null)
+        polled.outcome() == new CheckOutcome(SCM_STATUS, new ExecutionResult.Completed(), null)
         events.events.isEmpty()
     }
 
@@ -82,14 +84,14 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         def executor = new ScriptedExecutor([pending('k-after'), passed()])
 
         when:
-        def polled = poll(executor).answer(ci, ref(0, ci), round([ci], state))
+        def polled = poll(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci], state))
 
         then: 'no start; the recorded key is polled first, and the outcome names it as read from the branch'
         turns(executor) == [
             [RECORDED, 'k-rotated'],
             [ISSUED, 'k-after']
         ]
-        polled.outcome() == new CheckOutcome('scm-status', new ExecutionResult.Completed(),
+        polled.outcome() == new CheckOutcome(SCM_STATUS, new ExecutionResult.Completed(),
                 UntrustedText.branchDocument('k-rotated'))
         polls()[0] == new EngineEvent.PendingPolled(KEY, new PendingSubject.Check(ref(0, ci)), 'scm-status',
                 UntrustedText.branchDocument('k-rotated'), RECORDED, Duration.ofMinutes(2), Duration.ofMinutes(8))
@@ -106,7 +108,7 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         ] * 21)
 
         when:
-        def polled = poll(executor).answer(ci, ref(0, ci), round([ci]))
+        def polled = poll(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci]))
 
         then: 'the finding: a cannot-verify whose details name both contexts'
         def failure = polled.answer() as VerdictAnswer.InfrastructureFailure
@@ -137,7 +139,7 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         def ci = check()
 
         when:
-        def polled = poll(new ScriptedExecutor([pending('k-1')] * 21)).answer(ci, ref(0, ci), round([ci]))
+        def polled = poll(new ScriptedExecutor([pending('k-1')] * 21)).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci]))
 
         then:
         timeouts()*.failure() == [polled.outcome().status()]
@@ -160,10 +162,10 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         } as AttemptDelivery
 
         when:
-        def polled = poll(new ScriptedExecutor(), undeliverable).answer(ci, ref(0, ci), round([ci]))
+        def polled = poll(new ScriptedExecutor(), undeliverable).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci]))
 
         then:
-        polled.outcome() == new CheckOutcome('scm-status',
+        polled.outcome() == new CheckOutcome(SCM_STATUS,
                 new ExecutionResult.Failed(ExecutionResult.FailureClass.INFRASTRUCTURE, reason, [], details), null)
         polled.answer() == new VerdictAnswer.InfrastructureFailure(reason, details)
     }
@@ -176,7 +178,7 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         def throwing = new ScriptedExecutor()
         throwing.toThrow = new IllegalStateException('adapter broke')
         def chain = new VerifyOrchestrator(new PendingPoll(throwing, persistence, AttemptDelivery.assumedDelivered(),
-                VirtualTimeEquipment.on(clock, sleeper), listener), clock, listener)
+                VirtualTimeEquipment.on(clock, sleeper), listener), DescribedExecutors.none(), clock, listener)
 
         when:
         chain.verify(VerifyingStages.of([ci]), CONTEXT, WORKSPACE, KEY, STATE, TOKEN)
@@ -185,7 +187,7 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         def finished = listener.events.find {
             it instanceof EngineEvent.CheckFinished
         } as EngineEvent.CheckFinished
-        finished.outcome().executor() == 'scm-status'
+        finished.outcome().executor() == SCM_STATUS
         (finished.outcome().status() as ExecutionResult.Failed).failureClass() == ExecutionResult.FailureClass.INFRASTRUCTURE
         finished.outcome().resumedKey() == null
         finished.result().verdict() instanceof Verdict.CannotVerify
@@ -197,7 +199,7 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         given:
         def listener = new RecordingEventListener()
         def judge = JudgeChecks.agent('criteria.md', 'model')
-        def chain = new VerifyOrchestrator(poll(new ScriptedExecutor()), clock, listener)
+        def chain = new VerifyOrchestrator(poll(new ScriptedExecutor()), DescribedExecutors.none(), clock, listener)
 
         when:
         chain.verify(VerifyingStages.of([judge]), CONTEXT, WORKSPACE, KEY, STATE, TOKEN)
@@ -206,7 +208,7 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         def finished = listener.events.find {
             it instanceof EngineEvent.CheckFinished
         } as EngineEvent.CheckFinished
-        finished.outcome().executor() == 'claude'
+        finished.outcome().executor() == new RoundExecutor('claude', UntrustedText.factory('built-in'))
         (finished.outcome().status() as ExecutionResult.Failed).failureClass() == ExecutionResult.FailureClass.INFRASTRUCTURE
         finished.result().verdict() instanceof Verdict.CannotVerify
     }

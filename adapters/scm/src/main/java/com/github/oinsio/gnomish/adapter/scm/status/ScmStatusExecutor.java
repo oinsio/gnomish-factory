@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.domain.egress.EgressRefusedException;
 import com.github.oinsio.gnomish.domain.egress.EndpointDeclaration;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptCommitWorkspace;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
+import com.github.oinsio.gnomish.domain.pipeline.BuiltInExecutors;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.executorcontract.Capability;
 import com.github.oinsio.gnomish.executorcontract.Describe;
@@ -85,7 +86,7 @@ public final class ScmStatusExecutor implements Executor {
     public static Describe describeAnswer(ScmStatusReader statuses) {
         return new Describe(
                 Describe.SPOKEN_PROTOCOL_VERSION,
-                UntrustedText.factory("built-in"),
+                UntrustedText.factory(BuiltInExecutors.VERSION),
                 List.of(Role.VERDICT),
                 List.of(Capability.POLL),
                 JsonNodeFactory.instance.objectNode().put("type", "object").put("additionalProperties", false),

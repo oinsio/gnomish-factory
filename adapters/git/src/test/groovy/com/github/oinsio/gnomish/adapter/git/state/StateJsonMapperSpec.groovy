@@ -53,7 +53,7 @@ class StateJsonMapperSpec extends Specification {
         ],
         Unpriced.of(["model-a": new TokenUsage(10, 20, 0, 0)]))
         def participants = AttemptRecords.executed(usage) + [
-            Participants.verdict('agent-cli', 0, Unpriced.of(["model-a": new TokenUsage(1, 2, 0, 0)]))
+            Participants.verdict('claude', 0, Unpriced.of(["model-a": new TokenUsage(1, 2, 0, 0)]))
         ]
         def record = AttemptRecords.of(0, AttemptRecord.Result.PASSED, startedAt, [], participants, [], Stop.none())
         def pin = new ExecutorVersions(acme: UntrustedText.subprocess('1.4.0'))
@@ -219,8 +219,8 @@ class StateJsonMapperSpec extends Specification {
             new ToolUsage("bash", 3, Duration.ofMillis(1200))
         ], Unpriced.of(tokens))
         def votes = [
-            Participants.verdict('agent-cli', 0, Unpriced.of(tokens)),
-            Participants.verdict('agent-cli', 1, [:])
+            Participants.verdict('claude', 0, Unpriced.of(tokens)),
+            Participants.verdict('claude', 1, [:])
         ]
         def check1 = new CheckResult(new CheckRef(0, UntrustedText.manifest("command:./gradlew test")), new Verdict.Pass(null, []), Duration.ofMillis(200))
         def check2 = new CheckResult(
@@ -371,7 +371,7 @@ class StateJsonMapperSpec extends Specification {
                             ],
                             AttemptRecords.executed(new ExecutorUsage(Duration.ofSeconds(5), [], Unpriced.of(["model-a": new TokenUsage(10, 20, 0, 0)]))) +
                             [
-                                Participants.verdict('agent-cli', 0, Unpriced.of(["model-a": new TokenUsage(1, 2, 0, 0)]))
+                                Participants.verdict('claude', 0, Unpriced.of(["model-a": new TokenUsage(1, 2, 0, 0)]))
                             ],
                             [], Stop.none())
                 ], Snapshots.executed(["model-a": new TokenUsage(10, 20, 0, 0)]), ExecutorVersions.none())

@@ -40,8 +40,8 @@ class StateUsageWireSpec extends Specification {
         given:
         def usage = AttemptRecords.executed(new ExecutorUsage(Duration.ofSeconds(2), [], Unpriced.of(["m": new TokenUsage(1, 2, 3, 4)]))) +
         [
-            Participants.verdict('agent-cli', 0, Unpriced.of(["m": new TokenUsage(5, 6, 0, 0)])),
-            Participants.verdict('agent-cli', 1, [:])
+            Participants.verdict('claude', 0, Unpriced.of(["m": new TokenUsage(5, 6, 0, 0)])),
+            Participants.verdict('claude', 1, [:])
         ]
         def record = AttemptRecords.of(0, AttemptRecord.Result.PASSED, startedAt, [], usage, [], Stop.none())
         def state = new TaskState(new Position.AtStage("implement"), 0, [record], UsageSnapshot.EMPTY, ExecutorVersions.none())

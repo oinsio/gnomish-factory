@@ -189,9 +189,9 @@ class UsageSnapshotIdentitySpec extends Specification implements BareGitRepoFixt
     /** A round on a token of its own: a priced executor and one unpriced judge vote. */
     private AttemptRecord round(String stage, int number, AttemptRecord.Result result) {
         minted++
-        def executor = Participants.transform('agent-cli', new ExecutorUsage(Duration.ofSeconds(3), [],
+        def executor = Participants.transform('claude', new ExecutorUsage(Duration.ofSeconds(3), [],
         ['claude-x': new ModelUsage(new TokenUsage(100 * minted, 10, 5, 1), new BigDecimal('0.0125'))]))
-        def vote = Participants.verdict('agent-cli', 0, ['claude-j': new ModelUsage(new TokenUsage(7, 3, 0, 0), null)])
+        def vote = Participants.verdict('claude', 0, ['claude-j': new ModelUsage(new TokenUsage(7, 3, 0, 0), null)])
         AttemptRecords.identified(TASK, stage, RoundToken.of(String.format('%040x', minted)), number, result,
                 Instant.parse('2026-07-18T09:00:00Z').plusSeconds(60 * minted), [], [executor, vote], [], Stop.none())
     }
