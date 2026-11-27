@@ -655,6 +655,11 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   check is its own entry. One usage wire vocabulary spells them in the state
   file, the status report and the usage report. Type: `ParticipantUsage`.
   Introduced by `define-executor-contract` (design D14); ADR 0020, decision 9.
+  The executor's name is the registry entry its executor block resolved to,
+  the name dispatch ran (`claude` for an `agent-cli` block, the declaration's
+  name for a `program`), never the block's type word; entries recorded before
+  `extract-agent-round-runner` (design D12) keep `agent-cli` and are neither
+  rewritten nor aliased.
   *Never:* executor usage, judge usage — the role-named slots the list replaced.
 - **Usage provenance** — whether an executor reported its usage: `REPORTED` or
   `ABSENT`. An absent entry carries an empty model map and never renders as

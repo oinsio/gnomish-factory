@@ -143,7 +143,7 @@ class StageAttemptLoopSpec extends Specification {
 
         then: 'the round records the executor as its transform entry, verbatim'
         def record = outcome.finalState().attempts()[0]
-        record.usage()[0] == Participants.transform('api', executorUsage)
+        record.usage()[0] == Participants.transform('claude', executorUsage)
         record.usage()[0].wallTime() == Duration.ofSeconds(4)
         record.usage()[0].byModel() == ['model-a': new ModelUsage(new TokenUsage(100, 40, 0, 0), null)]
 

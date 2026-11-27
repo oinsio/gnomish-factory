@@ -12,8 +12,9 @@ import java.util.Optional;
  * the law pin at creation, so the version is the one part of an executor's identity a run can find
  * changed. The program binary itself is not pinned (proposal Q2).
  *
- * <p>An executor with no describe (an {@code agent-cli} stage) has no entry, and an absent entry is
- * never compared ({@link ExecutorVersionCheck}). The version is the executor's own free text, so it
+ * <p>A built-in ({@code claude} for an {@code agent-cli} stage) has no entry: its version is shown,
+ * never pinned (design D12 of extract-agent-round-runner), and an absent entry is never compared
+ * ({@link ExecutorVersionCheck}). The version is the executor's own free text, so it
  * stays a carrier (NFR-S2); names are law names and are held non-blank. Inert value data compared by
  * content; the map is defensively copied and unmodifiable.
  *

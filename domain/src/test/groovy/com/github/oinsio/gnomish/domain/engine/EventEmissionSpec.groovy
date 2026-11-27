@@ -92,7 +92,7 @@ class EventEmissionSpec extends EventEmissionSpecBase {
             it instanceof EngineEvent.ExecutionFinished
         }
         exec.size() == 1
-        (exec[0] as EngineEvent.ExecutionFinished).usage() == Participants.transform('api', fed)
+        (exec[0] as EngineEvent.ExecutionFinished).usage() == Participants.transform('claude', fed)
         (exec[0] as EngineEvent.ExecutionFinished).key() == new AttemptKey('TASK-1', 'build', 0)
     }
 }

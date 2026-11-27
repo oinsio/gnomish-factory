@@ -6,7 +6,6 @@ import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
-import spock.lang.PendingFeature
 import spock.lang.Specification
 import spock.lang.Timeout
 
@@ -140,7 +139,6 @@ class ClaudeRoundJarE2eSpec extends Specification {
     }
 
     // NFR-O1: the round line of an agent block names the registry entry it resolved to, with its describe version
-    @PendingFeature(reason = 'F1 of task 7.2: DescribedExecutors.executorOf names an agent block by its type word (agent-cli) with no version')
     def "NFR-O1: the round line of an agent-cli stage names executor=claude@built-in, role transform"() {
         given:
         Path clone = E2eGitTree.publishedCopyOf('e2e-claude')

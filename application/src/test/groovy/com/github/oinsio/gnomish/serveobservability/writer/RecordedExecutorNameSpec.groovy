@@ -81,16 +81,34 @@ class RecordedExecutorNameSpec extends Specification implements RotatingLedgerAp
         def logs = LogCaptureSupport.attach(LoggingEventListener, Level.INFO)
 
         when:
-        runReview([JudgeChecks.agent('criteria.md', 'm')], DescribedExecutors.none(), persistence)
+        runReview([
+            JudgeChecks.agent('criteria.md', 'm')
+        ], DescribedExecutors.none(), persistence)
 
         then: 'the round\'s and the judge check\'s ledger lines'
-        ledgerLines().collect { [it.executor, it.role, it.check] } == [
-            ['claude@built-in', 'transform', null],
-            ['claude@built-in', 'verdict', 0]
+        ledgerLines().collect {
+            [
+                it.executor,
+                it.role,
+                it.check
+            ]
+        } == [
+            [
+                'claude@built-in',
+                'transform',
+                null
+            ],
+            [
+                'claude@built-in',
+                'verdict',
+                0
+            ]
         ]
 
         and: 'the round\'s log line'
-        logs.list*.formattedMessage.any { it.contains('executor=claude@built-in, protocolVersion=1, role=transform') }
+        logs.list*.formattedMessage.any {
+            it.contains('executor=claude@built-in, protocolVersion=1, role=transform')
+        }
 
         and: 'both participant entries name the entry'
         persistence.entries[0].state.attempts()[0].usage()*.executor() == ['claude', 'claude']
@@ -103,8 +121,10 @@ class RecordedExecutorNameSpec extends Specification implements RotatingLedgerAp
     // NFR-O1 of extract-agent-round-runner: a described program's check line carries its describe version
     def "a described program check's line carries its describe version"() {
         when:
-        runReview([VerifyChecks.external('ci', 'acme-ci', Duration.ZERO, Duration.ZERO, VerifyCheck.TimeoutClass.QUALITY)],
-                described(['acme-ci': UntrustedText.subprocess('1')]), new InMemoryAttemptPersistence())
+        runReview([
+            VerifyChecks.external('ci', 'acme-ci', Duration.ZERO, Duration.ZERO, VerifyCheck.TimeoutClass.QUALITY)
+        ],
+        described(['acme-ci': UntrustedText.subprocess('1')]), new InMemoryAttemptPersistence())
 
         then:
         ledgerLines()[1].subMap(['executor', 'role']) == [executor: 'acme-ci@1', role: 'verdict']
@@ -117,11 +137,18 @@ class RecordedExecutorNameSpec extends Specification implements RotatingLedgerAp
         def persistence = new InMemoryAttemptPersistence()
 
         when:
-        runReview([JudgeChecks.agent('criteria.md', 'm')], described(['acme': UntrustedText.subprocess('3')]), persistence)
+        runReview([
+            JudgeChecks.agent('criteria.md', 'm')
+        ], described(['acme': UntrustedText.subprocess('3')]), persistence)
 
         then:
-        ledgerLines()*.executor == ['claude@built-in', 'claude@built-in']
-        persistence.entries*.state*.executorVersions().every { it == ExecutorVersions.none() }
+        ledgerLines()*.executor == [
+            'claude@built-in',
+            'claude@built-in'
+        ]
+        persistence.entries*.state*.executorVersions().every {
+            it == ExecutorVersions.none()
+        }
     }
 
     private static DescribedExecutors described(Map<String, UntrustedText> versions) {
@@ -135,14 +162,18 @@ class RecordedExecutorNameSpec extends Specification implements RotatingLedgerAp
                 new ToolTrace(KEY, []), [])
         def rounds = new ScriptedCheckRounds([new Verdict.Pass(null, [])])
         def stage = new StageDefinition('build', 'purpose', [], [], new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'm', [:]),
-                'instructions.md', checks, new AutonomyLimits(1), AdvancementMode.AUTO)
-        def listener = new CompositeEngineEventListener([new MdcEventListener(), new LoggingEventListener(), writer()])
+        'instructions.md', checks, new AutonomyLimits(1), AdvancementMode.AUTO)
+        def listener = new CompositeEngineEventListener([
+            new MdcEventListener(),
+            new LoggingEventListener(),
+            writer()
+        ])
         def ports = new EnginePorts(CheckRouting.of(stages, rounds, rounds, rounds), listener, persistence,
                 VirtualTimeEquipment.on(new VirtualClock(NOW)), AttemptDelivery.assumedDelivered(), described,
                 RoundIdentity.inPlace())
         new Engine().run(new PipelineDefinition('1', new AutonomyLimits(3), [stage]),
-                new TaskContext('TASK-9', UntrustedText.tracker('t'), UntrustedText.tracker('b'), []),
-                TaskState.atStageStart('build'), new FakeWorkspace(), ports)
+        new TaskContext('TASK-9', UntrustedText.tracker('t'), UntrustedText.tracker('b'), []),
+        TaskState.atStageStart('build'), new FakeWorkspace(), ports)
         MdcEventListener.clearAttemptScope()
     }
 }

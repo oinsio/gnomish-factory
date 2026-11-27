@@ -45,7 +45,7 @@
       "denials" : [ ],
       "usage" : [ {
         "role" : "transform",
-        "executor" : "agent-cli",
+        "executor" : "claude",
         "provenance" : "reported",
         "wallMillis" : 183000,
         "byTool" : [ {

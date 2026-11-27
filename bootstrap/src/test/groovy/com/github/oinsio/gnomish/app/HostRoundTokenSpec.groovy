@@ -175,7 +175,7 @@ class HostRoundTokenSpec extends Specification implements BareGitRepoFixture, Ap
         } == [
             ['command'],
             ['command'],
-            ['agent-cli']
+            ['claude']
         ]
     }
 }

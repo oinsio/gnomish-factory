@@ -83,6 +83,6 @@ class CommandStageHostFlowSpec extends Specification implements BareGitRepoFixtu
 
         and: 'the run made exactly one model invocation, the agent stage'
         FakeAgentSupport.capturedInvocations(agentInvocations).size() == 1
-        records.participant('review', 0).get('executor').asText() == 'agent-cli'
+        records.participant('review', 0).get('executor').asText() == 'claude'
     }
 }

@@ -79,7 +79,7 @@ class StateStopWireSpec extends Specification {
             "result": "decisionNeeded",
             "startedAt": "2026-10-07T09:00:00Z",
             "checks": [],
-            "usage": [{"role": "transform", "executor": "agent-cli", "provenance": "absent", "byTool": [], "byModel": {}}]${stopField}
+            "usage": [{"role": "transform", "executor": "claude", "provenance": "absent", "byTool": [], "byModel": {}}]${stopField}
           }],
           "totals": {"byRole": {}, "cost": {"priced": 0, "unpricedTokens": {}, "complete": true}, "rounds": 0}
         }

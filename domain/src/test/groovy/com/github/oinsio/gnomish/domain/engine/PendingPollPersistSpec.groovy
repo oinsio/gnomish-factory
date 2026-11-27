@@ -34,7 +34,7 @@ class PendingPollPersistSpec extends PendingPollSpecBase {
         def since = clock.instant()
 
         when:
-        def answer = poll(executor).answer(ci, ref(0, ci), round([ci])).answer()
+        def answer = poll(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci])).answer()
 
         then: 'the start went first, the poll of its key after exactly one pending write'
         turns(executor) == [null, [ISSUED, 'k-1']]
@@ -61,7 +61,7 @@ class PendingPollPersistSpec extends PendingPollSpecBase {
         def ci = check()
 
         when:
-        def answer = poll(executor).answer(ci, ref(0, ci), round([ci])).answer()
+        def answer = poll(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci])).answer()
 
         then:
         answer == new VerdictAnswer.Sarif([], null)
@@ -133,7 +133,7 @@ class PendingPollPersistSpec extends PendingPollSpecBase {
         def ci = check()
 
         when:
-        def answer = poll(executor, undeliverable).answer(ci, ref(0, ci), round([ci])).answer()
+        def answer = poll(executor, undeliverable).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci])).answer()
 
         then:
         answer == new VerdictAnswer.InfrastructureFailure(UntrustedText.factory('push refused'), UntrustedText.subprocess('denied'))
@@ -152,7 +152,7 @@ class PendingPollPersistSpec extends PendingPollSpecBase {
         VerifyCheck shell = VerifyChecks.command('./gradlew test')
 
         when:
-        def answer = poll(executor, delivery).answer(shell, ref(0, shell), round([shell])).answer()
+        def answer = poll(executor, delivery).answer(shell, DescribedExecutors.none().executorOf(shell), ref(0, shell), round([shell])).answer()
 
         then:
         answer == new VerdictAnswer.Sarif([], null)
@@ -167,7 +167,7 @@ class PendingPollPersistSpec extends PendingPollSpecBase {
         def ci = check()
 
         when:
-        poll(executor).answer(ci, ref(0, ci), round([ci])).answer()
+        poll(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci])).answer()
 
         then:
         persistence.pending[0].state.pendingPolls()[0].since() == Instant.EPOCH.plus(java.time.Duration.ofMinutes(3))

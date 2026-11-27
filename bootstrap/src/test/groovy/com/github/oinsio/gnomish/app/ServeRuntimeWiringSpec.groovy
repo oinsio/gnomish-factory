@@ -132,7 +132,7 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
         }
         rounds.size() == 1
         rounds[0].get('taskId').asText() == REF.id()
-        rounds[0].get('executor').asText() == 'agent-cli'
+        rounds[0].get('executor').asText() == 'claude@built-in'
         rounds[0].get('role').asText() == 'transform'
         rounds[0].get('status').asText() == 'completed'
     }

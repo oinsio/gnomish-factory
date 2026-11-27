@@ -15,8 +15,8 @@ import java.util.Map;
  * never declared on the run's child-environment allowlist, whose declared set is the names every
  * child is denied.
  *
- * <p>One producer, the describe preflight; an executor with no describe (an {@code agent-cli}
- * stage) has no entry. Inert value data compared by content; the map and its lists are copied and
+ * <p>One producer, the describe preflight, which describes the law's {@code program} executors only; a
+ * built-in ({@code claude} for an {@code agent-cli} stage) has no entry. Inert value data compared by content; the map and its lists are copied and
  * unmodifiable.
  *
  * <p>Implements NFR-S1 of define-executor-contract.

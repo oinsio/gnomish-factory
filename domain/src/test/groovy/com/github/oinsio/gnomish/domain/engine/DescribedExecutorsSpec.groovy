@@ -70,7 +70,10 @@ class DescribedExecutorsSpec extends Specification {
         holding.executorOf(stage(type, null)).version() == BUILT_IN
 
         where:
-        type << [ExecutorType.AGENT_CLI, ExecutorType.COMMAND]
+        type << [
+            ExecutorType.AGENT_CLI,
+            ExecutorType.COMMAND
+        ]
     }
 
     // NFR-O1 of extract-agent-round-runner: a check is named as a round is — its entry and that entry's version

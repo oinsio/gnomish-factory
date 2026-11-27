@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.workspace.fake.AttemptCommitWorkspaces
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
+import com.github.oinsio.gnomish.domain.engine.DescribedExecutors
 import com.github.oinsio.gnomish.domain.engine.PendingPoll
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.TaskContext

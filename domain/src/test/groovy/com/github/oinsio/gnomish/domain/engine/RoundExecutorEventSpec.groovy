@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
+import com.github.oinsio.gnomish.domain.pipeline.BuiltInExecutors
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.Sandbox
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
@@ -13,9 +14,9 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * NFR-O2, UX3 of define-executor-contract: every round's {@code ExecutionFinished} names the
- * executor that ran it — the stage's law-named executor ({@code executor.name}, task 6.1), with the
- * describe version the run obtained for it, or else the stage's executor type word with no version —
- * and the status it reached.
+ * executor that ran it — the registry entry its block resolved to (the law-named program, {@code
+ * executor.name}, task 6.1, with the describe version the run obtained for it; a built-in with the
+ * version {@code built-in}, NFR-O1 of extract-agent-round-runner) — and the status it reached.
  */
 class RoundExecutorEventSpec extends EventEmissionSpecBase {
 
@@ -73,19 +74,21 @@ class RoundExecutorEventSpec extends EventEmissionSpecBase {
         ]
     }
 
-    // NFR-O2, UX3: an executor with no name is named by the stage's executor type word, unversioned,
-    //     however many executors the run described
-    def "a round of a stage naming no executor names the executor type #word with no version"() {
+    // NFR-O1, FR14 of extract-agent-round-runner (D12, "The name in the record"): a block without a
+    //     name is named by the built-in entry dispatch resolves it to, with the built-in's version,
+    //     however many executors the run described — never by the block's type word
+    def "a round of a #type block names the built-in #entry at version built-in"() {
         when:
         def finished = finishedOf(stageOf(type), new DescribedExecutors(new ExecutorVersions(['lint-bot': V231]), ExecutorCredentialNames.none(), [] as Set))
 
         then:
-        finished.executor() == new RoundExecutor(word, null)
+        finished.executor() == new RoundExecutor(entry, UntrustedText.factory(BuiltInExecutors.VERSION))
 
         where:
-        type | word
-        ExecutorType.AGENT_CLI | 'agent-cli'
-        ExecutorType.API | 'api'
+        type | entry
+        ExecutorType.AGENT_CLI | 'claude'
+        ExecutorType.API | 'claude'
+        ExecutorType.COMMAND | 'command'
     }
 
     def "a round executor needs a name"() {

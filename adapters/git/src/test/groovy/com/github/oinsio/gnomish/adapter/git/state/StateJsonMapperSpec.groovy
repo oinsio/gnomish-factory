@@ -612,6 +612,9 @@ class StateJsonMapperSpec extends Specification {
 
         then: 'the document is readable and the absent field is an empty list, never null'
         state.attempts()[0].denials() == []
+
+        and: 'a participant recorded under the type word before the record named the registry entry keeps it: no reader aliases it (NFR-O1 of extract-agent-round-runner, D12)'
+        state.attempts()[0].usage()*.executor() == ['agent-cli']
     }
 
     // FR7 of fix-denial-attribution-durability: the identity is what makes a re-read a merge

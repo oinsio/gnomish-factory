@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.workspace.fake.AttemptCommitWorkspaces
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.CheckRef
+import com.github.oinsio.gnomish.domain.engine.DescribedExecutors
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.PendingPoll

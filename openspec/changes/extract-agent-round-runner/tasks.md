@@ -592,7 +592,7 @@ Old way: `Request.pending()`; `rounds.openRound(request)` and `round.closeRound(
   fixture service, killed after the pending commit and resumed by a second instance (one
   `start`, the round closes with the service's changes, second recovery a no-op), and killed
   before it (two `start`s, both in the ledger) (M5, G5)
-- [ ] 7.1a The executor a record names has one owner (NFR-O1, FR14; D12 as amended 2026-11-27,
+- [x] 7.1a The executor a record names has one owner (NFR-O1, FR14; D12 as amended 2026-11-27,
   the D8 row "The executor a record names"; answer A to the task 7.2 question, with the three
   points below). A single-owner task (`implementation.md`): the report ends with the sweep.
   Owner: `DescribedExecutors` names a block by `StageDefinition.Executor#registryName()` through
@@ -627,7 +627,7 @@ Old way: `Request.pending()`; `rounds.openRound(request)` and `round.closeRound(
   `CheckOutcome`, `ClaudeEntry` and `RoundOutcomeLedgerWriter` (its "a judge check's finish
   included, is not this writer's business" predates D2) follow the code; glossary entry
   "Participant usage" says which name an entry carries. Scoped PIT on the changed classes
-- [ ] 7.2 Packaged-jar end-to-end with the fake agent binary through the Claude dialect: transform
+- [x] 7.2 Packaged-jar end-to-end with the fake agent binary through the Claude dialect: transform
   round, judge check, decision request → answer → a fresh round started by a second instance whose
   recorded stdin carries the question, its options and the reply and whose recorded argv carries
   no session flag; the round line of the `agent-cli` stage reads `executor=claude@built-in`
@@ -635,7 +635,7 @@ Old way: `Request.pending()`; `rounds.openRound(request)` and `round.closeRound(
   leaves `ClaudeRoundJarE2eSpec`); and a round whose fake agent
   leaves an invalid answer: one attempt burned, the next round's recorded stdin carries the
   finding (FR20)
-- [ ] 7.3 `./gradlew check` with PIT; sweep report for D8 rows; recommend a commit message
+- [x] 7.3 `./gradlew check` with PIT; sweep report for D8 rows; recommend a commit message
 
 ## 8. Human gates before the archive
 
