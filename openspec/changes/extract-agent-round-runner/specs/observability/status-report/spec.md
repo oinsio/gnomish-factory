@@ -36,7 +36,7 @@ The JSON document SHALL carry `"version": 1` and use camelCase names, ISO-8601 U
             "durationMillis": 41250 } ],
         "denials": [],
         "usage": [
-          { "role": "transform", "executor": "agent-cli", "provenance": "reported",
+          { "role": "transform", "executor": "claude", "provenance": "reported",
             "wallMillis": 183000,
             "byTool": [ { "name": "Edit", "calls": 4, "totalMillis": 2100 } ],
             "byModel": {

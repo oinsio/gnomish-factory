@@ -372,6 +372,7 @@ measurement does not show.
 | The round's continuation (`StageExecutor.poll`, `domain/port`, over the open round a `RoundEnvironmentSource` holds; D11 and D14 as amended 2026-11-25) | the open round of a poll: the round its `start` opened, or the one the run's cell was restored with | `PendingPoll` (the only caller of `StageExecutor.poll`); the port's implementations `CheckRoundRoute`, `ResumeVerificationStageExecutor`, `SnapshottingStageExecutor` (a snapshot on a terminal poll only), `ExecutorDispatch`, `ProgramStageExecutor` (takes the open round, closes on a terminal result only) and `CheckRound` (a check round per request, as today); the round sources `HostRoundEnvironmentSource`, `MidRoundPushRounds`, `SandboxRoundEnvironmentSource`; `WorktreeSnapshot` and the in-box snapshot (the terminal snapshot's parent and range) | `Request.pending()`; `rounds.openRound(request)` and `round.closeRound(…)` on a poll (`ProgramStageExecutor.java:71,91`); a mint per poll (`MidRoundPushRounds.java:92`, `SandboxRoundEnvironmentSource.java:111`); the snapshot on a poll's `pending` result (`SnapshottingStageExecutor.java:78`); the `null` adoption (`ProgramStageExecutor.java:79`); the pending kind as an argument of `closeRound` | the port's two methods and the removed field (compile); the port contract spec of D14 (a second open refused, a poll with no open round refused, a poll's round names what the round opened with); `RoundBracketOwnerSpec` (`:bootstrap`): `.openRound(` in main sources only on the start path of `ProgramStageExecutor` and in the delegating `MidRoundPushRounds`, the token mint only in the two minting sources, the allowlist asserted reached; flow spec `PendingRoundFlowSpec` on a real bare origin, host and container; identity spec `PendingRoundIdentitySpec` |
 | How an answer is obtained (a sealed declaration on `AgentDialect`; D15) | schema-enforced final output, or a file the agent writes | `AgentRoundRunner` (validates; writes a schema-enforced answer to the round's answer path); the dialect's policy compilation (`writeExactly` only for the file form); the prompt's answer instruction | `ClaudeAnswerSchema.of` answering "no schema" for `transform`; the answer-file instruction spelled in the vendor-neutral prompt builder | exhaustive switch over the sealed declaration; spec: no argv of a schema-form dialect grants a write under `.gnomish-task/`; `PaidSmokeStructuredAnswerSpec` for the truth of a declaration (FR22) |
 | The answer read (one function in `:application` over `ResultFileReader` and the contract's `Answer.read`; D15) | a reading: absent, a contract answer, or refused with its cause | `RoundJudgement` (the live agent round), `ProgramResultRead` (a `program` and a built-in), `BranchDecisionFile` (the box round's file), `SnapshotTipCheck` (recovery at the register); the mapping of a refused reading to the round's result is one function both the live path and the recovery call | `DecisionRequestRead` with its raw-text and empty-file fallbacks; the host round's read at close; the second parse in `ProgramResultRead.answer` | `ResultPathReadBoundarySpec` extended to the one function; identity spec `AnswerReadIdentitySpec` on a real bare origin: the same bytes give the same round outcome live and from a snapshot (NFR-R5) |
+| The executor a record names (`DescribedExecutors`, `domain/engine`, over `StageDefinition.Executor#registryName()` and `BuiltInExecutors.VERSION`; D12 as amended 2026-11-27) | `RoundExecutor`: the registry entry a block resolved to and its describe version (`built-in` for a built-in, the described version for a program, none for a program the run did not describe) | `RoundExecution` (the round's log line and ledger line through `EngineEvent.ExecutionFinished`, and the `transform` participant entry); `TransformRound.ask` (the pending ask's name); `CheckRoundAnswers` and `VerifyOrchestrator` (a check's `CheckOutcome`, which carries a `RoundExecutor`, read by `RoundOutcomeLedgerWriter`; the `verdict` participant entry); `StageAttemptLoop` (`ranBy`, the pin, which answers none for a built-in); `DescribedExecutors.polls` | `Participants.typeWord` and its call in `executorOf`; the three reads of `stage.executor().name()` inside `DescribedExecutors`; `CheckOutcome`'s `String executor` and the `null` version in `RoundOutcomeLedgerWriter`'s check arm; the literal `"built-in"` in `ClaudeEntry`, `CommandStageExecutor`, `ShellExecutor`, `FilesExistExecutor`, `HttpExecutor`, `GithubActionsExecutor`, `ScmStatusExecutor`. Exempt: `HostRoundEnvironmentSource.ANSWER_NAME`, the name of a scratch file no record carries | `typeWord` is deleted and `CheckOutcome` takes a `RoundExecutor` (compile); `BuiltInVersionOwnerSpec` (`:bootstrap`): the literal `"built-in"` appears in `BuiltInExecutors.java` only, the scan asserted to reach every main source tree; identity spec: the NFR-O1 feature of `ClaudeRoundJarE2eSpec` — the round line of an `agent-cli` stage reads `executor=claude@built-in` on the packaged jar, where dispatch resolved the same block; the judge check's ledger line by the writer's spec over the engine's own `CheckFinished` event (a `run` writes no ledger) |
 
 **D9 — Crash consistency.** No new durable step on the decision path (the pending `transform`
 round adds one, D11): the answer file rides the snapshot/salvage
@@ -621,6 +622,45 @@ box, or to the host environment in a run without boxes) — and its describe is 
 entry it resolved to. `externalize-claude-executor` (NG1) lifts the reservation when it turns
 the entry into a law-declared program.
 
+*The name in the record* (NFR-O1; amended 2026-11-27 after the task 7.2 escalation). The entry
+a block resolves to is the block's one name, and every record carries it: the round's log line
+and ledger line, the `transform` and `verdict` participant entries, the pending ask, a check's
+ledger line. `StageDefinition.Executor#registryName()` is the one derivation, and
+`DescribedExecutors` is the one owner of "who ran this, at which version": `executorOf`,
+`ranBy` and `polls` all name a block through it, so the name a record carries is the name
+dispatch resolved. Task 4.3 moved the judge's participant to that name and left the stage's on
+a second derivation, the type word (`Participants.typeWord`): one task recorded one executor as
+`claude` for its judge and `agent-cli` for its stage, and the round line read
+`executor=agent-cli` with no version. The type word is deleted as a name in a record.
+
+*The version of a built-in.* Every built-in's describe names its version `built-in`; the word
+gets one owner, `BuiltInExecutors.VERSION`, read by the seven describes that spell it today,
+and `DescribedExecutors.executorOf` answers it for a built-in name, so a round line reads
+`executor=claude@built-in` and a check's ledger line carries its executor's version like a
+round's. A built-in's version is shown and never pinned: `executorVersions` and
+`ExecutorVersionCheck` stay on described programs, because a pinned `built-in` would make the
+release in which NG1 gives the entry a real version a `PipelineMismatch` for every task in
+flight. The constant tells one fact, "compiled into this factory"; the build that ran the round
+is the `factoryVersion` every ledger line already carries, and the CLI's own version arrives
+with NG1.
+
+*Records written before this amendment* keep `agent-cli` in their participant entries and are
+neither rewritten nor aliased: `totals` folds by role and model (`UsageFold`), never by
+executor name, so no sum splits; no pending record carries the word, since an agent block
+never polls (NG5); and the pin holds no built-in.
+
+*Alternative zero — keep the type word in the record:* the record then names what the law
+asked for, not what ran, from data dispatch did not act on (SLSA's provenance requirement and
+the Kubernetes status convention both record the resolved identity), and NFR-O1 stays unmet.
+*Alternative rejected — the resolved name with no version until NG1* (option B of the task 7.2
+question): it narrows NFR-O1 to save nothing, the constant being in the code already.
+*Alternative rejected — the factory's own version as the built-in's version:* it identifies an
+artifact where `built-in` does not (OpenTelemetry's rule for a version attribute), but it is on
+the ledger line already, and as a describe version it would differ after every factory
+upgrade. *Alternative rejected — a `requested` field beside the resolved name* (SLSA's external
+parameters, OpenTelemetry's request and response model): the requested form is the law, pinned
+on the task branch; a second copy in each line is a pair to keep in step.
+
 *Alternative rejected — "a fixed name until the judge can name one"* (option A of the task 4.1
 question): a shim with no removal step, the shape Jenkins' implied plugin dependencies record.
 *Alternative rejected — `type: judge` defaults to `claude`, as `external` defaults to
@@ -840,6 +880,10 @@ measurement covers, never the judgement.
 
 ## Risks / Trade-offs
 
+- [A task whose earlier rounds recorded the participant `agent-cli` shows two names for one
+  executor after the upgrade] → a visible difference in the per-round list only: totals fold by
+  role and model, the pin holds no built-in, and no reader keys on the name (D12 as amended
+  2026-11-27).
 - [A non-conforming executor that refuses a superseded or ended key (K3, K4)] → the conformance
   kit's `pending-repoll` case fails it before use; at run time the refusal is a visible
   infrastructure failure naming the key, never a silent loss or a silent `start`.

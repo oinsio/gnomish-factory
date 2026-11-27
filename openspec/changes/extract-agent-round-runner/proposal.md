@@ -101,7 +101,9 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
 ## Non-Goals
 
 - NG1: moving the Claude dialect out of process as the reference external executor — follow-up
-  `externalize-claude-executor` (also adds the Codex dialect).
+  `externalize-claude-executor` (also adds the Codex dialect). The CLI's own version in a round
+  line goes with it: until the entry is a described program its version is the built-ins'
+  constant (design D12).
 - NG2: an ACP dialect — follow-up `add-acp-executor`.
 - NG3: mid-round permission prompts as decision requests (ADR 0012 D7 stands).
 - NG4: isolating repo-local agent policy files (`.claude/settings.json`) — the describe fields
@@ -312,8 +314,11 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
 
 ### Non-Functional Observability
 
-- NFR-O1: Usage carries provenance; the Claude dialect reports `REPORTED`; the ledger shows
-  `executor=claude@<version> role=<role>`.
+- NFR-O1: Usage carries provenance; the Claude dialect reports `REPORTED`; every record of a
+  round or a check names the executor by the registry entry its block resolved to, so the
+  ledger shows `executor=claude@<version> role=<role>` for an agent stage's round and for a
+  judge check alike, `<version>` being a built-in's constant `built-in` (design D12 as amended
+  2026-11-27).
 - NFR-O2: Each poll of a pending `transform` round logs executor, key prefix, elapsed and
   remaining time under the task's MDC, as a verdict poll does; usage reported by `start` and by
   each `poll` is recorded under the one round identity.

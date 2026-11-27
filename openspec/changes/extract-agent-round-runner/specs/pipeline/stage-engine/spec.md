@@ -115,6 +115,30 @@ call `start`.
 - **WHEN** recovery runs again on a branch whose pending round already closed
 - **THEN** nothing is polled or started and the branch is unchanged
 
+### Requirement: A record names the executor by its registry entry
+Every record of a round or of an executor check — the log line, the ledger line, the usage
+participant entry and the pending record — SHALL name the executor by the registry entry its
+executor block resolved to, the name dispatch resolved, and a line that carries a version SHALL
+carry that entry's describe version, which for a built-in is `built-in`.
+**Implements**: NFR-O1, FR14 of extract-agent-round-runner
+**Notes**: The type word of a block (`agent-cli`) is how a law asks for an executor; rounds recorded before this requirement keep it in their participant entries.
+
+#### Scenario: An agent stage's round is named claude
+- **WHEN** a stage whose executor block is `type: agent-cli` completes a round
+- **THEN** its log line and its ledger line carry `executor=claude@built-in role=transform`, and the round's `transform` participant entry names `claude`
+
+#### Scenario: A judge check's ledger line carries the version
+- **WHEN** a `judge` check whose executor block is `type: agent-cli` ends
+- **THEN** its ledger line carries `executor=claude@built-in role=verdict`, and its `verdict` participant entry names `claude`
+
+#### Scenario: A program check's ledger line carries the described version
+- **WHEN** an executor check of a `program` executor described with version `1` ends
+- **THEN** its ledger line carries `executor=<name>@1 role=verdict`
+
+#### Scenario: A built-in's version is not pinned
+- **WHEN** a task's rounds ran an `agent-cli` stage and a `judge` check
+- **THEN** the task state's `executorVersions` carries no entry for `claude`
+
 ## MODIFIED Requirements
 
 ### Requirement: Failure classification

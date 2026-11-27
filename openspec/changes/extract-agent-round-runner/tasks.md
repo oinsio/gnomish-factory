@@ -592,16 +592,61 @@ Old way: `Request.pending()`; `rounds.openRound(request)` and `round.closeRound(
   fixture service, killed after the pending commit and resumed by a second instance (one
   `start`, the round closes with the service's changes, second recovery a no-op), and killed
   before it (two `start`s, both in the ledger) (M5, G5)
+- [ ] 7.1a The executor a record names has one owner (NFR-O1, FR14; D12 as amended 2026-11-27,
+  the D8 row "The executor a record names"; answer A to the task 7.2 question, with the three
+  points below). A single-owner task (`implementation.md`): the report ends with the sweep.
+  Owner: `DescribedExecutors` names a block by `StageDefinition.Executor#registryName()` through
+  one private function used by `executorOf`, `ranBy` and `polls`, and answers a version: the
+  described one for a program, `BuiltInExecutors.VERSION` (new, the word `built-in`) for a
+  built-in name, none for a program the run did not describe.
+  Consumers, each shown to take the name and the version from the owner: `RoundExecution.java:147`
+  (the `ExecutionFinished` event and the `transform` participant); `TransformRound.java:73` (the
+  pending ask); `CheckRoundAnswers.java:78`, `:93` and `VerifyOrchestrator.java:163` (`CheckOutcome`
+  takes a `RoundExecutor` instead of a `String`; `RoundOutcomeLedgerWriter`'s check arm writes
+  its version where it writes `null` today, asserted by the writer's spec over the engine's own
+  `CheckFinished` event of a judge check and of a described `program` check);
+  `StageAttemptLoop` (`ranBy`).
+  Three points the answer adds to option A: (1) `ranBy` keeps answering none for a built-in —
+  `executorVersions` and `ExecutorVersionCheck` stay on described programs, and a spec pins that
+  a task which ran `claude` holds no pin for it; (2) the version of a built-in is the constant,
+  never the factory's version; (3) no reader aliases `agent-cli` to `claude` and no record is
+  rewritten.
+  Old-way sweep, every hit removed or routed, the grep and its hits in the report:
+  `Participants.typeWord` (deleted); `executor().name()` in `domain/engine`; `"built-in"` in every
+  main source tree (seven files today: `ClaudeEntry`, `CommandStageExecutor`, `ShellExecutor`,
+  `FilesExistExecutor`, `HttpExecutor`, `GithubActionsExecutor`, `ScmStatusExecutor`);
+  `new CheckOutcome(`; `"agent-cli"` in main and test sources and in committed fixtures and
+  goldens where it is a participant or a round line's executor (as the law's type word it
+  stays; `HostRoundEnvironmentSource.ANSWER_NAME` is a scratch file's name and is exempt).
+  By the same rule a `command` stage's line gains `@built-in` and its protocol version (the
+  name was `command` already); specs that assert the bare name follow.
+  Gate: `BuiltInVersionOwnerSpec` (`:bootstrap`) — the literal appears in `BuiltInExecutors.java`
+  only, the scan asserted to reach every main source tree, shown red with one literal restored.
+  Specs with markers for the four scenarios of "A record names the executor by its registry
+  entry" (`pipeline/stage-engine`); javadoc of `RoundExecutor`, `DescribedExecutors`,
+  `CheckOutcome`, `ClaudeEntry` and `RoundOutcomeLedgerWriter` (its "a judge check's finish
+  included, is not this writer's business" predates D2) follow the code; glossary entry
+  "Participant usage" says which name an entry carries. Scoped PIT on the changed classes
 - [ ] 7.2 Packaged-jar end-to-end with the fake agent binary through the Claude dialect: transform
-  round, judge vote, decision request → answer → a fresh round started by a second instance whose
+  round, judge check, decision request → answer → a fresh round started by a second instance whose
   recorded stdin carries the question, its options and the reply and whose recorded argv carries
-  no session flag; ledger asserts
-  `executor=claude@<version>` (NFR-O1); and a round whose fake agent leaves an invalid
-  answer: one attempt burned, the next round's recorded stdin carries the finding (FR20)
+  no session flag; the round line of the `agent-cli` stage reads `executor=claude@built-in`
+  (NFR-O1; the identity spec of the D8 row of task 7.1a — the `@PendingFeature` of finding F1
+  leaves `ClaudeRoundJarE2eSpec`); and a round whose fake agent
+  leaves an invalid answer: one attempt burned, the next round's recorded stdin carries the
+  finding (FR20)
 - [ ] 7.3 `./gradlew check` with PIT; sweep report for D8 rows; recommend a commit message
-- [ ] 7.3a (human) `./gradlew :bootstrap:paidSmokeTest --tests '*PaidSmokeLivenessSpec*' -PpaidSmoke.linuxImage=<image>`
+
+## 8. Human gates before the archive
+
+These two are not tasks of the implement stage and carry no checkbox: each is a paid run on the
+operator's subscription whose result is recorded in `design.md`, which that stage may not edit.
+The human runs them once task 7.3 is green and before the change is archived, and writes the
+result into the decision named; the pull request's description lists both until they are done.
+
+- 7.3a (human) `./gradlew :bootstrap:paidSmokeTest --tests '*PaidSmokeLivenessSpec*' -PpaidSmoke.linuxImage=<image>`
   green on macOS and on the Linux container rows; record the CLI version and the largest gap
   per row in D6 (FR17). A gap above the threshold is reported under `spec-mismatch.md`
-- [ ] 7.3b (human) `./gradlew :bootstrap:paidSmokeTest --tests '*PaidSmokeStructuredAnswerSpec*' -PpaidSmoke.linuxImage=<image>`
+- 7.3b (human) `./gradlew :bootstrap:paidSmokeTest --tests '*PaidSmokeStructuredAnswerSpec*' -PpaidSmoke.linuxImage=<image>`
   green on macOS and on the Linux container rows; record the CLI version per row in D15 (FR22).
   A red row is reported under `spec-mismatch.md`
