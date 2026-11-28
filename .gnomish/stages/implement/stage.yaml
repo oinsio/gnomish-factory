@@ -28,12 +28,12 @@ executor:
   settings:
     # Counts the orchestrator's turns only - a subagent's turns are not counted (verified
     # on Claude Code 2.1.289). A few turns per task: brief, launch, read the report, tick.
-    maxTurns: 400
+    maxTurns: 800
     # The changes of this repository run 12-35 tasks, and a whole implementation has taken
     # eight hours. A round that outlives this is killed and parked as an infrastructure
     # failure for a human to return - no attempt burned, the ticked tasks kept - so the
     # budget is generous rather than tight.
-    roundTimeout: 28800s
+    roundTimeout: 57600s
     allowedTools:
       - Read
       - Glob

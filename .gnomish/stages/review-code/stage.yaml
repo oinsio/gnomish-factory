@@ -23,10 +23,10 @@ executor:
   model: claude-fable-5-1
   settings:
     # Every task and requirement is checked against the code with file:line evidence.
-    maxTurns: 150
+    maxTurns: 300
     # Quick mode runs no Gradle - the implement stage left ./gradlew check green on this
     # very commit - so the round is reading, not building.
-    roundTimeout: 3600s
+    roundTimeout: 7200s
     # Bash is for read-only git and grep and the decision-file echo; the report is written
     # through Write. `allowedTools` cannot widen .claude/settings.json.
     allowedTools:
@@ -122,7 +122,8 @@ verify:
     criteriaFile: stages/review-code/acceptance.md
     model: claude-fable-5-1
     settings:
-      maxTurns: 60
+      maxTurns: 120
+      roundTimeout: 3600s
       disallowedTools:
         - Bash
         - Agent
@@ -136,4 +137,4 @@ verify:
     votes: 1
 advancement: auto
 autonomy:
-  attemptLimit: 3
+  attemptLimit: 6
