@@ -4,7 +4,8 @@
 
 The law commit protects `.gnomish/` — manifests, instructions, judge criteria — and threat
 #22 of `docs/sandbox-threat-registry.md` is recorded as closed by it. The code check of
-2026-09-27 showed the closure is partial: a `command` check is law, but it runs `sh -c` over
+2026-09-27 showed the closure is partial: a `shell` check (legacy manifest token `command`) is
+law, but it runs `sh -c` over
 the gnome's tree, so everything it invokes — `gradlew`, build scripts, tests, coverage
 thresholds, mutation config, snapshots — is gnome-editable, and `gradlew → exit 0` passes.
 Running the check in a fresh box does not help: the fresh box is built from the attempt
@@ -45,9 +46,12 @@ change seals verification against the tree it verifies, in three mechanisms and 
 
 - NG1: sealing the build tool itself (`gradlew` as a binary) — the law may ship its own wrapper
   under `GNOMISH_LAW_DIR` and protect the repo's; replacing the build system is out of scope.
+  Pickup: the first pipeline that can neither ship its own wrapper under the law tree nor
+  protect the repository's.
 - NG2: hidden tests as a factory feature beyond "a path under the law tree" — a test runner
   that reads them is pipeline content.
 - NG3: host-mode isolation of refs (shared `.git`) — recorded as a limitation, not fixed.
+  Pickup: the change that gives host mode a per-task clone.
 - NG4: baseline comparisons (`baseline: <law commit>` for perf or coverage deltas).
 - NG5: judge reducers beyond majority and the `abstain` state.
 
@@ -71,7 +75,7 @@ change seals verification against the tree it verifies, in three mechanisms and 
   comes from the law commit through the law source, never from the working copy.
 - FR2: The law MAY declare `protected:` globs; the loader SHALL validate them lexically.
 - FR3: The built-in `diff-scope` verdict executor SHALL compare the attempt commit with the task
-  base, SHALL fail with one finding per protected path touched unless the stage declares
+  base (the SHA of the task's base pin: the commit the task branch was created from), SHALL fail with one finding per protected path touched unless the stage declares
   `allows-protected`, SHALL fail on deletion of a protected file, and SHALL fail when the diff
   exceeds the declared size cap.
 - FR4: Every `verdict` request SHALL carry, as delimited data, the list of protected paths the
@@ -99,13 +103,16 @@ change seals verification against the tree it verifies, in three mechanisms and 
 
 - NFR-S1: `GNOMISH_LAW_DIR` is outside the working copy and read-only for the task user; a write
   attempt fails; in host mode it is a separate directory the gnome's command cannot modify.
-- NFR-S2: The factory-owned agent config directory contains only factory-written content; no
-  working-copy file is read as agent policy.
+- NFR-S2: No working-copy file is read as agent policy: the factory-owned agent config
+  directory starts each round with factory-written content only (the CLI may add its own state
+  files during the round; they die with it), and a round's agent credentials reach it only
+  through the describe-declared credential variables, never from a login under the operator's
+  home.
 
 ### Non-Functional Cost
 
-- NFR-C1: Materialization copies only the law tree (bounded by the law size cap); `diff-scope`
-  adds no model call.
+- NFR-C1: Materialization copies only the law tree's entries, each under the law source's
+  per-file read cap; `diff-scope` adds no model call.
 
 ## Operator Experience Criteria
 
@@ -133,10 +140,14 @@ change seals verification against the tree it verifies, in three mechanisms and 
   protected-change list.
 - `pipeline-config`: `protected:`, `allows-protected`, `severity`, executor isolation exemption.
 - `stage-engine`: advisory severity handling.
+- `executor/wire-contract`: an optional protected-change list in a `verdict` request's role
+  inputs.
 
 ## Impact
 
-- `adapters/law` + `sandbox/core` seam (`putFile`) for materialization; new `diff-scope` built-in
+- `adapters/law` + a new sealed-tree operation on the `sandbox/core` environment port (host and
+  container implementations) for materialization; `executor-contract` (`RoleInputs`, request
+  schema); new `diff-scope` built-in
   over `gitobjects`; agent round runner (config dir and flags); `docs/sandbox-threat-registry.md`.
 - Sequencing: after `extract-agent-round-runner` (describe fields, runner) and
   `migrate-verify-to-executor-contract` (verdict executors); independent of `add-sandbox-hardening`
