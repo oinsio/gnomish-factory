@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.pipeline
 
+import com.github.oinsio.gnomish.domain.engine.ExecutorRole
 import spock.lang.Specification
 
 /**
@@ -40,5 +41,12 @@ class BuiltInExecutorsSpec extends Specification {
         expect:
         BuiltInExecutors.CLAUDE == 'claude'
         BuiltInExecutors.CHECK_NAMES == BuiltInExecutors.NAMES - ['claude']
+    }
+
+    // FR13 of extract-agent-round-runner (D12): the command built-in's roles have one owner, read by
+    //     the judge role rule and by the built-in's own describe
+    def "FR13: the command built-in serves role transform only"() {
+        expect:
+        BuiltInExecutors.COMMAND_ROLES == [ExecutorRole.TRANSFORM]
     }
 }

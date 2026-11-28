@@ -17,7 +17,7 @@ import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
-import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyingStages
@@ -182,9 +182,11 @@ class ThreeProviderVerifyChainSpec extends Specification {
         def clock = time.clock()
         def shell = new ShellCommandCheckRunner(clock).withEnvironments(new TempDirCheckEnvironments(tempDir, clock))
         def rounds = platform.checkRounds(checks, allowlist, shell, clock)
+        def persistence = new InMemoryAttemptPersistence()
+        def checkRounds = new CheckRounds(new EnginePorts(rounds, listener, persistence, time, RoundIdentity.inPlace()),
+                new PendingPoll(rounds, persistence, time, listener))
         def orchestrator = new VerifyOrchestrator(
-                new PendingPoll(rounds, new InMemoryAttemptPersistence(), AttemptDelivery.assumedDelivered(), time,
-                listener),
+                checkRounds,
                 DescribedExecutors.none(),
                 clock,
                 listener)

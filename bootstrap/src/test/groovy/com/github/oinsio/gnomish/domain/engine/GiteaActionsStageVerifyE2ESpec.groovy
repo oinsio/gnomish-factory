@@ -12,8 +12,8 @@ import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.engine.port.PendingTurn
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.BuiltInExecutors
@@ -190,9 +190,11 @@ class GiteaActionsStageVerifyE2ESpec extends Specification implements BareGitRep
                     }
                 }
         def listener = new RecordingEventListener()
+        def persistence = new InMemoryAttemptPersistence()
+        def checkRounds = new CheckRounds(new EnginePorts(rounds, listener, persistence, time, RoundIdentity.inPlace()),
+                new PendingPoll(rounds, persistence, time, listener))
         new VerifyOrchestrator(
-                new PendingPoll(rounds, new InMemoryAttemptPersistence(), AttemptDelivery.assumedDelivered(), time,
-                listener),
+                checkRounds,
                 DescribedExecutors.none(),
                 clock,
                 listener)

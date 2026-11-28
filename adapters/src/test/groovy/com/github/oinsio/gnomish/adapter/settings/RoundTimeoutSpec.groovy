@@ -75,7 +75,7 @@ class RoundTimeoutSpec extends Specification {
     def "D6: the judge refuses #value with the one malformed-value message"() {
         expect:
         RoundTimeout.malformation(value) ==
-                "malformed 'roundTimeout': expected a number of seconds or an ISO-8601 duration string"
+                "malformed 'roundTimeout': expected a positive number of seconds or a positive ISO-8601 duration string"
 
         where:
         value << [
@@ -84,8 +84,22 @@ class RoundTimeoutSpec extends Specification {
             '',
             '   ',
             null,
-            [1, 2]
+            [1, 2],
+            0,
+            -5,
+            'PT0S',
+            '0s',
+            '-PT5S'
         ]
+    }
+
+    // FR7, FR13: a zero or negative bound is refused at load, never handed to the round
+    def "D6: a non-positive #value declares nothing"() {
+        expect:
+        RoundTimeout.declared([roundTimeout: value]) == Optional.empty()
+
+        where:
+        value << [0, -5, 'PT0S', '0s', '-PT5S']
     }
 
     // D6: one parse behind both — a value the judge accepts is declared as what it names

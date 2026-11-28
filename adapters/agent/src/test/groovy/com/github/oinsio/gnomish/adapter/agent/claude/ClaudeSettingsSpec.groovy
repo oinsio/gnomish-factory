@@ -80,11 +80,17 @@ class ClaudeSettingsSpec extends Specification {
         expect:
         ClaudeSettings.validate(FILE, WHERE, [roundTimeout: value]) == [
             new ConfigError(FILE, 'executor.settings.roundTimeout',
-            "malformed 'roundTimeout': expected a number of seconds or an ISO-8601 duration string")
+            "malformed 'roundTimeout': expected a positive number of seconds or a positive ISO-8601 duration string")
         ]
 
         where:
-        value << ['not-a-duration', '']
+        value << [
+            'not-a-duration',
+            '',
+            0,
+            -5,
+            'PT0S'
+        ]
     }
 
     def "every roundTimeout shape accepted before the schema moved is accepted (#value)"() {

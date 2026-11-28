@@ -43,7 +43,7 @@ class HostPendingRoundCommitSpec extends Specification implements HostSnapshotRo
 
         then: 'the answer is the round\'s, and its snapshot carries the pending-round subject'
         result.is(answer)
-        subjectOf(cloneDir, snapshot) == ServiceCommitMessages.pendingSnapshot('implement', ROUND, token)
+        subjectOf(cloneDir, snapshot) == RoundSubject.pendingSnapshot('implement', ROUND, token)
 
         and: 'the pending round commit is registered with the branch, on the snapshot alone, changing only state.json'
         def pending = tip()
@@ -51,7 +51,7 @@ class HostPendingRoundCommitSpec extends Specification implements HostSnapshotRo
         registeredId(cloneDir, TASK) == pending
         gitOutput(cloneDir, 'rev-list', '--parents', '-n', '1', pending).split(' ').drop(1).toList() == [snapshot]
         changedIn(pending) == ['.gnomish-task/state.json']
-        subjectOf(cloneDir, pending) == ServiceCommitMessages.pending('implement', ROUND, token)
+        subjectOf(cloneDir, pending) == RoundSubject.pending('implement', ROUND, token)
 
         and: 'its tree carries the round\'s working copy, and its state the round\'s own entry'
         fileAt(pending, 'App.java') == 'class App {}'
@@ -115,7 +115,7 @@ class HostPendingRoundCommitSpec extends Specification implements HostSnapshotRo
 
         then:
         result.is(answer)
-        subjectOf(cloneDir, tip()) == ServiceCommitMessages.snapshot('implement', ROUND, token)
+        subjectOf(cloneDir, tip()) == RoundSubject.snapshot('implement', ROUND, token)
         cell.closed().close() == RoundClose.VERIFIABLE
     }
 
@@ -165,8 +165,8 @@ class HostPendingRoundCommitSpec extends Specification implements HostSnapshotRo
         gitOutput(cloneDir, 'rev-list', '--parents', '-n', '1', snapshot).split(' ').drop(1).toList() == [pending]
 
         and: 'its subject names the token of the round\'s pending-round snapshot'
-        subjectOf(cloneDir, pendingSnapshot) == ServiceCommitMessages.pendingSnapshot('implement', ROUND, token)
-        subjectOf(cloneDir, snapshot) == ServiceCommitMessages.snapshot('implement', ROUND, token)
+        subjectOf(cloneDir, pendingSnapshot) == RoundSubject.pendingSnapshot('implement', ROUND, token)
+        subjectOf(cloneDir, snapshot) == RoundSubject.snapshot('implement', ROUND, token)
         cell.closed() == new ClosedRound(token, snapshot, snapshot, RoundClose.VERIFIABLE)
 
         and: 'it carries the record the pending round commit carried: the lag was settled, not staged'
@@ -196,7 +196,7 @@ class HostPendingRoundCommitSpec extends Specification implements HostSnapshotRo
 
         then: 'the snapshot was not declined: the range it was judged over is the executor\'s commit alone'
         def snapshot = tip()
-        subjectOf(cloneDir, snapshot) == ServiceCommitMessages.snapshot('implement', ROUND, token)
+        subjectOf(cloneDir, snapshot) == RoundSubject.snapshot('implement', ROUND, token)
         gitOutput(cloneDir, 'rev-list', "${pending}..${snapshot}^").readLines() == [
             gitOutput(cloneDir, 'rev-parse', snapshot + '^')
         ]

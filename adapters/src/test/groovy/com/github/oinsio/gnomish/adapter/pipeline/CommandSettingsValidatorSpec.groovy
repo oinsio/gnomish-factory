@@ -25,7 +25,7 @@ class CommandSettingsValidatorSpec extends Specification {
 
     private static final AutonomyLimits LIMITS = new AutonomyLimits(2)
     private static final String MALFORMED =
-    "malformed 'roundTimeout': expected a number of seconds or an ISO-8601 duration string"
+    "malformed 'roundTimeout': expected a positive number of seconds or a positive ISO-8601 duration string"
 
     def "FR3: a command stage's well-formed roundTimeout (#value) yields no errors"() {
         expect:
@@ -72,7 +72,10 @@ class CommandSettingsValidatorSpec extends Specification {
             'not-a-duration',
             '',
             '   ',
-            ['PT1M']
+            ['PT1M'],
+            0,
+            -5,
+            'PT0S'
         ]
     }
 

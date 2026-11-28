@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.pipeline;
 
+import com.github.oinsio.gnomish.domain.engine.ExecutorRole;
 import java.util.List;
 
 /**
@@ -34,6 +35,15 @@ public final class BuiltInExecutors {
 
     /** The built-in a {@code command} stage runs: its declared command line. */
     public static final String COMMAND = "command";
+
+    /**
+     * The roles the {@link #COMMAND} built-in serves (design D12 of extract-agent-round-runner): its
+     * one statement, read by the judge role rule, which refuses a {@code command} judge block unless
+     * the list holds {@code verdict}, and by the built-in's own describe and round start, which map it
+     * onto the contract's roles. {@code ExecutorRegistryEntrySpec} pins the real entry's describe to
+     * this list.
+     */
+    public static final List<ExecutorRole> COMMAND_ROLES = List.of(ExecutorRole.TRANSFORM);
 
     /**
      * The agent entry an {@code agent-cli} executor block resolves to (design D12 of

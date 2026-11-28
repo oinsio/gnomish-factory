@@ -27,7 +27,7 @@ class PendingPollResumeSpec extends PendingPollSpecBase {
         def executor = new ScriptedExecutor([passed(), passed()])
 
         when:
-        def result = orchestrator(poll(executor)).verify(VerifyingStages.of([first, second]), CONTEXT, WORKSPACE, KEY,
+        def result = orchestrator(checkRounds(executor)).verify(VerifyingStages.of([first, second]), CONTEXT, WORKSPACE, KEY,
         state, TOKEN)
 
         then:
@@ -49,7 +49,7 @@ class PendingPollResumeSpec extends PendingPollSpecBase {
         def executor = new ScriptedExecutor([pending('k-new'), passed()])
 
         when:
-        def answer = poll(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci], STATE.withPendingPolls([stale]), roundToken)).answer()
+        def answer = checkRounds(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci], STATE.withPendingPolls([stale]), roundToken)).answer()
 
         then:
         answer == new VerdictAnswer.Sarif([], null)
@@ -73,7 +73,7 @@ class PendingPollResumeSpec extends PendingPollSpecBase {
         def executor = new ScriptedExecutor([pending('k-new'), passed()])
 
         when:
-        poll(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci], STATE.withPendingPolls([roundEntry]))).answer()
+        checkRounds(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci], STATE.withPendingPolls([roundEntry]))).answer()
 
         then:
         turns(executor) == [null, [ISSUED, 'k-new']]
@@ -92,7 +92,7 @@ class PendingPollResumeSpec extends PendingPollSpecBase {
         ])
 
         when:
-        poll(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci, other], state)).answer()
+        checkRounds(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci, other], state)).answer()
 
         then:
         turns(executor) == [null]
@@ -113,7 +113,7 @@ class PendingPollResumeSpec extends PendingPollSpecBase {
         ])
 
         when:
-        orchestrator(poll(executor)).verify(VerifyingStages.of([first, second]), CONTEXT, WORKSPACE, KEY, state, TOKEN)
+        orchestrator(checkRounds(executor)).verify(VerifyingStages.of([first, second]), CONTEXT, WORKSPACE, KEY, state, TOKEN)
 
         then:
         [
@@ -145,7 +145,7 @@ class PendingPollResumeSpec extends PendingPollSpecBase {
         def executor = new ScriptedExecutor([pending('k-2'), passed()])
 
         when:
-        def answer = poll(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci], state)).answer()
+        def answer = checkRounds(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci], state)).answer()
 
         then:
         answer == new VerdictAnswer.Sarif([], null)
@@ -168,7 +168,7 @@ class PendingPollResumeSpec extends PendingPollSpecBase {
         ])
 
         when:
-        def answer = poll(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci], state)).answer()
+        def answer = checkRounds(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci], state)).answer()
 
         then: 'one poll at once, then the timeout: no wait'
         turns(executor) == [[RECORDED, 'k-1']]
@@ -184,9 +184,9 @@ class PendingPollResumeSpec extends PendingPollSpecBase {
         def resumed = new ScriptedExecutor([passed()])
 
         when:
-        poll(started).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci], STATE, TOKEN, secondRound)).answer()
+        checkRounds(started).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci], STATE, TOKEN, secondRound)).answer()
         def written = persistence.pending[0].state
-        poll(resumed).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci], written, TOKEN, secondRound)).answer()
+        checkRounds(resumed).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci], written, TOKEN, secondRound)).answer()
 
         then:
         written.pendingPolls()*.attempt() == [2]

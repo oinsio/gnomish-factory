@@ -17,8 +17,8 @@ import org.slf4j.LoggerFactory;
  * migrate-verify-to-executor-contract): first parents only, over commits whose subject is the pending
  * subject of the same stage, round and token, to the one commit carrying that round's snapshot
  * subject or its pending-round snapshot subject. Every commit on the way is judged by the writer's own
- * rendering of the round's subjects ({@link ServiceCommitMessages#pending(String, int, RoundToken)},
- * {@link ServiceCommitMessages#snapshot}, {@link ServiceCommitMessages#pendingSnapshot}), compared
+ * rendering of the round's subjects ({@link RoundSubject#pending(String, int, RoundToken)},
+ * {@link RoundSubject#snapshot}, {@link RoundSubject#pendingSnapshot}), compared
  * whole, so a commit of another round, another token or another kind ends the walk with nothing. A
  * pending commit has exactly one parent by construction; one with any other count is not the
  * factory's and is refused too.
@@ -81,9 +81,9 @@ final class PendingChain {
      *     the kind that bottom names, or empty when a commit on the way is not the round's
      */
     Optional<Walk> snapshotBelow(String branch, RegisteredCommit pending, AttemptKey key, RoundToken token) {
-        String snapshotSubject = ServiceCommitMessages.snapshot(key.stage(), key.attempt(), token);
-        String pendingSnapshotSubject = ServiceCommitMessages.pendingSnapshot(key.stage(), key.attempt(), token);
-        String pendingSubject = ServiceCommitMessages.pending(key.stage(), key.attempt(), token);
+        String snapshotSubject = RoundSubject.snapshot(key.stage(), key.attempt(), token);
+        String pendingSnapshotSubject = RoundSubject.pendingSnapshot(key.stage(), key.attempt(), token);
+        String pendingSubject = RoundSubject.pending(key.stage(), key.attempt(), token);
         List<String> walked = new ArrayList<>(List.of(pending.id()));
         Optional<Line> line = read(branch, pending.id());
         while (line.isPresent() && line.get().parents().size() == 1) {

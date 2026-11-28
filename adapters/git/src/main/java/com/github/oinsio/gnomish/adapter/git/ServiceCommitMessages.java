@@ -2,21 +2,17 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord;
-import com.github.oinsio.gnomish.domain.engine.CheckRef;
-import com.github.oinsio.gnomish.domain.engine.PendingPollRecord;
-import com.github.oinsio.gnomish.domain.engine.PendingSubject;
-import com.github.oinsio.gnomish.domain.engine.RoundToken;
 
 /**
  * Formats the service commit-message shapes the git adapter uses across its round
- * commits, task-lifecycle commits, snapshot commit, salvage commit, cleanup commit, and
+ * commits, task-lifecycle commits, salvage commit, cleanup commit, and
  * tracker-write-confirmed commit — the scheme fixed by design D14 and proposal Q1: {@code
- * gnomish: round <stage>#<n>}, {@code gnomish: task <event>}, {@code gnomish: snapshot
- * <stage>#<n> <token>}, {@code gnomish: salvage}, {@code gnomish: cleanup}, {@code gnomish: task
- * write-confirmed}. Except for the snapshot message (see {@link #snapshot}), these are a
- * human/audit-trail aid, not a parsing contract — {@code usage} reconstruction walks
+ * gnomish: round <stage>#<n>}, {@code gnomish: task <event>}, {@code gnomish: salvage}, {@code
+ * gnomish: cleanup}, {@code gnomish: task write-confirmed}. These are a human/audit-trail aid, not a parsing contract — {@code usage} reconstruction walks
  * {@code state.json} history instead (D14) — so this class only has to get the text
- * right and consistent, not parseable.
+ * right and consistent, not parseable. The snapshot, pending-round snapshot, unverified snapshot
+ * and pending subjects, which <em>are</em> a parsing contract, are {@link RoundSubject}'s: writer and
+ * parser of that wire form in one owner.
  *
  * <p>Pure string formatting: no git subprocess calls, no filesystem I/O. Callers such as
  * the git {@code AttemptPersistence} and {@code TaskRepository} adapters pass these
@@ -26,24 +22,8 @@ import com.github.oinsio.gnomish.domain.engine.RoundToken;
  */
 public final class ServiceCommitMessages {
 
-    private static final String PREFIX = "gnomish: ";
-
-    /**
-     * The snapshot subject's fixed prefix, ahead of {@code <stage>#<round> <token>}. Package-visible so
-     * {@link SnapshotTipCheck} — the parsing side of this parsing contract — reads the same
-     * literal this class writes, rather than repeating it (`.claude/rules/manual-sync-pairs.md`,
-     * preference 1: shared definition over a hand-synced duplicate).
-     */
-    static final String SNAPSHOT_PREFIX = PREFIX + "snapshot ";
-
-    /**
-     * The pending subject's fixed prefix, ahead of {@code <stage>#<round> <token>}; package-visible
-     * for the same reason as {@link #SNAPSHOT_PREFIX} (design D21 of migrate-verify-to-executor-contract).
-     */
-    static final String PENDING_PREFIX = PREFIX + "pending ";
-
-    /** The pending-round snapshot subject's prefix, package-visible as {@link #SNAPSHOT_PREFIX} is (D11). */
-    static final String PENDING_SNAPSHOT_PREFIX = PREFIX + "pending-snapshot ";
+    /** The service namespace every factory subject opens with; {@link RoundSubject} prefixes its own with it. */
+    static final String PREFIX = "gnomish: ";
 
     private ServiceCommitMessages() {}
 
@@ -70,93 +50,6 @@ public final class ServiceCommitMessages {
      */
     public static String taskEvent(TaskLifecycleEvent event) {
         return PREFIX + "task " + eventName(event);
-    }
-
-    /**
-     * The snapshot commit message of a round that closed verifiable, on either medium: {@code
-     * gnomish: snapshot <stage>#<round> <token>} (FR21 of add-sandbox-core, design D15; FR15 of
-     * make-checkpoint-gate-durable, design D10; design D22 of migrate-verify-to-executor-contract). Unlike every
-     * other message here, this one <em>is</em> a parsing contract: resume classifies a branch tip
-     * carrying it as "snapshot-without-state — died during verification" ({@link SnapshotTipCheck}),
-     * which is the only way to tell a factory snapshot from the gnome's own in-box commits (both
-     * carry the in-box identity). The round token names the round that wrote the snapshot, so the
-     * resume reads the decision request — if any — at exactly that round's path in the snapshot's
-     * tree ({@link com.github.oinsio.gnomish.domain.branch.EnvelopePaths#answerFile}).
-     *
-     * @param stage the stage id the round belongs to
-     * @param round the attempt key's non-negative number, as the round's record carries it
-     * @param token the round's token, from the run's {@link com.github.oinsio.gnomish.app.port.git.CurrentRound} — never re-read here
-     * @return the formatted commit message
-     */
-    public static String snapshot(String stage, int round, RoundToken token) {
-        return SNAPSHOT_PREFIX + stage + "#" + round + " " + token.commit();
-    }
-
-    /**
-     * The snapshot commit message of a round whose executor did not complete: {@code gnomish:
-     * unverified-snapshot <stage>#<round> <token>} (design D22 of migrate-verify-to-executor-contract).
-     * It does not start with {@link #SNAPSHOT_PREFIX}, so {@link SnapshotTipCheck} never reads a
-     * registered commit carrying it as an interrupted verification; it is still in the service
-     * namespace, so a gnome commit carrying it is a violation ({@link GnomeRangeInspection}).
-     *
-     * @param stage the stage id the round belongs to
-     * @param round the attempt key's non-negative number, as the round's record carries it
-     * @param token the round's token, from the run's {@link com.github.oinsio.gnomish.app.port.git.CurrentRound}
-     * @return the formatted commit message
-     */
-    public static String unverifiedSnapshot(String stage, int round, RoundToken token) {
-        return PREFIX + "unverified-snapshot " + stage + "#" + round + " " + token.commit();
-    }
-
-    /**
-     * The snapshot message of a {@code transform} round that answered {@code pending}, under its
-     * pending round commit: {@code gnomish: pending-snapshot <stage>#<round> <token>} (design D11 of
-     * extract-agent-round-runner). {@link SnapshotTipCheck} never reads it as a round to verify: a
-     * pending commit above it is a pending round, and it alone a round to re-drive; parameters as
-     * {@link #unverifiedSnapshot}.
-     */
-    public static String pendingSnapshot(String stage, int round, RoundToken token) {
-        return PENDING_SNAPSHOT_PREFIX + stage + "#" + round + " " + token.commit();
-    }
-
-    /**
-     * The pending commit message of an open round, on either medium: {@code gnomish: pending
-     * <stage>#<round> <token>} (design D21 of migrate-verify-to-executor-contract). The stage comes
-     * from the persisted state's position — the one source on both ends, since a pending entry
-     * carries no stage — and the round and token from the list's last entry, the check whose
-     * {@code pending} answer the write lands. The token names the round as the snapshot below it
-     * does, so a pickup follows first parents over this subject to that snapshot.
-     *
-     * @param stage the stage the open round belongs to, {@code Position.AtStage.name()}
-     * @param last the last entry of the open round's list
-     * @return the formatted commit message
-     * @throws IllegalArgumentException if the entry names no round token — the in-place run, which
-     *     writes no commit
-     */
-    public static String pending(String stage, PendingPollRecord last) {
-        RoundToken token = last.token();
-        if (token == null) {
-            throw new IllegalArgumentException(
-                    "a pending commit names its round's token; the entry of " + subject(last) + " carries none");
-        }
-        return pending(stage, last.attempt(), token);
-    }
-
-    /** The entry's subject as a refusal names it: the check by its index, or the round. */
-    static String subject(PendingPollRecord entry) {
-        return switch (entry.subject()) {
-            case PendingSubject.Check(CheckRef ref) -> "check " + ref.index();
-            case PendingSubject.Round _ -> "the round";
-        };
-    }
-
-    /**
-     * The pending subject of the round named by {@code stage}, {@code round} and {@code token} — the
-     * one rendering, which {@link SnapshotTipCheck}'s walk compares a pending commit's subject with,
-     * so the walk judges a commit by the writer's own spelling of its round (design D21).
-     */
-    static String pending(String stage, int round, RoundToken token) {
-        return PENDING_PREFIX + stage + "#" + round + " " + token.commit();
     }
 
     /**

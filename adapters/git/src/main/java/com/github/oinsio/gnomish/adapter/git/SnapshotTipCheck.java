@@ -46,7 +46,7 @@ import org.slf4j.LoggerFactory;
  * minted, so the round is restored from the record (FR13 of make-checkpoint-gate-durable).
  *
  * <p>Reads only commit subjects and one blob as bare-object queries in the factory clone — no
- * checkout, no hooks (FR17); the subjects are a parsing contract ({@link ServiceCommitMessages#snapshot}).
+ * checkout, no hooks (FR17); the subjects are a parsing contract ({@link RoundSubject#snapshot}).
  *
  * <p>Implements FR21 of add-sandbox-core; FR15 of make-checkpoint-gate-durable; FR3, FR20 of
  * migrate-verify-to-executor-contract; FR21, NFR-R5 of extract-agent-round-runner.
@@ -57,14 +57,6 @@ import org.slf4j.LoggerFactory;
 public final class SnapshotTipCheck {
 
     private static final Logger log = LoggerFactory.getLogger(SnapshotTipCheck.class);
-
-    // Single owner: reads ServiceCommitMessages' prefixes rather than repeating the literals, so
-    // the writer and this parser cannot drift (manual-sync-pairs.md, preference 1).
-    private static final String SNAPSHOT_PREFIX = ServiceCommitMessages.SNAPSHOT_PREFIX;
-
-    private static final String PENDING_PREFIX = ServiceCommitMessages.PENDING_PREFIX;
-
-    private static final String PENDING_SNAPSHOT_PREFIX = ServiceCommitMessages.PENDING_SNAPSHOT_PREFIX;
 
     private final GitRunner runner;
     private final Path cloneDir;
@@ -113,18 +105,18 @@ public final class SnapshotTipCheck {
         // @UntrustedParser warrant (design D11): a subject the factory wrote on the registered
         //     commit, of which only stage, round and token are lifted; a malformed one is refused.
         String line = subjectLine.stdout().forParsing().strip();
-        if (line.startsWith(SNAPSHOT_PREFIX)) {
-            return round(taskId, branch, line.substring(SNAPSHOT_PREFIX.length()))
+        if (line.startsWith(RoundSubject.SNAPSHOT_PREFIX)) {
+            return round(taskId, branch, line.substring(RoundSubject.SNAPSHOT_PREFIX.length()))
                     .map(round -> verification(
                             registered, new PendingChain.Walk(List.of(registered.id()), RoundClose.VERIFIABLE), round));
         }
-        if (line.startsWith(PENDING_PREFIX)) {
-            return round(taskId, branch, line.substring(PENDING_PREFIX.length()))
+        if (line.startsWith(RoundSubject.PENDING_PREFIX)) {
+            return round(taskId, branch, line.substring(RoundSubject.PENDING_PREFIX.length()))
                     .flatMap(round -> chain.snapshotBelow(branch, registered, round.key(), round.token())
                             .map(walk -> verification(registered, walk, round)));
         }
-        if (line.startsWith(PENDING_SNAPSHOT_PREFIX)) {
-            round(taskId, branch, line.substring(PENDING_SNAPSHOT_PREFIX.length()))
+        if (line.startsWith(RoundSubject.PENDING_SNAPSHOT_PREFIX)) {
+            round(taskId, branch, line.substring(RoundSubject.PENDING_SNAPSHOT_PREFIX.length()))
                     .ifPresent(round -> log.info(
                             "the register of {} names the pending-round snapshot of {} round {} (token {}) with no"
                                     + " pending round commit above it: its start is re-driven, nothing is re-verified (K1)",

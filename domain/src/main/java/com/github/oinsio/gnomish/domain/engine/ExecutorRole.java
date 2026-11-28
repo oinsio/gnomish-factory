@@ -9,8 +9,9 @@ package com.github.oinsio.gnomish.domain.engine;
  * record vocabulary.
  *
  * <p>The domain's own constants, with no wire spelling: the one usage wire vocabulary spells them
- * through the contract's role tokens, and its mapper switches over both sets exhaustively in both
- * directions, so a constant added on either side fails to compile there.
+ * through the contract's role tokens, and the one role mapper ({@code ExecutorRoles} in {@code
+ * :application}) switches over both sets exhaustively in both directions, so a constant added on
+ * either side fails to compile there.
  *
  * <p>Implements FR15 of define-executor-contract.
  */

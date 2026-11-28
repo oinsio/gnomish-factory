@@ -60,7 +60,7 @@ class RoundSnapshotSpec extends Specification {
         calls == ['settle', 'judge', 'commit']
         orders.first().chain() == [PENDING, PENDING_SNAPSHOT]
         orders.first().base() == PENDING
-        orders.first().subject() == ServiceCommitMessages.snapshot('build', 0, RoundToken.of(OPEN))
+        orders.first().subject() == RoundSubject.snapshot('build', 0, RoundToken.of(OPEN))
 
         and: 'the closing snapshot is the round\'s registered commit now'
         cell.registeredChain() == [CLOSING]

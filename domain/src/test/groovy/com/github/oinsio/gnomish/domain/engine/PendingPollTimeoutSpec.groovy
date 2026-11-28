@@ -18,7 +18,7 @@ class PendingPollTimeoutSpec extends PendingPollSpecBase {
     static final String MESSAGE = "external check 'ci' did not complete within PT10M"
 
     private VerdictAnswer timedOut(VerifyCheck.Executor ci, List<ExecutionResult> answers) {
-        poll(new ScriptedExecutor(answers)).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci])).answer()
+        checkRounds(new ScriptedExecutor(answers)).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci])).answer()
     }
 
     /** Answers that keep the check pending past its 10-minute deadline at a 30 s interval. */

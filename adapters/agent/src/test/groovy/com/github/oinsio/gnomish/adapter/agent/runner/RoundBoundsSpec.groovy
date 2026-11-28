@@ -61,13 +61,14 @@ class RoundBoundsSpec extends Specification {
         RoundBounds.overall(FACTORY, request([:], Bounds.none())) == FACTORY.overall()
     }
 
-    def "FR7: a roundTimeout that is not a positive duration is refused, never bounded by"() {
-        when:
-        RoundBounds.overall(FACTORY, [roundTimeout: 0])
+    // FR7: the load judge refuses a non-positive roundTimeout; one that reaches a round declares
+    //     nothing, like every value with no accepted shape, so the round is never bounded by it
+    def "FR7: a roundTimeout that is not a positive duration (#value) declares nothing, so the factory's bound applies"() {
+        expect:
+        RoundBounds.overall(FACTORY, [roundTimeout: value]) == FACTORY.overall()
 
-        then:
-        def refused = thrown(IllegalArgumentException)
-        refused.message.contains('overall')
+        where:
+        value << [0, -5, 'PT0S']
     }
 
     def "NFR-R1: the hinted request of a streams_progress dialect carries the three resolved bounds as its time hints, the rest of it unchanged"() {

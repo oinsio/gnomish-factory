@@ -2,7 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import static com.github.oinsio.gnomish.app.PendingRoundKills.atPoll
 
-import com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages
+import com.github.oinsio.gnomish.adapter.git.RoundSubject
 import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.EngineEvent
@@ -42,8 +42,8 @@ class PendingRoundIdentitySpec extends PendingRoundResumeSpecBase {
         expect: 'it died at its second poll; the register names its pending round commit'
         killed instanceof TaskOutcome.Escalated
         subjectsSince(created) == [
-            ServiceCommitMessages.pendingSnapshot('build', 0, token),
-            ServiceCommitMessages.pending('build', 0, token)
+            RoundSubject.pendingSnapshot('build', 0, token),
+            RoundSubject.pending('build', 0, token)
         ]
         gitOutput(clone, 'rev-parse', REGISTER) == tip()
 
@@ -66,9 +66,9 @@ class PendingRoundIdentitySpec extends PendingRoundResumeSpecBase {
         and: 'no verify check ran before the round closed: the branch holds the round\'s four commits, one token'
         outcome instanceof TaskOutcome.Completed
         subjectsSince(created) == [
-            ServiceCommitMessages.pendingSnapshot('build', 0, token),
-            ServiceCommitMessages.pending('build', 0, token),
-            ServiceCommitMessages.snapshot('build', 0, token),
+            RoundSubject.pendingSnapshot('build', 0, token),
+            RoundSubject.pending('build', 0, token),
+            RoundSubject.snapshot('build', 0, token),
             'gnomish: round build#0'
         ]
         gitOutput(clone, 'rev-parse', REGISTER) == tip()

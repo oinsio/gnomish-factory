@@ -5,7 +5,6 @@ import com.github.oinsio.gnomish.domain.engine.RoundToken;
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -31,7 +30,8 @@ import org.jspecify.annotations.Nullable;
  * attempt-commit-agnostic (D15 of add-sandbox-core). One cell per run, constructed by the run
  * preparation before the round source and the persistence that both read it. It holds a whole round,
  * never a fragment: a snapshot without an open round is refused, and opening a round drops the
- * previous round's snapshot.
+ * previous round's snapshot. The cell owns the round's identity; the snapshot and the commits
+ * registered on it are one {@link RegisteredChain} value it holds.
  *
  * <p>Thread-safety: the state is one immutable value behind a {@code volatile} field, so a reader
  * on another thread sees a whole transition or none of it. Within a run, rounds are sequential.
@@ -41,19 +41,8 @@ import org.jspecify.annotations.Nullable;
  */
 public final class CurrentRound implements RoundIdentity, LastRegisteredCommit {
 
-    /** A round's identity, with its snapshot once one has been recorded. */
-    private record State(RoundToken token, @Nullable Snapshot snapshot, boolean taken) {}
-
-    /**
-     * The snapshot commit that closed a round, how it closed, and the round's registered chain — the
-     * last registered commit first, the snapshot last: always together.
-     */
-    private record Snapshot(String attemptCommit, RoundClose close, List<String> chain) {
-
-        String registered() {
-            return chain.getFirst();
-        }
-    }
+    /** A round's identity, with its registered chain once its snapshot has been recorded. */
+    private record State(RoundToken token, @Nullable RegisteredChain chain, boolean taken) {}
 
     private volatile @Nullable State state;
 
@@ -71,27 +60,24 @@ public final class CurrentRound implements RoundIdentity, LastRegisteredCommit {
      */
     public void snapshotted(String attemptCommit, RoundClose close) {
         State open = openState();
-        state = new State(open.token(), new Snapshot(attemptCommit, close, List.of(attemptCommit)), open.taken());
+        state = new State(open.token(), RegisteredChain.startedBy(attemptCommit, close), open.taken());
     }
 
     /**
      * Records the pending commit that just landed on the round's last registered commit with its
-     * register (design D21 of migrate-verify-to-executor-contract): it becomes the round's last
-     * registered commit, the parent of the next pending commit and of the round's close. The
-     * snapshot the checks judge is unchanged.
+     * register (design D21 of migrate-verify-to-executor-contract), through {@link
+     * RegisteredChain#landed}.
      *
      * @throws IllegalStateException if the open round has no snapshot — a pending commit always sits
      *     on one
      */
     public void pendingRegistered(String commit) {
         State s = openState();
-        Snapshot snapshot = s.snapshot();
-        if (snapshot == null) {
+        RegisteredChain chain = s.chain();
+        if (chain == null) {
             throw new IllegalStateException("a pending commit needs the round's snapshot below it");
         }
-        List<String> chain =
-                Stream.concat(Stream.of(commit), snapshot.chain().stream()).toList();
-        state = new State(s.token(), new Snapshot(snapshot.attemptCommit(), snapshot.close(), chain), s.taken());
+        state = new State(s.token(), chain.landed(commit), s.taken());
     }
 
     /**
@@ -133,7 +119,7 @@ public final class CurrentRound implements RoundIdentity, LastRegisteredCommit {
         if (s.taken()) {
             throw new IllegalStateException("the open round's token was already stamped on a record");
         }
-        state = new State(s.token(), s.snapshot(), true);
+        state = new State(s.token(), s.chain(), true);
         return Optional.of(s.token());
     }
 
@@ -144,8 +130,8 @@ public final class CurrentRound implements RoundIdentity, LastRegisteredCommit {
         if (s == null || s.taken()) {
             return Optional.empty();
         }
-        Snapshot snapshot = s.snapshot();
-        return snapshot != null && snapshot.close() == RoundClose.PENDING ? Optional.of(s.token()) : Optional.empty();
+        RegisteredChain chain = s.chain();
+        return chain != null && chain.close() == RoundClose.PENDING ? Optional.of(s.token()) : Optional.empty();
     }
 
     /**
@@ -170,12 +156,7 @@ public final class CurrentRound implements RoundIdentity, LastRegisteredCommit {
      */
     public Optional<ClosedRound> snapshot() {
         State s = openState();
-        Snapshot snapshot = s.snapshot();
-        if (snapshot == null) {
-            return Optional.empty();
-        }
-        return Optional.of(
-                new ClosedRound(s.token(), snapshot.attemptCommit(), snapshot.registered(), snapshot.close()));
+        return Optional.ofNullable(s.chain()).map(chain -> chain.closedBy(s.token()));
     }
 
     /**
@@ -199,8 +180,8 @@ public final class CurrentRound implements RoundIdentity, LastRegisteredCommit {
     @Override
     public List<String> registeredChain() {
         State s = state;
-        Snapshot snapshot = s == null ? null : s.snapshot();
-        return snapshot == null ? List.of() : snapshot.chain();
+        RegisteredChain chain = s == null ? null : s.chain();
+        return chain == null ? List.of() : chain.commits();
     }
 
     private State openState() {

@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyingStages
@@ -48,7 +47,7 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         ])
 
         when:
-        poll(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci]))
+        checkRounds(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci]))
 
         then: 'one event per poll, the start not among them, the issued key shown as a subprocess capture'
         polls() == [
@@ -66,7 +65,7 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         def ci = check()
 
         when:
-        def polled = poll(new ScriptedExecutor([passed()])).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci]))
+        def polled = checkRounds(new ScriptedExecutor([passed()])).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci]))
 
         then:
         polled.outcome() == new CheckOutcome(SCM_STATUS, new ExecutionResult.Completed(), null)
@@ -84,7 +83,7 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         def executor = new ScriptedExecutor([pending('k-after'), passed()])
 
         when:
-        def polled = poll(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci], state))
+        def polled = checkRounds(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci], state))
 
         then: 'no start; the recorded key is polled first, and the outcome names it as read from the branch'
         turns(executor) == [
@@ -108,7 +107,7 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         ] * 21)
 
         when:
-        def polled = poll(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci]))
+        def polled = checkRounds(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci]))
 
         then: 'the finding: a cannot-verify whose details name both contexts'
         def failure = polled.answer() as VerdictAnswer.InfrastructureFailure
@@ -139,7 +138,7 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         def ci = check()
 
         when:
-        def polled = poll(new ScriptedExecutor([pending('k-1')] * 21)).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci]))
+        def polled = checkRounds(new ScriptedExecutor([pending('k-1')] * 21)).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci]))
 
         then:
         timeouts()*.failure() == [polled.outcome().status()]
@@ -162,7 +161,7 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         } as AttemptDelivery
 
         when:
-        def polled = poll(new ScriptedExecutor(), undeliverable).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci]))
+        def polled = checkRounds(new ScriptedExecutor(), undeliverable).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci]))
 
         then:
         polled.outcome() == new CheckOutcome(SCM_STATUS,
@@ -177,8 +176,7 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         def listener = new RecordingEventListener()
         def throwing = new ScriptedExecutor()
         throwing.toThrow = new IllegalStateException('adapter broke')
-        def chain = new VerifyOrchestrator(new PendingPoll(throwing, persistence, AttemptDelivery.assumedDelivered(),
-                VirtualTimeEquipment.on(clock, sleeper), listener), DescribedExecutors.none(), clock, listener)
+        def chain = new VerifyOrchestrator(checkRounds(throwing), DescribedExecutors.none(), clock, listener)
 
         when:
         chain.verify(VerifyingStages.of([ci]), CONTEXT, WORKSPACE, KEY, STATE, TOKEN)
@@ -199,7 +197,7 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         given:
         def listener = new RecordingEventListener()
         def judge = JudgeChecks.agent('criteria.md', 'model')
-        def chain = new VerifyOrchestrator(poll(new ScriptedExecutor()), DescribedExecutors.none(), clock, listener)
+        def chain = new VerifyOrchestrator(checkRounds(new ScriptedExecutor()), DescribedExecutors.none(), clock, listener)
 
         when:
         chain.verify(VerifyingStages.of([judge]), CONTEXT, WORKSPACE, KEY, STATE, TOKEN)

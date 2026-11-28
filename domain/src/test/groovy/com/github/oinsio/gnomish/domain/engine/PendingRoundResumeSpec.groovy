@@ -17,7 +17,7 @@ import java.time.Duration
  * The resumed half of the one path of a pending {@code transform} round (FR11, NFR-R3, NFR-R4 of
  * extract-agent-round-runner; design D11, "Resume"; crash-consistency item 14): the engine reads the
  * round's entry off the registered state against the token of the pending round the run's cell was
- * restored with, and continues it through {@code PendingPoll.resumeRound} — a {@code RECORDED} poll, no
+ * restored with, and continues it through {@code PendingPoll.resume} — a {@code RECORDED} poll, no
  * {@code start} — taking the round's token only when it does.
  */
 class PendingRoundResumeSpec extends PendingTransformRoundSpecBase {

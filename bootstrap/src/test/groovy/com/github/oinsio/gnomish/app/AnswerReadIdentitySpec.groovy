@@ -7,8 +7,8 @@ import com.github.oinsio.gnomish.adapter.git.DenialCursorSource
 import com.github.oinsio.gnomish.adapter.git.GitObjectsTaskRepository
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.LocalBoxEnvironment
+import com.github.oinsio.gnomish.adapter.git.RoundSubject
 import com.github.oinsio.gnomish.adapter.git.SandboxRoundEnvironmentSource
-import com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages
 import com.github.oinsio.gnomish.adapter.git.SnapshotTipCheck
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
@@ -156,7 +156,7 @@ class AnswerReadIdentitySpec extends Specification implements BareGitRepoFixture
                 [
                     new TreeEdit.PutFile(answerPath, bytes)
                 ],
-                new CommitMetadata(identity, now, identity, now, ServiceCommitMessages.snapshot('build', 0, rounds.opened())))
+                new CommitMetadata(identity, now, identity, now, RoundSubject.snapshot('build', 0, rounds.opened())))
                 .alongside(REGISTER))
     }
 

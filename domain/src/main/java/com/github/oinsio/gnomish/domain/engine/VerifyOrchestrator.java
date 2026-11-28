@@ -22,7 +22,7 @@ import org.slf4j.LoggerFactory;
  * checks are ordered first, so a fast failure short-circuits the expensive ones). Each
  * verdict is dispatched by an exhaustive switch over the sealed {@link VerifyCheck}
  * (design D3): a new variant fails to compile. A thin chain driver: every check is a check round
- * on the engine's one {@code StageExecutor} port, driven by {@link PendingPoll} — a {@code start},
+ * on the engine's one {@code StageExecutor} port, driven by {@link CheckRounds} over {@link PendingPoll} — a {@code start},
  * and while the executor answers {@code pending} its persisted key and its polls — a judge check
  * as its {@link VerifyCheck.Judge#asExecutorCheck() check-round view}, one {@code verdict} request
  * to the executor its block declares (design D2 of extract-agent-round-runner). The check round's answer is a {@link
@@ -42,13 +42,13 @@ final class VerifyOrchestrator {
 
     private static final Logger log = LoggerFactory.getLogger(VerifyOrchestrator.class);
 
-    private final PendingPoll checkRounds;
+    private final CheckRounds checkRounds;
     private final DescribedExecutors described;
     private final InstantSource clock;
     private final EngineEventListener listener;
 
     /**
-     * Wires the collaborators the verify chain drives: the {@link PendingPoll} every check's rounds
+     * Wires the collaborators the verify chain drives: the {@link CheckRounds} every check's rounds
      * go through, the injected {@link InstantSource} it times against, and the {@link
      * EngineEventListener} it emits to. All immutable (NFR-R1).
      *
@@ -59,7 +59,7 @@ final class VerifyOrchestrator {
      * @param listener the observer the per-check events are emitted to; never null
      */
     VerifyOrchestrator(
-            PendingPoll checkRounds, DescribedExecutors described, InstantSource clock, EngineEventListener listener) {
+            CheckRounds checkRounds, DescribedExecutors described, InstantSource clock, EngineEventListener listener) {
         this.checkRounds = checkRounds;
         this.described = described;
         this.clock = clock;

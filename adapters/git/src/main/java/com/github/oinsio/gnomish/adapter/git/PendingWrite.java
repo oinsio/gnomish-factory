@@ -58,7 +58,7 @@ record PendingWrite(String taskId, String stage, PendingPollRecord last) {
 
     /** The pending commit's subject, {@code gnomish: pending <stage>#<round> <token>}. */
     String subject() {
-        return ServiceCommitMessages.pending(stage, last);
+        return RoundSubject.pending(stage, last);
     }
 
     /**
@@ -83,7 +83,7 @@ record PendingWrite(String taskId, String stage, PendingPollRecord last) {
                     taskId,
                     stage,
                     last.attempt(),
-                    "the entry of " + ServiceCommitMessages.subject(last) + " needs a " + expected
+                    "the entry of " + RoundSubject.entryName(last) + " needs a " + expected
                             + " snapshot below it, the round's closed " + round.close());
         }
         return round;

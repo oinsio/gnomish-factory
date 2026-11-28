@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.agent.command;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.github.oinsio.gnomish.adapter.agent.runner.RoundBounds;
 import com.github.oinsio.gnomish.adapter.command.CommandRun;
+import com.github.oinsio.gnomish.app.describe.ExecutorRoles;
 import com.github.oinsio.gnomish.app.describe.ProgramBounds;
 import com.github.oinsio.gnomish.domain.pipeline.BuiltInExecutors;
 import com.github.oinsio.gnomish.executorcontract.Describe;
@@ -10,7 +11,6 @@ import com.github.oinsio.gnomish.executorcontract.EnforcementLevel;
 import com.github.oinsio.gnomish.executorcontract.Executor;
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest;
 import com.github.oinsio.gnomish.executorcontract.ExecutorResult;
-import com.github.oinsio.gnomish.executorcontract.Role;
 import com.github.oinsio.gnomish.pendingkey.PendingKey;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
@@ -34,7 +34,11 @@ import java.util.Map;
  * (NFR-C1, D8), so its describe declares that it reports usage. {@link #poll} answers
  * {@code failed/infrastructure}: a command round is never {@code pending}.
  *
- * <p>Implements FR3, FR4, FR5, FR6, FR7, FR8, NFR-C1, NFR-S1, NG1 of add-command-executor; FR7 of
+ * <p>Its roles are {@link BuiltInExecutors#COMMAND_ROLES}, the one statement the judge role rule also
+ * reads, mapped through {@link ExecutorRoles}; {@link #start} refuses a role its describe does not
+ * list, never by a spelling of its own (FR13, D12 of extract-agent-round-runner).
+ *
+ * <p>Implements FR3, FR4, FR5, FR6, FR7, FR8, NFR-C1, NFR-S1, NG1 of add-command-executor; FR7, FR13 of
  * extract-agent-round-runner.
  */
 public final class CommandStageExecutor implements Executor {
@@ -77,7 +81,9 @@ public final class CommandStageExecutor implements Executor {
         return new Describe(
                 Describe.SPOKEN_PROTOCOL_VERSION,
                 UntrustedText.factory(BuiltInExecutors.VERSION),
-                List.of(Role.TRANSFORM),
+                BuiltInExecutors.COMMAND_ROLES.stream()
+                        .map(ExecutorRoles::contract)
+                        .toList(),
                 List.of(),
                 JsonNodeFactory.instance.objectNode().put("type", "object"),
                 List.of(),
@@ -92,7 +98,7 @@ public final class CommandStageExecutor implements Executor {
     @Override
     public ExecutorResult start(ExecutorRequest request) {
         String command = request.roleInputs().instructions();
-        if (request.role() != Role.TRANSFORM || command == null) {
+        if (!describeAnswer().roles().contains(request.role()) || command == null) {
             return CommandRoundReport.refused("the command built-in runs transform rounds only, and was asked for a "
                     + request.role().wire() + " run");
         }

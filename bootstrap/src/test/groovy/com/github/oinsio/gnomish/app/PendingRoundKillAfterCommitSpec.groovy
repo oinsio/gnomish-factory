@@ -4,7 +4,7 @@ import static com.github.oinsio.gnomish.app.PendingRoundKills.atClose
 import static com.github.oinsio.gnomish.app.PendingRoundKills.atPendingWrite
 import static com.github.oinsio.gnomish.app.PendingRoundKills.refusingRefsAt
 
-import com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages
+import com.github.oinsio.gnomish.adapter.git.RoundSubject
 import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.EngineEvent
@@ -71,8 +71,8 @@ class PendingRoundKillAfterCommitSpec extends PendingRoundResumeSpecBase {
         expect: 'the terminal poll was asked, and the register is still the pending round commit, its entry present'
         requests() == ['start -', 'poll ' + KEY]
         subjectsSince(created) == [
-            ServiceCommitMessages.pendingSnapshot('build', 0, RoundToken.of(created)),
-            ServiceCommitMessages.pending('build', 0, RoundToken.of(created))
+            RoundSubject.pendingSnapshot('build', 0, RoundToken.of(created)),
+            RoundSubject.pending('build', 0, RoundToken.of(created))
         ]
         pendingCommit == tip()
         stateAt(REGISTER).pendingPolls()*.key()*.value() == [KEY]
@@ -109,9 +109,9 @@ class PendingRoundKillAfterCommitSpec extends PendingRoundResumeSpecBase {
 
         expect: 'the register is the round\'s snapshot on its pending round commit, its state still carrying the entry'
         subjectsSince(created) == [
-            ServiceCommitMessages.pendingSnapshot('build', 0, token),
-            ServiceCommitMessages.pending('build', 0, token),
-            ServiceCommitMessages.snapshot('build', 0, token)
+            RoundSubject.pendingSnapshot('build', 0, token),
+            RoundSubject.pending('build', 0, token),
+            RoundSubject.snapshot('build', 0, token)
         ]
         gitOutput(clone, 'rev-parse', REGISTER) == tip()
         with(stateAt(REGISTER).pendingPolls()) {
@@ -149,7 +149,7 @@ class PendingRoundKillAfterCommitSpec extends PendingRoundResumeSpecBase {
         def token = RoundToken.of(created)
         assert outcome instanceof TaskOutcome.Completed
         assert subjectsSince(pendingCommit) == [
-            ServiceCommitMessages.snapshot('build', 0, token),
+            RoundSubject.snapshot('build', 0, token),
             'gnomish: round build#0'
         ]
         def closing = stateAt(REGISTER)

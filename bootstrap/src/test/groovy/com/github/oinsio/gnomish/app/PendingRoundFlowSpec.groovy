@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages
+import com.github.oinsio.gnomish.adapter.git.RoundSubject
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -50,9 +50,9 @@ class PendingRoundFlowSpec extends PendingRoundFlowSpecBase {
 
         then: 'the branch holds exactly the round\'s four commits, each subject naming its one token'
         subjectsSince(created) == [
-            ServiceCommitMessages.pendingSnapshot('build', 0, token),
-            ServiceCommitMessages.pending('build', 0, token),
-            ServiceCommitMessages.snapshot('build', 0, token),
+            RoundSubject.pendingSnapshot('build', 0, token),
+            RoundSubject.pending('build', 0, token),
+            RoundSubject.snapshot('build', 0, token),
             'gnomish: round build#0'
         ]
 

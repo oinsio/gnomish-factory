@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.adapter.check.http.HttpExecutor
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.adapter.scm.ScmConnectionReader
 import com.github.oinsio.gnomish.adapter.scm.status.ScmStatusExecutor
+import com.github.oinsio.gnomish.app.describe.ExecutorRoles
 import com.github.oinsio.gnomish.app.describe.ProgramBounds
 import com.github.oinsio.gnomish.app.port.git.LastRegisteredCommit
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
@@ -17,6 +18,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
+import com.github.oinsio.gnomish.domain.pipeline.BuiltInExecutors
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
@@ -161,5 +163,15 @@ class ExecutorRegistryEntrySpec extends Specification {
 
         and: 'the stage entry binds its round executor to an open round\'s environment'
         registry.resolve(new ExecutorName('command')).rounds().executor(Stub(TaskExecutionEnvironment)) != null
+    }
+
+    // FR13 of extract-agent-round-runner (D12): the identity of the single-owner row — the roles the
+    //     real command entry describes are the ones the judge role rule reads
+    def "FR13: the command entry's describe lists exactly the command built-in's owned roles"() {
+        expect:
+        registry([]).resolve(new ExecutorName(BuiltInExecutors.COMMAND)).describe().roles() ==
+        BuiltInExecutors.COMMAND_ROLES.collect {
+            ExecutorRoles.contract(it)
+        }
     }
 }

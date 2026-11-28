@@ -12,7 +12,9 @@ import org.jspecify.annotations.Nullable;
  * the shapes it accepts, judged at law load, and the duration a settings map declares at round time —
  * one parse behind both, so the judge and the reader cannot drift. A shape is a {@link Number} of
  * seconds or a non-blank ISO-8601 duration string, with or without the {@code PT} prefix,
- * case-insensitively ({@code 45}, {@code "PT30S"}, {@code "45s"}).
+ * case-insensitively ({@code 45}, {@code "PT30S"}, {@code "45s"}), naming a positive duration: a zero
+ * or negative bound is refused at load rather than handed to a round, where {@code ProgramBounds}
+ * would refuse it on every round of the stage.
  *
  * <p>Callers: the Claude dialect's settings judge and {@code CommandSettingsValidator} at load;
  * {@code RoundBounds} in {@code :adapters:agent} at round time, the one resolution of a round's
@@ -59,11 +61,18 @@ public final class RoundTimeout {
     public static @Nullable String malformation(@Nullable Object value) {
         return parsed(value) != null
                 ? null
-                : "malformed '" + KEY + "': expected a number of seconds or an ISO-8601 duration string";
+                : "malformed '" + KEY
+                        + "': expected a positive number of seconds or a positive ISO-8601 duration string";
     }
 
-    /** The duration {@code value} names, or {@code null} when it has no accepted shape. */
+    /** The positive duration {@code value} names, or {@code null} when it has no accepted shape. */
     private static @Nullable Duration parsed(@Nullable Object value) {
+        Duration duration = shaped(value);
+        return duration == null || duration.isNegative() || duration.isZero() ? null : duration;
+    }
+
+    /** The duration {@code value} spells, of any sign, or {@code null} when it has no accepted shape. */
+    private static @Nullable Duration shaped(@Nullable Object value) {
         if (value instanceof Number number) {
             return Duration.ofSeconds(number.longValue());
         }

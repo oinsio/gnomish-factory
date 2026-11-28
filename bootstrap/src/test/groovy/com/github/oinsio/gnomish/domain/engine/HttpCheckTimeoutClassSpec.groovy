@@ -12,7 +12,7 @@ import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
-import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyingStages
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -67,14 +67,16 @@ class HttpCheckTimeoutClassSpec extends Specification {
         //     each wait advancing the clock.
         def time = VirtualTimeEquipment.create()
         def rounds = platform.checkRounds([check], LOOPBACK_ALLOWLIST, new ShellCommandCheckRunner(time.clock()), time.clock())
-        def poll = new PendingPoll(rounds, new InMemoryAttemptPersistence(), AttemptDelivery.assumedDelivered(), time,
-                new RecordingEventListener())
+        def persistence = new InMemoryAttemptPersistence()
+        def listener = new RecordingEventListener()
+        def checkRounds = new CheckRounds(new EnginePorts(rounds, listener, persistence, time, RoundIdentity.inPlace()),
+                new PendingPoll(rounds, persistence, time, listener))
         def workspace = new RecordedAttemptCommitWorkspace(ClosedRounds.at(platform.greenSha))
         def round = new PendingRound(VerifyingStages.of([check]), new TaskContext('TO-1', UntrustedText.tracker('t'),
         UntrustedText.tracker('b'), []), workspace, new AttemptKey('TO-1', 'verify', 0), TaskState.atStageStart('verify'), null)
 
         when:
-        def verdict = poll.answer(check, DescribedExecutors.none().executorOf(check), CheckRef.of(0, check), round).answer()
+        def verdict = checkRounds.answer(check, DescribedExecutors.none().executorOf(check), CheckRef.of(0, check), round).answer()
 
         then: 'the wait really polled the stuck gate over TLS before resolving on the deadline'
         platform.wireMock.verify(moreThanOrExactly(1), getRequestedFor(urlPathEqualTo(STUCK_QUALITY_GATE)))

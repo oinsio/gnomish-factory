@@ -14,7 +14,9 @@ import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.workspace.fake.AttemptCommitWorkspaces
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.CheckRef
+import com.github.oinsio.gnomish.domain.engine.CheckRounds
 import com.github.oinsio.gnomish.domain.engine.DescribedExecutors
+import com.github.oinsio.gnomish.domain.engine.EnginePorts
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.PendingPoll
@@ -29,8 +31,8 @@ import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
-import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.engine.port.PendingTurn
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.pipeline.Threshold
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
@@ -104,12 +106,15 @@ class PendingPollCheckRoundSpec extends Specification {
                         note(checkRound.poll(request, turn))
                     }
                 }
-        def poll = new PendingPoll(noting, new InMemoryAttemptPersistence(), AttemptDelivery.assumedDelivered(),
-                VirtualTimeEquipment.on(clock, sleeper), new RecordingEventListener())
+        def persistence = new InMemoryAttemptPersistence()
+        def time = VirtualTimeEquipment.on(clock, sleeper)
+        def listener = new RecordingEventListener()
+        def checkRounds = new CheckRounds(new EnginePorts(noting, listener, persistence, time, RoundIdentity.inPlace()),
+                new PendingPoll(noting, persistence, time, listener))
         def round = new PendingRound(VerifyingStages.of([check]), new TaskContext('TASK-1', UntrustedText.tracker('t'),
         UntrustedText.tracker('b'), []), AttemptCommitWorkspaces.at(SHA), new AttemptKey('TASK-1', 'build', 0),
         TaskState.atStageStart('build'), RoundToken.of('c' * 40))
-        poll.answer(check, DescribedExecutors.none().executorOf(check), CheckRef.of(0, check), round).answer()
+        checkRounds.answer(check, DescribedExecutors.none().executorOf(check), CheckRef.of(0, check), round).answer()
     }
 
     private ScmStatusReader reader() {

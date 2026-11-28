@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages
+import com.github.oinsio.gnomish.adapter.git.RoundSubject
 import com.github.oinsio.gnomish.domain.engine.PendingSubject
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -52,10 +52,10 @@ class PendingRoundRotationFlowSpec extends PendingRoundFlowSpecBase {
         and: 'the next polls asked for the new key, and the round closed on the rotated commit under its one token'
         StandIn.beside(link, 'heads').toFile().readLines()*.split(' ')*.getAt(1) == ['-', KEY, ROTATED, ROTATED]
         subjectsSince(created) == [
-            ServiceCommitMessages.pendingSnapshot('build', 0, opened),
-            ServiceCommitMessages.pending('build', 0, opened),
-            ServiceCommitMessages.pending('build', 0, opened),
-            ServiceCommitMessages.snapshot('build', 0, opened),
+            RoundSubject.pendingSnapshot('build', 0, opened),
+            RoundSubject.pending('build', 0, opened),
+            RoundSubject.pending('build', 0, opened),
+            RoundSubject.snapshot('build', 0, opened),
             'gnomish: round build#0'
         ]
         outcome instanceof TaskOutcome.Completed

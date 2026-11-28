@@ -52,7 +52,7 @@ class SnapshotRegisterSpec extends Specification implements BareGitRepoFixture, 
         tipWithSubject('gnomish: round implement#1')
 
         when: 'the gnome commits a well-formed snapshot subject above it'
-        gnomeCommit(ServiceCommitMessages.snapshot('implement', 1, RoundToken.of(tip())))
+        gnomeCommit(RoundSubject.snapshot('implement', 1, RoundToken.of(tip())))
 
         then:
         new SnapshotTipCheck(runner, clone).inspect(TASK).isEmpty()
@@ -62,7 +62,7 @@ class SnapshotRegisterSpec extends Specification implements BareGitRepoFixture, 
     //     the pending verification, read at the register — the commit above changes nothing.
     def "FR13: a registered snapshot under a commit above it is still pending, at the snapshot"() {
         given:
-        tipWithSubject(ServiceCommitMessages.snapshot('implement', 2, RoundToken.of(tip())))
+        tipWithSubject(RoundSubject.snapshot('implement', 2, RoundToken.of(tip())))
         def snapshot = tip()
         gnomeCommit('gnome work after the snapshot')
 

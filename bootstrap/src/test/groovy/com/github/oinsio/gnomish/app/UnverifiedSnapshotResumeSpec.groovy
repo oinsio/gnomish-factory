@@ -10,8 +10,8 @@ import com.github.oinsio.gnomish.adapter.agent.program.ProgramStageExecutor
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.LocalBoxEnvironment
+import com.github.oinsio.gnomish.adapter.git.RoundSubject
 import com.github.oinsio.gnomish.adapter.git.SandboxRoundEnvironmentSource
-import com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages
 import com.github.oinsio.gnomish.adapter.git.SnapshotTipCheck
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
@@ -143,7 +143,7 @@ class UnverifiedSnapshotResumeSpec extends Specification implements BareGitRepoF
         (result.status() as ExecutionResult.Failed).failureClass() == failureClass
         def closed = registered()
         closed != before
-        subjectOf(cloneDir, closed) == ServiceCommitMessages.unverifiedSnapshot('build', 0, RoundToken.of(before))
+        subjectOf(cloneDir, closed) == RoundSubject.unverifiedSnapshot('build', 0, RoundToken.of(before))
 
         when: 'a pickup reads the register'
         def pending = new SnapshotTipCheck(runner, cloneDir).inspect(TASK)

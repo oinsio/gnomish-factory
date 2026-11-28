@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.testfixtures.JudgeChecks
@@ -68,7 +69,10 @@ abstract class VerifyOrchestratorSpecBase extends Specification {
             ScriptedCheckRounds judges = new ScriptedCheckRounds(),
             AttemptDelivery attemptDelivery = AttemptDelivery.assumedDelivered()) {
         def rounds = CheckRouting.byExecutor(builtinRunner, commandRunner, externalClient, judges)
-        new VerifyOrchestrator(new PendingPoll(rounds, persistence, attemptDelivery, VirtualTimeEquipment.on(clock, sleeper),
-                listener), DescribedExecutors.none(), clock, listener)
+        def time = VirtualTimeEquipment.on(clock, sleeper)
+        def ports = new EnginePorts(rounds, listener, persistence, time, attemptDelivery, DescribedExecutors.none(),
+                RoundIdentity.inPlace())
+        new VerifyOrchestrator(new CheckRounds(ports, new PendingPoll(rounds, persistence, time, listener)),
+                DescribedExecutors.none(), clock, listener)
     }
 }

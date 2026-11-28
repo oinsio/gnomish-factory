@@ -98,9 +98,9 @@ final class RoundSnapshot {
      */
     static String subject(AttemptKey key, RoundToken token, RoundClose close) {
         return switch (close) {
-            case VERIFIABLE -> ServiceCommitMessages.snapshot(key.stage(), key.attempt(), token);
-            case UNVERIFIABLE -> ServiceCommitMessages.unverifiedSnapshot(key.stage(), key.attempt(), token);
-            case PENDING -> ServiceCommitMessages.pendingSnapshot(key.stage(), key.attempt(), token);
+            case VERIFIABLE -> RoundSubject.snapshot(key.stage(), key.attempt(), token);
+            case UNVERIFIABLE -> RoundSubject.unverifiedSnapshot(key.stage(), key.attempt(), token);
+            case PENDING -> RoundSubject.pendingSnapshot(key.stage(), key.attempt(), token);
         };
     }
 }

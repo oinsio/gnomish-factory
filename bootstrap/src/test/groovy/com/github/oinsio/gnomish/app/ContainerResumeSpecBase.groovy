@@ -7,7 +7,7 @@ import com.github.oinsio.gnomish.adapter.git.GitObjectsTaskRepository
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.PushBestEffortTaskLifecycleStore
 import com.github.oinsio.gnomish.adapter.git.RegisteredBranchFixture
-import com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages
+import com.github.oinsio.gnomish.adapter.git.RoundSubject
 import com.github.oinsio.gnomish.adapter.git.VirtualTimeGitRetries
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
@@ -165,7 +165,7 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
 
     /**
      * Commits a state.json positioned at {@code stage} as the tip's message being the
-     * snapshot-commit shape {@link ServiceCommitMessages#snapshot} — resume then classifies the
+     * snapshot-commit shape {@link RoundSubject#snapshot} — resume then classifies the
      * tip as an interrupted verification (FR21, D15) instead of running ordinary salvage.
      */
     protected void commitSnapshotStateAtStage(String taskId, String stage, int round) {
@@ -174,7 +174,7 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
         // The round opened on the current tip, so that tip is the token the subject names (design
         // D10 of make-checkpoint-gate-durable).
         def token = RoundToken.of(gitObjects.resolveRef('refs/heads/' + TaskIdSanitizer.branchName(taskId)).get().hex())
-        commitOnBranch(taskId, '.gnomish-task/state.json', bytes, ServiceCommitMessages.snapshot(stage, round, token))
+        commitOnBranch(taskId, '.gnomish-task/state.json', bytes, RoundSubject.snapshot(stage, round, token))
     }
 
     /** Hand-commits task.json (the crash-window shapes recordOutcome never leaves behind). */

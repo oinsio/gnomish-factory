@@ -1,6 +1,10 @@
 package com.github.oinsio.gnomish.domain.pipeline;
 
+import com.github.oinsio.gnomish.domain.engine.ExecutorRole;
 import java.util.List;
+import java.util.Locale;
+import java.util.stream.Collectors;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The catalog-free half of the role rule over a {@code judge} check's executor block (design D12 of
@@ -9,8 +13,9 @@ import java.util.List;
  * not by the law:
  *
  * <ul>
- *   <li>{@code command} resolves to the {@link BuiltInExecutors#COMMAND} built-in, whose describe
- *       lists role {@code transform} only;</li>
+ *   <li>{@code command} resolves to the {@link BuiltInExecutors#COMMAND} built-in, refused unless its
+ *       roles, {@link BuiltInExecutors#COMMAND_ROLES} — the one statement its describe also maps —
+ *       hold {@code verdict};</li>
  *   <li>{@code api} resolves to no executor at all ({@link ApiExecutorRule}).</li>
  * </ul>
  *
@@ -32,9 +37,7 @@ final class JudgeRoleRule {
     static void validate(String manifest, String where, StageDefinition.Executor executor, List<ConfigError> errors) {
         String reason =
                 switch (executor.type()) {
-                    case COMMAND ->
-                        "executor type 'command' resolves to the built-in executor '%s', which serves only role 'transform'"
-                                .formatted(BuiltInExecutors.COMMAND);
+                    case COMMAND -> commandReason(BuiltInExecutors.COMMAND_ROLES);
                     case API -> "executor type 'api' resolves to no executor";
                     case AGENT_CLI, PROGRAM -> null;
                 };
@@ -45,5 +48,22 @@ final class JudgeRoleRule {
                     reason + "; a judge check needs an executor that serves role 'verdict'"
                             + " (type agent-cli, or a program whose describe lists 'verdict')"));
         }
+    }
+
+    /**
+     * Why a {@code command} judge block is refused, decided by the built-in's roles.
+     *
+     * @param roles the roles the {@code command} built-in serves ({@link BuiltInExecutors#COMMAND_ROLES})
+     * @return the refusal naming the roles it serves, or {@code null} when they hold {@code verdict}
+     */
+    static @Nullable String commandReason(List<ExecutorRole> roles) {
+        if (roles.contains(ExecutorRole.VERDICT)) {
+            return null;
+        }
+        String served = roles.stream()
+                .map(role -> "'" + role.name().toLowerCase(Locale.ROOT) + "'")
+                .collect(Collectors.joining(", "));
+        return "executor type 'command' resolves to the built-in executor '%s', which serves only role %s"
+                .formatted(BuiltInExecutors.COMMAND, served);
     }
 }

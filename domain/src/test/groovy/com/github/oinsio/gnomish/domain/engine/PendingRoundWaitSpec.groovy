@@ -11,7 +11,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
-import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.engine.port.PendingTurn
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
@@ -139,8 +138,7 @@ class PendingRoundWaitSpec extends PendingTransformRoundSpecBase {
         def since = clock.instant().minus(Duration.ofMinutes(50))
         def entry = new PendingPollRecord(PendingSubject.ROUND, 0, TOKEN, new PendingKey('job-42'), since)
         executor.scripted << pending('job-42', Duration.ofMinutes(20))
-        def poll = new PendingPoll(executor, persistence, AttemptDelivery.assumedDelivered(),
-                VirtualTimeEquipment.on(clock, sleeper), listener)
+        def poll = new PendingPoll(executor, persistence, VirtualTimeEquipment.on(clock, sleeper), listener)
         def start = new StageExecutor.Request(CONTEXT, STAGE, new FakeWorkspace(), 0, [])
         def ask = new RoundAsk(start, new AttemptKey('TASK-1', 'build', 0), TaskState.atStageStart('build'), TOKEN,
                 'remote', BOUNDS)

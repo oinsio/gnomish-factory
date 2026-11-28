@@ -83,7 +83,7 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
     def "FR15, FR13: a well-formed subject yields the attempt commit, stage, round, the typed token and no request"() {
         given: 'a round opened on the current tip and closed without asking'
         def token = RoundToken.of(tip())
-        tipWithSubject(ServiceCommitMessages.snapshot('implement', 3, token))
+        tipWithSubject(RoundSubject.snapshot('implement', 3, token))
 
         when:
         def pending = new SnapshotTipCheck(runner, clone).inspect(TASK)
@@ -106,7 +106,7 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
     def "FR19: a registered unverified snapshot is not an interrupted verification"() {
         given: 'a round opened on the current tip, closed unverifiable, and registered'
         def token = RoundToken.of(tip())
-        tipWithSubject(ServiceCommitMessages.unverifiedSnapshot('implement', 3, token))
+        tipWithSubject(RoundSubject.unverifiedSnapshot('implement', 3, token))
 
         expect:
         new SnapshotTipCheck(runner, clone).inspect(TASK).isEmpty()
@@ -131,9 +131,9 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
     def "FR20: a registered pending commit yields the snapshot below it and itself as the registered commit"() {
         given: 'a round snapshotted, then a check of it went pending'
         def token = RoundToken.of(tip())
-        tipWithSubject(ServiceCommitMessages.snapshot('implement', 3, token))
+        tipWithSubject(RoundSubject.snapshot('implement', 3, token))
         def snapshot = tip()
-        def pending = registeredCommitOn(ServiceCommitMessages.pending('implement', 3, token), snapshot)
+        def pending = registeredCommitOn(RoundSubject.pending('implement', 3, token), snapshot)
 
         when:
         def found = new SnapshotTipCheck(runner, clone).inspect(TASK)
@@ -145,7 +145,7 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
     def "FR20: a registered snapshot is its own registered commit"() {
         given:
         def token = RoundToken.of(tip())
-        tipWithSubject(ServiceCommitMessages.snapshot('implement', 3, token))
+        tipWithSubject(RoundSubject.snapshot('implement', 3, token))
 
         expect:
         new SnapshotTipCheck(runner, clone).inspect(TASK).get().registered() == tip()
@@ -156,10 +156,10 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
     def "FR20: a stacked pending commit is followed over the round's pending commits down to the snapshot"() {
         given:
         def token = RoundToken.of(tip())
-        tipWithSubject(ServiceCommitMessages.snapshot('implement', 3, token))
+        tipWithSubject(RoundSubject.snapshot('implement', 3, token))
         def snapshot = tip()
-        def first = registeredCommitOn(ServiceCommitMessages.pending('implement', 3, token), snapshot)
-        def second = registeredCommitOn(ServiceCommitMessages.pending('implement', 3, token), first)
+        def first = registeredCommitOn(RoundSubject.pending('implement', 3, token), snapshot)
+        def second = registeredCommitOn(RoundSubject.pending('implement', 3, token), first)
 
         when:
         def found = new SnapshotTipCheck(runner, clone).inspect(TASK).get()
@@ -181,10 +181,10 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
     def "FR11: a pending round commit above a pending-round snapshot is read as a pending round with its token"() {
         given: 'a round whose start went pending, its key rotated once'
         def token = RoundToken.of(tip())
-        tipWithSubject(ServiceCommitMessages.pendingSnapshot('implement', 3, token))
+        tipWithSubject(RoundSubject.pendingSnapshot('implement', 3, token))
         def snapshot = tip()
-        def first = registeredCommitOn(ServiceCommitMessages.pending('implement', 3, token), snapshot)
-        def rotated = registeredCommitOn(ServiceCommitMessages.pending('implement', 3, token), first)
+        def first = registeredCommitOn(RoundSubject.pending('implement', 3, token), snapshot)
+        def rotated = registeredCommitOn(RoundSubject.pending('implement', 3, token), first)
 
         when:
         def found = new SnapshotTipCheck(runner, clone).inspect(TASK)
@@ -200,7 +200,7 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
     def "FR11: a registered pending-round snapshot alone is no interrupted round, and its re-driven start is named"() {
         given:
         def token = RoundToken.of(tip())
-        tipWithSubject(ServiceCommitMessages.pendingSnapshot('implement', 3, token))
+        tipWithSubject(RoundSubject.pendingSnapshot('implement', 3, token))
         def logs = LogCaptureSupport.attach(SnapshotTipCheck, Level.DEBUG)
 
         when:
@@ -239,8 +239,8 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
         given:
         def token = RoundToken.of(tip())
         def path = EnvelopePaths.answerFile(new AttemptKey(TASK, 'implement', 0), token).relative()
-        commitFile(path, DECISION, ServiceCommitMessages.snapshot('implement', 0, token))
-        registeredCommitOn(ServiceCommitMessages.pending('implement', 0, token), tip())
+        commitFile(path, DECISION, RoundSubject.snapshot('implement', 0, token))
+        registeredCommitOn(RoundSubject.pending('implement', 0, token), tip())
 
         expect:
         questionOf(new SnapshotTipCheck(runner, clone).inspect(TASK).get()) == 'which db?'
@@ -253,17 +253,17 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
         def token = RoundToken.of(tip())
         def other = RoundToken.of(gitOutput(clone, 'rev-parse', 'HEAD^{tree}'))
         Map<String, String> below = [
-            'another token': ServiceCommitMessages.snapshot('implement', 3, other),
-            'another round': ServiceCommitMessages.snapshot('implement', 2, token),
-            'another stage': ServiceCommitMessages.snapshot('review', 3, token),
-            'an unverified snapshot': ServiceCommitMessages.unverifiedSnapshot('implement', 3, token),
+            'another token': RoundSubject.snapshot('implement', 3, other),
+            'another round': RoundSubject.snapshot('implement', 2, token),
+            'another stage': RoundSubject.snapshot('review', 3, token),
+            'an unverified snapshot': RoundSubject.unverifiedSnapshot('implement', 3, token),
             'a round commit': 'gnomish: round implement#3',
-            'a pending commit of another token': ServiceCommitMessages.pending('implement', 3, other),
-            'a pending-round snapshot of another token': ServiceCommitMessages.pendingSnapshot('implement', 3, other),
-            'a pending-round snapshot of another round': ServiceCommitMessages.pendingSnapshot('implement', 2, token),
+            'a pending commit of another token': RoundSubject.pending('implement', 3, other),
+            'a pending-round snapshot of another token': RoundSubject.pendingSnapshot('implement', 3, other),
+            'a pending-round snapshot of another round': RoundSubject.pendingSnapshot('implement', 2, token),
         ]
         tipWithSubject(below[variant])
-        registeredCommitOn(ServiceCommitMessages.pending('implement', 3, token), tip())
+        registeredCommitOn(RoundSubject.pending('implement', 3, token), tip())
         def logs = LogCaptureSupport.attach(PendingChain, Level.DEBUG)
 
         when:
@@ -295,9 +295,9 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
     def "FR20: a foreign commit between the pending commit and its round's snapshot is not crossed"() {
         given:
         def token = RoundToken.of(tip())
-        tipWithSubject(ServiceCommitMessages.snapshot('implement', 3, token))
+        tipWithSubject(RoundSubject.snapshot('implement', 3, token))
         gnomeCommit('wip: between')
-        registeredCommitOn(ServiceCommitMessages.pending('implement', 3, token), tip())
+        registeredCommitOn(RoundSubject.pending('implement', 3, token), tip())
 
         expect:
         new SnapshotTipCheck(runner, clone).inspect(TASK).isEmpty()
@@ -306,13 +306,13 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
     def "FR20: a pending commit with #count parents is not the factory's and is refused"() {
         given:
         def token = RoundToken.of(tip())
-        tipWithSubject(ServiceCommitMessages.snapshot('implement', 3, token))
+        tipWithSubject(RoundSubject.snapshot('implement', 3, token))
         def snapshot = tip()
         def parents = count == 0 ? [] : [
             snapshot,
             gitOutput(clone, 'rev-parse', snapshot + '^')
         ]
-        registeredCommitOn(ServiceCommitMessages.pending('implement', 3, token), *parents)
+        registeredCommitOn(RoundSubject.pending('implement', 3, token), *parents)
 
         expect:
         new SnapshotTipCheck(runner, clone).inspect(TASK).isEmpty()
@@ -341,7 +341,7 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
         given:
         def token = RoundToken.of(tip())
         def path = EnvelopePaths.answerFile(new AttemptKey(TASK, 'implement', 0), token).relative()
-        commitFile(path, DECISION, ServiceCommitMessages.snapshot('implement', 0, token))
+        commitFile(path, DECISION, RoundSubject.snapshot('implement', 0, token))
 
         and: 'the working copy no longer holds it — the read is of the snapshot, not of a working copy'
         Files.delete(clone.resolve(path))
@@ -357,7 +357,7 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
         given: 'a round that wrote its answer file, and died after its snapshot'
         def token = RoundToken.of(tip())
         def path = EnvelopePaths.answerFile(new AttemptKey(TASK, 'implement', 0), token).relative()
-        commitFile(path, text, ServiceCommitMessages.snapshot('implement', 0, token))
+        commitFile(path, text, RoundSubject.snapshot('implement', 0, token))
 
         when:
         def recovered = new SnapshotTipCheck(runner, clone).inspect(TASK).get().answer()
@@ -382,7 +382,7 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
                 DECISION, 'gnomish: task approved')
 
         and: 'the current round, opened on the next tip, asked nothing'
-        tipWithSubject(ServiceCommitMessages.snapshot('implement', 0, RoundToken.of(tip())))
+        tipWithSubject(RoundSubject.snapshot('implement', 0, RoundToken.of(tip())))
 
         expect:
         new SnapshotTipCheck(runner, clone).inspect(TASK).get().answer() == new AnswerFileReading.Absent()

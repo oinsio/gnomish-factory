@@ -38,7 +38,7 @@ class InBoxPendingRoundCommitSpec extends Specification implements InBoxPendingR
         persistence().persistPending(TASK, roundPendingState('job-7'))
 
         then: 'the round\'s close is registered under the pending-round subject, carrying the gnome\'s work'
-        gitOutput(cloneDir, 'log', '-1', '--format=%s', snapshot) == ServiceCommitMessages.pendingSnapshot('implement', 1, token)
+        gitOutput(cloneDir, 'log', '-1', '--format=%s', snapshot) == RoundSubject.pendingSnapshot('implement', 1, token)
         gitOutput(cloneDir, 'show', snapshot + ':work.txt') == 'gnome work'
 
         and: 'the pending round commit is registered on the snapshot alone, changing only state.json'
@@ -46,7 +46,7 @@ class InBoxPendingRoundCommitSpec extends Specification implements InBoxPendingR
         registered() == pending
         parentsOf(pending) == snapshot
         changedIn(pending) == [STATE]
-        gitOutput(cloneDir, 'log', '-1', '--format=%s', pending) == ServiceCommitMessages.pending('implement', 1, token)
+        gitOutput(cloneDir, 'log', '-1', '--format=%s', pending) == RoundSubject.pending('implement', 1, token)
         gitOutput(cloneDir, 'show', pending + ':work.txt') == 'gnome work'
 
         and: 'its state carries the round\'s own entry'
@@ -107,8 +107,8 @@ class InBoxPendingRoundCommitSpec extends Specification implements InBoxPendingR
         parentsOf(closing) == pending
 
         and: 'its subject names the token of the round\'s pending-round snapshot'
-        gitOutput(cloneDir, 'log', '-1', '--format=%s', snapshot) == ServiceCommitMessages.pendingSnapshot('implement', 1, token)
-        gitOutput(cloneDir, 'log', '-1', '--format=%s', closing) == ServiceCommitMessages.snapshot('implement', 1, token)
+        gitOutput(cloneDir, 'log', '-1', '--format=%s', snapshot) == RoundSubject.pendingSnapshot('implement', 1, token)
+        gitOutput(cloneDir, 'log', '-1', '--format=%s', closing) == RoundSubject.snapshot('implement', 1, token)
         rounds.closed() == new ClosedRound(token, closing, closing, RoundClose.VERIFIABLE)
 
         and: 'the box\'s state.json lag was settled before the staging, so the snapshot changes nothing'
@@ -135,7 +135,7 @@ class InBoxPendingRoundCommitSpec extends Specification implements InBoxPendingR
         then: 'the admitted range is the executor\'s commit and the closing snapshot above the pending round commit'
         registered() == closing
         gitOutput(cloneDir, 'log', '--format=%s', "${pending}..${closing}").readLines() == [
-            ServiceCommitMessages.snapshot('implement', 1, rounds.opened()),
+            RoundSubject.snapshot('implement', 1, rounds.opened()),
             'polled.txt'
         ]
 

@@ -3,7 +3,7 @@ package com.github.oinsio.gnomish.app
 import static com.github.oinsio.gnomish.app.PendingRoundKills.atPendingWrite
 import static com.github.oinsio.gnomish.app.PendingRoundKills.refusingRefsAt
 
-import com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages
+import com.github.oinsio.gnomish.adapter.git.RoundSubject
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -38,7 +38,7 @@ class PendingRoundKillBeforeCommitSpec extends PendingRoundResumeSpecBase {
         expect: 'the register holds no pending round commit: the creation, or the pending-round snapshot alone'
         def registered = gitOutput(clone, 'rev-parse', REGISTER)
         subjectsSince(created) == (snapshotted ? [
-            ServiceCommitMessages.pendingSnapshot('build', 0, RoundToken.of(created))
+            RoundSubject.pendingSnapshot('build', 0, RoundToken.of(created))
         ] : [])
         registered == tip()
         stateAt(REGISTER).pendingPolls().isEmpty()
@@ -65,9 +65,9 @@ class PendingRoundKillBeforeCommitSpec extends PendingRoundResumeSpecBase {
         outcome instanceof TaskOutcome.Completed
         def token = RoundToken.of(registered)
         subjectsSince(registered).takeRight(4) == [
-            ServiceCommitMessages.pendingSnapshot('build', 0, token),
-            ServiceCommitMessages.pending('build', 0, token),
-            ServiceCommitMessages.snapshot('build', 0, token),
+            RoundSubject.pendingSnapshot('build', 0, token),
+            RoundSubject.pending('build', 0, token),
+            RoundSubject.snapshot('build', 0, token),
             'gnomish: round build#0'
         ]
         def closing = stateAt(REGISTER)
