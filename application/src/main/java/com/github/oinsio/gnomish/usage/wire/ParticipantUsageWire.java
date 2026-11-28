@@ -1,10 +1,9 @@
 package com.github.oinsio.gnomish.usage.wire;
 
-import com.github.oinsio.gnomish.domain.engine.ExecutorRole;
+import com.github.oinsio.gnomish.app.describe.ExecutorRoles;
 import com.github.oinsio.gnomish.domain.engine.ModelUsage;
 import com.github.oinsio.gnomish.domain.engine.ParticipantUsage;
 import com.github.oinsio.gnomish.domain.engine.UsageProvenance;
-import com.github.oinsio.gnomish.executorcontract.Role;
 import com.github.oinsio.gnomish.executorcontract.usagewire.ParticipantUsageDto;
 import com.github.oinsio.gnomish.executorcontract.usagewire.RecordedProvenance;
 import java.time.Duration;
@@ -12,7 +11,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import org.jspecify.annotations.Nullable;
 
 /**
  * The one mapping between the domain's {@link ParticipantUsage} and the usage wire vocabulary's
@@ -22,8 +20,9 @@ import org.jspecify.annotations.Nullable;
  * {@code :application} because the vocabulary's module reaches no factory layer and the domain
  * reaches no contract.
  *
- * <p>The domain's role and provenance constants are switched over exhaustively in both directions,
- * so a constant added on either side fails to compile here rather than drifting. The model map is
+ * <p>A role is spelled through {@link ExecutorRoles}, the one role mapping; the provenance constants
+ * are switched over exhaustively here in both directions, so a constant added on either side fails
+ * to compile rather than drifting. The model map is
  * written in model-id order, so a document is byte-stable whatever order the entry holds it in.
  *
  * <p>Implements FR15, FR16 of define-executor-contract.
@@ -57,7 +56,7 @@ public final class ParticipantUsageWire {
     private static ParticipantUsageDto toDto(ParticipantUsage entry) {
         Duration wall = entry.wallTime();
         return new ParticipantUsageDto(
-                toRole(entry.role()),
+                ExecutorRoles.contract(entry.role()),
                 entry.executor(),
                 entry.vote(),
                 toProvenance(entry.provenance()),
@@ -69,34 +68,13 @@ public final class ParticipantUsageWire {
     private static ParticipantUsage fromDto(ParticipantUsageDto dto) {
         Long wall = dto.wallMillis();
         return new ParticipantUsage(
-                fromRole(dto.role()),
+                ExecutorRoles.domain(dto.role()),
                 dto.executor(),
                 dto.vote(),
                 fromProvenance(dto.provenance()),
                 wall == null ? null : Duration.ofMillis(wall),
                 UsageWireParts.fromTools(dto.byTool()),
                 fromModels(dto.byModel()));
-    }
-
-    static Role toRole(ExecutorRole role) {
-        return switch (role) {
-            case TRANSFORM -> Role.TRANSFORM;
-            case VERDICT -> Role.VERDICT;
-            case DECISION -> Role.DECISION;
-            case EFFECT -> Role.EFFECT;
-        };
-    }
-
-    static ExecutorRole fromRole(@Nullable Role role) {
-        if (role == null) {
-            throw new IllegalArgumentException("usage entry names a role outside the contract's set");
-        }
-        return switch (role) {
-            case TRANSFORM -> ExecutorRole.TRANSFORM;
-            case VERDICT -> ExecutorRole.VERDICT;
-            case DECISION -> ExecutorRole.DECISION;
-            case EFFECT -> ExecutorRole.EFFECT;
-        };
     }
 
     static RecordedProvenance toProvenance(UsageProvenance provenance) {

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent.command
 
+import com.github.oinsio.gnomish.app.describe.ProgramBounds
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.executorcontract.ExecutorResult
 import com.github.oinsio.gnomish.executorcontract.FailureClass
@@ -29,7 +30,7 @@ class CommandExitCodeSpec extends Specification {
 
     static final String BUILD_ERRORS = 'Compiling 3 files\nFoo.java:3: error: cannot find symbol\nBUILD FAILED\n'
 
-    def factory = new CommandExecutorFactory(new VirtualClock())
+    def factory = new CommandExecutorFactory(new VirtualClock(), ProgramBounds.DEFAULTS)
 
     private ExecutorResult start(int code, String output = '', ExecHandle.Wait wait = new ExecHandle.Wait.Exited(Duration.ofSeconds(4)),
             Map<String, Object> settings = [:]) {

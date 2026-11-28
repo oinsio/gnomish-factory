@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent.command
 
 import com.github.oinsio.gnomish.adapter.command.CommandRun
+import com.github.oinsio.gnomish.app.describe.ProgramBounds
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.executorcontract.Capability
 import com.github.oinsio.gnomish.executorcontract.Describe
@@ -32,10 +33,10 @@ import spock.lang.Timeout
 @Timeout(60)
 class CommandStageExecutorSpec extends Specification {
 
-    /** What the factory's own process environment holds: the base, an operator variable, a tracker token, a decision file, noise. */
+    /** What the factory's own process environment holds: the base, an operator variable, a tracker token, an answer file, noise. */
     static final Map<String, String> FACTORY_ENV = [
         PATH: '/usr/bin', HOME: '/home/gnome', OPERATOR_TOOL_HOME: '/opt/tool', GITHUB_TOKEN: 'ghp_secret',
-        GNOMISH_DECISION_FILE: '/tmp/decision.json', UNRELATED_CLOUD_KEY: 'aws-secret']
+        GNOMISH_ANSWER_FILE: '/tmp/answer.json', UNRELATED_CLOUD_KEY: 'aws-secret']
 
     @TempDir
     Path workspace
@@ -54,8 +55,8 @@ class CommandStageExecutorSpec extends Specification {
         def environment = new HostTaskExecutionEnvironment(workspace, new VirtualClock(), allowlist, launch)
         environment.materialize('gnomish/TASK-7', null)
         try {
-            new CommandExecutorFactory(new VirtualClock()).executor(environment)
-                    .start(new CommandExecutorFactory(new VirtualClock()).request(CommandFixtures.round()))
+            new CommandExecutorFactory(new VirtualClock(), ProgramBounds.DEFAULTS).executor(environment)
+                    .start(new CommandExecutorFactory(new VirtualClock(), ProgramBounds.DEFAULTS).request(CommandFixtures.round()))
         } finally {
             environment.dispose()
         }
@@ -108,7 +109,7 @@ class CommandStageExecutorSpec extends Specification {
         seen.environment() == [PATH: '/usr/bin', HOME: '/home/gnome', OPERATOR_TOOL_HOME: '/opt/tool']
     }
 
-    def "NG1: no decision file variable reaches the command, though the factory's environment holds one"() {
+    def "NG1: no answer file variable reaches the command, though the factory's environment holds one"() {
         given:
         def allowlist = ChildEnvAllowlist.of([], [], { String name ->
             Optional.ofNullable(FACTORY_ENV[name])
@@ -118,7 +119,7 @@ class CommandStageExecutorSpec extends Specification {
         start(0, {}, allowlist)
 
         then:
-        !seen.environment().containsKey('GNOMISH_DECISION_FILE')
+        !seen.environment().containsKey('GNOMISH_ANSWER_FILE')
     }
 
     def "NG1: a decision-request file the command writes into the working copy is no answer: the round completes"() {
@@ -135,7 +136,7 @@ class CommandStageExecutorSpec extends Specification {
 
     def "FR8: describe lists transform alone, no poll, no credentials and no usage report"() {
         when:
-        Describe describe = new CommandStageExecutor(Stub(TaskExecutionEnvironment), new CommandRun(CommandRun.POSIX_SHELL, new VirtualClock())).describe()
+        Describe describe = new CommandStageExecutor(Stub(TaskExecutionEnvironment), new CommandRun(CommandRun.POSIX_SHELL, new VirtualClock()), ProgramBounds.DEFAULTS).describe()
 
         then:
         describe.protocolVersion() == Describe.SPOKEN_PROTOCOL_VERSION
@@ -151,10 +152,10 @@ class CommandStageExecutorSpec extends Specification {
     // Scenario: executor/command-executor / Poll is never pending
     def "FR8: a poll of the command built-in is failed/infrastructure, never pending, and runs nothing"() {
         given:
-        def request = new CommandExecutorFactory(new VirtualClock()).request(CommandFixtures.round())
+        def request = new CommandExecutorFactory(new VirtualClock(), ProgramBounds.DEFAULTS).request(CommandFixtures.round())
 
         when:
-        def result = new CommandStageExecutor(Stub(TaskExecutionEnvironment), new CommandRun(CommandRun.POSIX_SHELL, new VirtualClock()))
+        def result = new CommandStageExecutor(Stub(TaskExecutionEnvironment), new CommandRun(CommandRun.POSIX_SHELL, new VirtualClock()), ProgramBounds.DEFAULTS)
                 .poll(request, new PendingKey('k-1'))
 
         then:

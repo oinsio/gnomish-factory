@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.adapter.check.http.HttpCheckProbe
 import com.github.oinsio.gnomish.adapter.check.http.HttpRunContext
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.adapter.scm.ScmConnectionReader
+import com.github.oinsio.gnomish.app.AgentEntryFixture
 import com.github.oinsio.gnomish.app.BuiltInConnections
 import com.github.oinsio.gnomish.app.BuiltInEntries
 import com.github.oinsio.gnomish.app.CheckDispatch
@@ -15,6 +16,7 @@ import com.github.oinsio.gnomish.app.CheckRoundRoute
 import com.github.oinsio.gnomish.app.ConnectionProfiles
 import com.github.oinsio.gnomish.app.DescribedLaws
 import com.github.oinsio.gnomish.app.ExecutorRegistry
+import com.github.oinsio.gnomish.app.VerdictInput
 import com.github.oinsio.gnomish.app.describe.ProgramBounds
 import com.github.oinsio.gnomish.app.port.git.LastRegisteredCommit
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
@@ -70,13 +72,13 @@ class PlatformCheckRounds implements GitObjectsFixture {
         def equipment = new ProgramRoundEquipment(ProgramBounds.DEFAULTS, VirtualTimeEquipment.create(),
                 TestChildEnvironment.hostAllowlist().programGrant(), Path.of('/tmp'), LastRegisteredCommit.NONE)
         def builtIns = new BuiltInEntries(new FilesExistCheckRunner(), shell,
-                HttpCheckProbe.guarded(new OperatorEgress(inProcessEgress), secrets, HttpRunContext.none()), secrets, clock)
+                HttpCheckProbe.guarded(new OperatorEgress(inProcessEgress), secrets, HttpRunContext.none()), secrets, clock, equipment.bounds())
         def registry = ExecutorRegistry.of(DescribedLaws.connected((admission as BuiltInConnections.Admission.Admitted).connections()),
-                definition, PipelineLaw.ofContent([:]), equipment, builtIns, null)
+                definition, PipelineLaw.ofContent([:]), equipment, builtIns, null, AgentEntryFixture.idle(equipment))
         def stages = { request ->
             throw new IllegalStateException('a verify chain runs no stage round')
         } as StageExecutor
-        new CheckRoundRoute(stages, new CheckDispatch(registry, new PinCheck(objects, law)))
+        new CheckRoundRoute(stages, new CheckDispatch(registry, new PinCheck(objects, law), VerdictInput.IDENTIFIER_ONLY))
     }
 
     /** Seeds the law commit carrying the workflow file {@code workflow}. */

@@ -76,7 +76,7 @@ class PipelineLoaderCommandSettingsSpec extends Specification implements Pipelin
         expect:
         errors() == [
             new ConfigError(MANIFEST, 'executor.settings.roundTimeout',
-            "malformed 'roundTimeout': expected a number of seconds or an ISO-8601 duration string")
+            "malformed 'roundTimeout': expected a positive number of seconds or a positive ISO-8601 duration string")
         ]
 
         where:

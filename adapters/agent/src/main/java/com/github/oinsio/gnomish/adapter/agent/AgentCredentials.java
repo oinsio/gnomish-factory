@@ -1,13 +1,14 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
+import com.github.oinsio.gnomish.adapter.agent.claude.ClaudeEnvironment;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import java.util.List;
 
 /**
  * Which agent credentials a round would carry (design D4 of add-doctor-command): the names of the
- * AI-seam credentials ({@link AgentAiSeam#CREDENTIAL_NAMES}) that resolve through the round's
- * child-environment allowlist. It asks the exact question an agent round and a judge vote ask,
- * {@link AgentAiSeam#variables}, over the allowlist the composition root binds to the secrets port,
+ * secret-carrying credentials the Claude describe declares ({@link ClaudeEnvironment#SECRETS}) that
+ * resolve through the round's child-environment allowlist. It asks the exact question an agent round
+ * and a judge vote ask, {@link ClaudeEnvironment#variables}, over the allowlist the composition root binds to the secrets port,
  * so a token in the host secrets folder counts as present here exactly when it reaches the agent
  * CLI, and a name the allowlist scrubs (a declared tracker or check credential) counts as absent
  * exactly when the round would lose it. No list of names lives here, and no environment is read:
@@ -16,7 +17,7 @@ import java.util.List;
  * <p>Only names leave this class, never a value (NFR-S1): the resolved values are dropped before
  * the result is built.
  *
- * <p>Implements FR1, NFR-S1 of add-doctor-command.
+ * <p>Implements FR1, NFR-S1 of add-doctor-command; NFR-S1 of extract-agent-round-runner.
  */
 public final class AgentCredentials {
 
@@ -29,7 +30,7 @@ public final class AgentCredentials {
      * @return the credential names; never null
      */
     public static List<String> names() {
-        return AgentAiSeam.CREDENTIAL_NAMES;
+        return ClaudeEnvironment.SECRETS;
     }
 
     /**
@@ -39,7 +40,7 @@ public final class AgentCredentials {
      * @return the present credential names, in seam order; empty when none resolves; never null
      */
     public static List<String> presentNames(ChildEnvAllowlist childEnv) {
-        var present = AgentAiSeam.variables(childEnv).keySet();
-        return AgentAiSeam.CREDENTIAL_NAMES.stream().filter(present::contains).toList();
+        var present = ClaudeEnvironment.variables(childEnv).keySet();
+        return ClaudeEnvironment.SECRETS.stream().filter(present::contains).toList();
     }
 }

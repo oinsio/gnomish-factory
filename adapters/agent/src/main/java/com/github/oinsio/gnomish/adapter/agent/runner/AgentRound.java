@@ -1,0 +1,183 @@
+package com.github.oinsio.gnomish.adapter.agent.runner;
+
+import com.github.oinsio.gnomish.adapter.agent.RoundScratchDirectory;
+import com.github.oinsio.gnomish.adapter.agent.program.ProgramEnd;
+import com.github.oinsio.gnomish.adapter.agent.program.ProgramRoundEquipment;
+import com.github.oinsio.gnomish.adapter.agent.program.ProgressLines;
+import com.github.oinsio.gnomish.app.describe.ProgramChannel;
+import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
+import com.github.oinsio.gnomish.executorcontract.ExecutorRequest;
+import com.github.oinsio.gnomish.executorcontract.ExecutorResult;
+import com.github.oinsio.gnomish.executorcontract.Status;
+import com.github.oinsio.gnomish.sandbox.CredentialGrantStanding;
+import com.github.oinsio.gnomish.sandbox.ExecCommand;
+import com.github.oinsio.gnomish.sandbox.ExecHandle;
+import com.github.oinsio.gnomish.sandbox.ProcessStartException;
+import com.github.oinsio.gnomish.sandbox.ProgramCredentialGrant;
+import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import org.jspecify.annotations.Nullable;
+
+/**
+ * One agent CLI round, launched and watched to its end (FR1, FR8, NFR-R1 of
+ * extract-agent-round-runner): the dialect's argv and stdin, with the credentials the dialect's
+ * describe names granted through the run's allowlist and the round's answer path in {@code
+ * GNOMISH_ANSWER_FILE} — the open round's answer path the runner was bound to, else a fresh
+ * factory-named one ({@link #answerFile}) — spawned only through the environment's process seam; stderr to a file in the
+ * round scratch directory ({@link RoundScratchDirectory}), read capped after the exit and never through
+ * a pipe of its own; stdout read live from the launch by the one line reader ({@link ProgressLines})
+ * under the line cap, each line parsed by the dialect ({@link DialectLines}); the wait under the
+ * round's bounds, resolved once per run by {@link RoundBounds} — the factory's startup-read and
+ * silence bounds when the dialect's describe declares {@code streams_progress} (FR16), the overall
+ * bound the request's {@code roundTimeout} declares or the factory's — on
+ * the run's time equipment ({@code ProgressWait}), an expiry killing the process tree. The dialect
+ * renders the request with those same bounds as its time hints, so the bound the CLI is told and the
+ * bound it is killed at are one value. How the process ended is judged by {@link
+ * RoundJudgement}.
+ *
+ * <p>Every outcome is a result, never a throw: a refused start, an expired bound, an interrupt and a
+ * stdout that did not end within the handle's post-exit bound are each {@code failed/infrastructure}
+ * naming what went wrong, with the stderr tail.
+ *
+ * <p>Implements FR1, FR7, FR8, FR9, FR16, FR19, NFR-R1 of extract-agent-round-runner.
+ *
+ * @param <E> the dialect's own event type
+ */
+final class AgentRound<E> {
+
+    private final String name;
+    private final AgentDialect<E> dialect;
+    private final TaskExecutionEnvironment environment;
+    private final ProgramRoundEquipment equipment;
+    private final AgentProgressListener listener;
+    private final StdoutCaps caps;
+    private final @Nullable String roundAnswerFile;
+
+    /**
+     * @param name the executor's name; never blank
+     * @param dialect the vendor's dialect; never null
+     * @param environment where the round runs; materialized; never null
+     * @param equipment the run's bounds, time, credential grant and stderr parent; never null
+     * @param listener the round's progress listener, which must not throw; never null
+     * @param caps the round's stdout caps; never null
+     * @param roundAnswerFile the open round's answer path, or null for a request served outside a
+     *     round source
+     */
+    AgentRound(
+            String name,
+            AgentDialect<E> dialect,
+            TaskExecutionEnvironment environment,
+            ProgramRoundEquipment equipment,
+            AgentProgressListener listener,
+            StdoutCaps caps,
+            @Nullable String roundAnswerFile) {
+        this.name = name;
+        this.dialect = dialect;
+        this.environment = environment;
+        this.equipment = equipment;
+        this.listener = listener;
+        this.caps = caps;
+        this.roundAnswerFile = roundAnswerFile;
+    }
+
+    /**
+     * Runs {@code request} as one round; never throws for what the CLI did.
+     *
+     * @param request the run, in exactly one role; never null
+     * @return the round's result; never null
+     */
+    ExecutorResult run(ExecutorRequest request) {
+        RoundBounds bounds = RoundBounds.of(equipment.bounds(), dialect.describe(), request);
+        RenderedArgv rendered = dialect.render(bounds.hinted(request));
+        String answerFile = answerFile();
+        Map<String, String> variables = new LinkedHashMap<>(credentials());
+        variables.put(ProgramChannel.ANSWER_FILE_VARIABLE, answerFile);
+        try (RoundScratchDirectory scratch =
+                RoundScratchDirectory.open(equipment.stderrParent(), RoundScratchDirectory.Writer.AGENT_CLI)) {
+            ExecutorResult result = launched(
+                    new ExecCommand(rendered.argv(), variables, rendered.stdin(), scratch.stderr()),
+                    answerFile,
+                    scratch,
+                    bounds,
+                    request);
+            if (result.status() == Status.COMPLETED) {
+                scratch.logTailOnSuccess();
+            }
+            return result;
+        }
+    }
+
+    /**
+     * The path the round's answer file is handed at (FR9, FR19 of extract-agent-round-runner, design
+     * D3 as amended): the open round's answer path — in a branch mode the round's answer file under
+     * {@code .gnomish-task/} ({@code EnvelopePaths.answerFile}), where a decision request rides the
+     * round's commit whoever wrote it, the agent or, for a schema-enforced answer, the runner — or else
+     * a fresh factory-named path in the environment's scratch area, the contract's per-request answer
+     * channel. The request's policy names no answer path: a {@code writeExactly} grant is the stage
+     * half's for a file-form dialect only, and names this same path.
+     */
+    private String answerFile() {
+        return roundAnswerFile != null ? roundAnswerFile : ProgramChannel.freshPath(environment, name, "answer");
+    }
+
+    /**
+     * The credentials the dialect's describe declares, granted through the run allowlist's grant —
+     * those that can be granted, that is: an agent CLI authenticates by any one of several
+     * credentials, or through its own logged-in {@code HOME}, so a declared name with no value is
+     * omitted rather than a failure, and so is a name the allowlist withholds (a declared tracker
+     * or check credential) or passes through to every child already (NFR-S1 of
+     * extract-agent-round-runner; NFR-S3 of tighten-spec-contract).
+     */
+    private Map<String, String> credentials() {
+        ProgramCredentialGrant grant = equipment.grant();
+        List<String> grantable = dialect.describe().credentials().stream()
+                .filter(name -> grant.standing(name) == CredentialGrantStanding.GRANTABLE)
+                .toList();
+        return grant.grant(grantable);
+    }
+
+    private ExecutorResult launched(
+            ExecCommand command,
+            String answerFile,
+            RoundScratchDirectory scratch,
+            RoundBounds bounds,
+            ExecutorRequest request) {
+        var judgement = new RoundJudgement<>(name, dialect, environment, scratch, request);
+        ExecHandle handle;
+        try {
+            handle = environment.exec(command);
+        } catch (ProcessStartException refused) {
+            return judgement.failure("the environment refused to start the agent CLI: "
+                    + UntrustedText.subprocess(String.valueOf(refused.getMessage()))
+                            .excerpt(512));
+        }
+        var time = equipment.time();
+        var lines = new DialectLines<>(dialect, listener, time.clock(), caps);
+        ProgramEnd end;
+        boolean drained;
+        try (ProgressLines reader = ProgressLines.start(handle.output(), time.clock(), caps.lineBytes(), lines)) {
+            end = bounds.waitOn(time).await(handle, reader);
+            drained = reader.await(handle.postExitBound());
+        }
+        if (end instanceof ProgramEnd.Exited exited && drained) {
+            return judgement.exited(exited, lines, answerFile, time.clock().instant());
+        }
+        return switch (end) {
+            // An interrupt that cut the wait for the reader is the round's interruption, never the
+            // bound's expiry (FR6 of fix-round-stdout-drain): the reader's wait keeps the flag set.
+            case ProgramEnd.Exited ignored ->
+                Thread.currentThread().isInterrupted()
+                        ? judgement.failure("the round was interrupted while its stdout was still being read")
+                        : judgement.failure(
+                                "its stdout did not end within the post-exit bound of " + handle.postExitBound());
+            case ProgramEnd.BoundExpired expired ->
+                judgement.failure("the " + expired.bound() + " bound of " + expired.value()
+                        + " expired and its process tree was killed");
+            case ProgramEnd.Interrupted ignored ->
+                judgement.failure("the round was interrupted and its process tree killed");
+        };
+    }
+}

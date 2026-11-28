@@ -11,11 +11,14 @@ import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.PendingPollRecord
+import com.github.oinsio.gnomish.domain.engine.PendingState
+import com.github.oinsio.gnomish.domain.engine.PendingSubject
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.port.PendingTurn
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -65,6 +68,28 @@ trait HostSnapshotRound implements RegisteredRoundFixture {
                         STAGE, new DirectoryWorkspace(worktree()), ROUND, []))
     }
 
+    /**
+     * A poll of the round through the same host stage chain, over a stage executor that answers a poll
+     * of {@code turn} with {@code answer} after doing {@code work}, and refuses a start.
+     */
+    ExecutionResult pollRound(ExecutionResult answer, PendingTurn turn, Closure<?> work) {
+        // A map coercion: a trait cannot hold an anonymous class.
+        def stageExecutor = [
+            execute: { StageExecutor.Request request ->
+                throw new IllegalStateException('a poll reached the stage executor as a start')
+            },
+            poll: { StageExecutor.Request request, PendingTurn polled ->
+                assert polled == turn
+                work.call()
+                answer
+            }
+        ] as StageExecutor
+        def chain = new GitHostRounds(runner, new VirtualClock(), ClaimEpochSource.NONE).snapshotting(stageExecutor, cell)
+        chain.poll(new StageExecutor.Request(
+                        new TaskContext(TASK, UntrustedText.tracker('title'), UntrustedText.tracker('body'), []),
+                        STAGE, new DirectoryWorkspace(worktree()), ROUND, []), turn)
+    }
+
     /** The round's close through the production persistence over the run's cell. */
     void persistRound() {
         def key = new AttemptKey(TASK, 'implement', ROUND)
@@ -83,10 +108,23 @@ trait HostSnapshotRound implements RegisteredRoundFixture {
     void persistPending(String... keys) {
         def recorded = store.readRecordedState(worktree(), TASK).orElseThrow()
         def entries = keys.toList().withIndex().collect { String key, int index ->
-            new PendingPollRecord(new CheckRef(index, UntrustedText.factory('executor:ci')), ROUND, cell.opened(),
+            new PendingPollRecord(new PendingSubject.Check(new CheckRef(index, UntrustedText.factory('executor:ci'))), ROUND, cell.opened(),
             new PendingKey(key), Instant.parse('2026-11-12T09:00:00Z'))
         }
         persistence().persistPending(TASK, recorded.withPendingPolls(entries))
+    }
+
+    /** The round's own pending write (design D11 of extract-agent-round-runner): one {@code Round} entry. */
+    void persistPendingRound(String key) {
+        def recorded = store.readRecordedState(worktree(), TASK).orElseThrow()
+        persistence().persistPending(TASK, recorded.withPendingPolls([
+            new PendingPollRecord(PendingSubject.ROUND, ROUND, cell.opened(), new PendingKey(key), Instant.parse('2026-11-24T09:00:00Z'))
+        ]))
+    }
+
+    static ExecutionResult pending(String key) {
+        new ExecutionResult(new ExecutionResult.Pending(new PendingKey(key), null, PendingState.RUNNING, null, null),
+                null, ExecutorUsage.none(), new ToolTrace(new AttemptKey(TASK, 'implement', ROUND), []), [])
     }
 
     static ExecutionResult completed() {

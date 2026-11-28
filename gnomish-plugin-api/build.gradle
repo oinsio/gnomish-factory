@@ -32,6 +32,9 @@ plugins {
 // `TrackerAdapterFactory.probeRead` default method and its `TrackerReadVerdict`. No pre-existing
 // type changed, so no pre-1.0 version bump is owed and `japicmpApiGate` stays green.
 //
+// extract-agent-round-runner (D2, D11, D12): 0.15.0 -> 0.16.0, the fourteenth BREAKING move; the
+// removed and changed types are listed in README, "Versioning"; `compat-baseline/` regenerated.
+//
 // D16 and D20 of migrate-verify-to-executor-contract: 0.14.0 -> 0.15.0, the thirteenth BREAKING
 // move — `TrackerConfig` carries the admitted tracker endpoint; `TrackerAdapterFactory.endpoint()`,
 // `ConnectionProfiles.endpoint`, `domain.egress` and GF188/GF189 added (D16); the pending key of
@@ -146,7 +149,7 @@ plugins {
 // which removes their old canonical constructors. Pre-1.0, a breaking change is
 // a MINOR bump; `compat-baseline/` was regenerated in the same commit so a
 // reviewer sees the break and the bump that accepts it in one diff.
-version = '0.15.0'
+version = '0.16.0'
 
 description = 'Third-party contract surface: tracker/secrets ports, the tracker SPI factory with its validator, and the findings sanitizer.'
 

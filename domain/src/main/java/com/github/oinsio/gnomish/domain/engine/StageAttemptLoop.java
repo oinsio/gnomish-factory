@@ -13,13 +13,12 @@ import org.jspecify.annotations.Nullable;
  * to the {@link AttemptJournal} (design D4, D7; the "Per-round port choreography" diagram).
  * Each round is emitted as {@link EngineEvent.AttemptStarted}, executed, recorded into a new
  * {@link TaskState}, persisted synchronously, then emitted as {@link EngineEvent.AttemptFinished}
- * — persist strictly before the finish event and any next attempt (FR11). At the top of each
- * round — the moment the round begins, where {@link EngineEvent.AttemptStarted} is emitted — the
- * loop reads {@code clock.instant()} once and threads that single instant through {@link
- * RoundExecution} onto the round's {@link AttemptRecord#startedAt()} (FR15 of add-manual-run,
- * design D11), so the begin time is carried in state rather than derived from a later reading. One
- * {@code StageAttemptLoop} is constructed per run from the run's {@link EnginePorts}, holding
- * only immutable collaborators so the engine stays reentrant (NFR-R1).
+ * — persist strictly before the finish event and any next attempt (FR11). The loop reads {@code
+ * clock.instant()} once as the round begins and threads it onto the round's {@link
+ * AttemptRecord#startedAt()} (FR15 of add-manual-run, design D11). One instance per run, holding only
+ * immutable collaborators (NFR-R1). A {@code transform} round's {@code pending} from an executor
+ * declaring {@code poll} is handed to {@link PendingPoll} inside the round, so only its terminal
+ * answer is routed (design D11 of extract-agent-round-runner).
  *
  * <p>A round's outcome routes through a single exhaustive switch (design D4). A {@link
  * RoundOutcome.Judged} routes on its verdict — from the verify chain, or the {@link Verdict.Fail}
@@ -35,15 +34,13 @@ import org.jspecify.annotations.Nullable;
  * RoundOutcome.Unrecorded} escalates the {@link EscalationReport.CannotExecute} the {@link
  * ExecutorOutcomeClassifier} built, from the entry state with its denials: nothing is recorded,
  * persisted or emitted and no attempt is burned (FR10, NFR-O1; FR1 of
- * fix-denial-attribution-durability). A thrown {@code persist}
- * ends the run as {@link TaskOutcome.Aborted} through the journal (FR11, NFR-O1).
- *
- * <p>A passing round's persisted state already carries the advanced position (FR4 of
- * harden-task-branch-contract), so no kill can freeze "passed, but still at it".
- *
+ * fix-denial-attribution-durability). A thrown {@code persist} ends the run as {@link
+ * TaskOutcome.Aborted} (FR11, NFR-O1). A passing round's persisted state already carries the
+ * advanced position (FR4 of harden-task-branch-contract).
  * <p>Implements FR4, FR5, FR6, FR8, FR10, FR11, FR13, NFR-O1 of add-stage-engine; FR4 of
  * harden-task-branch-contract; FR1 of fix-denial-attribution-durability; FR7 of
- * define-executor-contract (FR13: the version pin rides each round writer).
+ * define-executor-contract (FR13: the version pin rides each round writer); FR10 of
+ * extract-agent-round-runner.
  */
 final class StageAttemptLoop {
 
@@ -54,21 +51,22 @@ final class StageAttemptLoop {
     private final DescribedExecutors described;
 
     /**
-     * Wires the loop from a run's ports: the {@link RoundExecution} that runs each round is
-     * built from the executor and {@code verifyOrchestrator}, and the {@link AttemptJournal}
-     * that owns per-round persistence and events is built from the run's listener and
-     * persistence ports, and every round writer pins the versions of the executors the stage
-     * runs from the run's {@link DescribedExecutors} (FR13 of define-executor-contract). All
+     * Wires the loop from a run's ports: the {@link RoundExecution} that runs each round, the {@link
+     * AttemptJournal} that owns per-round persistence and events, and the run's {@link
+     * DescribedExecutors} every round writer pins from (FR13 of define-executor-contract). All
      * immutable, so the loop carries no mutable state (NFR-R1).
      *
      * @param ports the run's collaborators the loop reads executor/listener/persistence from;
      *     never null
      * @param verifyOrchestrator the verify chain the round's checks run through; never null
+     * @param poll the engine's one owner of pending work a {@code transform} round's {@code pending}
+     *     is handed to (design D11 of extract-agent-round-runner); never null
      * @param definition the pipeline whose declared order a passing round advances along, so the
      *     advanced position rides that round's own commit (FR4 of harden-task-branch-contract)
      */
-    StageAttemptLoop(EnginePorts ports, VerifyOrchestrator verifyOrchestrator, PipelineDefinition definition) {
-        this.roundExecution = new RoundExecution(ports, verifyOrchestrator);
+    StageAttemptLoop(
+            EnginePorts ports, VerifyOrchestrator verifyOrchestrator, PendingPoll poll, PipelineDefinition definition) {
+        this.roundExecution = new RoundExecution(ports, verifyOrchestrator, poll);
         this.journal = new AttemptJournal(ports.listener(), ports.persistence());
         this.clock = ports.time().clock();
         this.definition = definition;
@@ -76,22 +74,19 @@ final class StageAttemptLoop {
     }
 
     /**
-     * Drives {@code stage} from the recorded {@code state} to a {@link StageResult}, looping
-     * over rounds within the stage. Each iteration emits {@link EngineEvent.AttemptStarted}
-     * through the journal, executes the round through {@link RoundExecution}, then routes its
-     * sealed {@link RoundOutcome} as the class javadoc describes. Every result but {@code Passed}
-     * is a {@link StageResult.Terminal} the engine returns verbatim. A recorded round is committed
-     * (persist → AttemptFinished) before it routes; the loop threads {@code state} through one
-     * local variable, so the engine stays reentrant (NFR-R1).
+     * Drives {@code stage} from the recorded {@code state} to a {@link StageResult}, one round per
+     * iteration: {@link EngineEvent.AttemptStarted}, the round through {@link RoundExecution}, then
+     * its {@link RoundOutcome} routed as the class javadoc describes; every result but {@code Passed}
+     * is a {@link StageResult.Terminal}. A recorded round is committed (persist → AttemptFinished)
+     * before it routes; {@code state} is threaded through one local, so the engine is reentrant.
      *
      * <p>Implements FR4, FR5, FR6, FR8, FR10, FR11, FR13 of add-stage-engine; FR1 of
      * fix-denial-attribution-durability.
      *
      * <p>Two views of one state ride each round (D21 item 12 of migrate-verify-to-executor-contract):
      * the last persisted state, which the round's pending writes carry unchanged but for their
-     * entries, and its {@link Engine#resumedFrom} view, which numbers the round and records it. They
-     * differ only on a stage's first round after a pass, whose persisted state still holds the
-     * previous stage's passing round.
+     * entries, and its {@link Engine#resumedFrom} view, which numbers and records the round; they
+     * differ only on a stage's first round after a pass.
      *
      * @param context the task's identity and human decisions; never null
      * @param state the last persisted state this stage resumes from; never null
@@ -140,11 +135,9 @@ final class StageAttemptLoop {
     }
 
     /**
-     * Records a {@link RoundOutcome.Judged} round into a new {@link TaskState}
-     * (FR13): a {@link Verdict.Fail} burns one attempt via {@link TaskState#recordQualityFailure},
-     * every other verdict records the round without counting it via {@link
-     * TaskState#recordUnburnedRound}. Recorded before persisting, so routing later reads an
-     * already-computed state and never re-records.
+     * Records a {@link RoundOutcome.Judged} round into a new {@link TaskState} (FR13): a {@link
+     * Verdict.Fail} burns one attempt, every other verdict records the round unburned. Recorded before
+     * persisting, so routing reads an already-computed state and never re-records.
      */
     private TaskState newState(TaskState state, RoundOutcome.Judged verified, StageDefinition stage) {
         var ran = described.ranBy(stage);

@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.domain.pipeline
 
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 import java.time.Duration
 import spock.lang.Specification
 
@@ -30,14 +30,16 @@ class VerifyCheckSpec extends Specification {
                 ].toSorted()
     }
 
-    // FR1, UX2: the manifest forms an executor check may be declared with are a closed set
-    def "Token is the closed set of the three sugar tokens and the explicit executor form"() {
+    // FR1, UX2: the manifest forms an executor check may be declared with are a closed set, and a
+    // judge's check-round view (FR4 of extract-agent-round-runner) is the last
+    def "Token is the closed set of the three sugar tokens, the explicit executor form and the judge's round"() {
         expect:
         VerifyCheck.Token.values()*.name() == [
             'BUILTIN',
             'COMMAND',
             'EXTERNAL',
-            'EXECUTOR'
+            'EXECUTOR',
+            'JUDGE'
         ]
     }
 
@@ -165,59 +167,33 @@ class VerifyCheckSpec extends Specification {
         VerifyCheck.Token.EXECUTOR | 'files-exist' | false | 'an executor form names files-exist'
         VerifyCheck.Token.EXECUTOR | 'shell' | false | 'an executor form names shell'
         VerifyCheck.Token.EXECUTOR | 'sonarqube' | true | 'an executor form names any other executor'
+        VerifyCheck.Token.JUDGE | 'claude' | false | 'never, for a judge\'s round, whatever it names'
+        VerifyCheck.Token.JUDGE | 'sonarqube' | false | 'never, for a judge\'s round naming a program'
     }
 
-    // FR2/FR11: a judge check carries its acceptance criteria, model pin,
-    // opaque settings and vote count
-    def "Judge exposes criteria file, model, settings and votes"() {
+    // FR2; FR13 of extract-agent-round-runner: a judge check carries its acceptance criteria and
+    // the executor block a stage declares — no model, settings or votes of its own
+    def "Judge exposes its criteria file and its executor block"() {
         when: 'a judge check is modeled'
-        VerifyCheck check = new VerifyCheck.Judge(
-                'stages/review/acceptance.md', 'claude-sonnet-4-5', [temperature: 0], 3)
+        VerifyCheck.Judge check = JudgeChecks.agent('stages/review/acceptance.md', 'claude-sonnet-4-5', [temperature: 0])
 
-        then: 'the variant exposes exactly the four judge fields'
+        then: 'the variant exposes the criteria and the block, a stage block of the same shape'
         check.criteriaFile() == 'stages/review/acceptance.md'
-        check.model() == 'claude-sonnet-4-5'
-        check.settings() == [temperature: 0]
-        check.votes() == 3
+        check.executor() == new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-sonnet-4-5', [temperature: 0])
+        VerifyCheck.Judge.recordComponents*.name == ['criteriaFile', 'executor']
     }
 
-    // FR11/D6: the votes rule (>= 1 and odd) belongs to the pure validators
-    // (task 4.4) — the record carries an invalid count for them to report
-    def "Judge carries an invalid vote count (#votes) without throwing"() {
-        when: 'a judge check is modeled with votes that violate FR11'
-        def check = new VerifyCheck.Judge('acceptance.md', 'claude-sonnet-4-5', [:], votes as int)
-
-        then: 'the record carries the value untouched for the validator to report'
-        notThrown(Exception)
-        check.votes() == votes
-
-        where:
-        votes << [0, -1, 2] // non-positive and even counts are validator territory
-    }
-
-    // FR2: the model is immutable — defensive copy isolates from the source map
-    def "Judge is isolated from later mutation of the source settings"() {
+    // FR2: the block is immutable — defensive copy isolates from the source map
+    def "Judge's block is isolated from later mutation of the source settings"() {
         given: 'a mutable source settings map'
         Map<String, Object> source = [temperature: 0]
 
         when: 'the check is created and the source map grows afterwards'
-        def check = new VerifyCheck.Judge('acceptance.md', 'claude-sonnet-4-5', source, 1)
+        def check = JudgeChecks.agent('acceptance.md', 'claude-sonnet-4-5', source)
         source.intruder = 'later noise'
 
         then: 'the check still holds only the original settings'
-        check.settings() == [temperature: 0]
-    }
-
-    // FR2: the exposed settings map itself cannot be mutated
-    def "Judge's settings map is immutable"() {
-        given: 'a judge check'
-        def check = new VerifyCheck.Judge('acceptance.md', 'claude-sonnet-4-5', [:], 1)
-
-        when: 'a caller tries to put into the exposed map'
-        check.settings().put('intruder', true)
-
-        then: 'the map rejects the mutation'
-        thrown(UnsupportedOperationException)
+        check.executor().settings() == [temperature: 0]
     }
 
     // FR2: checks are plain values, so an ordered verify list compares by
@@ -228,8 +204,8 @@ class VerifyCheckSpec extends Specification {
         VerifyChecks.command('make test') == VerifyChecks.command('make test')
         VerifyChecks.external('ci/build', 'github-actions', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY) ==
                 VerifyChecks.external('ci/build', 'github-actions', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
-        new VerifyCheck.Judge('acceptance.md', 'claude-sonnet-4-5', [:], 3) ==
-        new VerifyCheck.Judge('acceptance.md', 'claude-sonnet-4-5', [:], 3)
+        JudgeChecks.agent('acceptance.md', 'claude-sonnet-4-5') ==
+                JudgeChecks.agent('acceptance.md', 'claude-sonnet-4-5')
 
         and: 'the token is part of the value: the same executor and id under two tokens differ'
         VerifyChecks.command('make test') !=

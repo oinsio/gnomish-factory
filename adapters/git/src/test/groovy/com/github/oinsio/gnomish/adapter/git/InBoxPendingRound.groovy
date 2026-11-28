@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.PendingPollRecord
+import com.github.oinsio.gnomish.domain.engine.PendingSubject
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
@@ -38,7 +39,8 @@ trait InBoxPendingRound implements BareGitRepoFixture {
     EnvironmentRoundSnapshot snapshotStep
     String snapshot
 
-    void setupPendingRound() {
+    /** The round snapshotted under {@code close}: verifiable for a check's pending, pending for the round's own. */
+    void setupPendingRound(RoundClose close = RoundClose.VERIFIABLE) {
         cloneDir = initWorkingRepo(tempDir, 'factory-clone')
         Files.createDirectories(cloneDir.resolve('.gnomish-task'))
         Files.writeString(cloneDir.resolve(STATE), '{"stateVersion":1}')
@@ -49,7 +51,7 @@ trait InBoxPendingRound implements BareGitRepoFixture {
         box = boxOver(new LocalBoxEnvironment(cloneDir, Files.createDirectories(tempDir.resolve('box'))))
         snapshotStep = new EnvironmentRoundSnapshot(box, runner, cloneDir, OpenedRound.reopen(rounds, cloneDir, BRANCH))
         new File(box.workingCopy.toFile(), 'work.txt').text = 'gnome work'
-        snapshot = snapshotStep.snapshot(TASK, 'implement', 1, RoundClose.VERIFIABLE)
+        snapshot = snapshotStep.snapshot(TASK, 'implement', 1, close)
     }
 
     LocalBoxEnvironment boxOver(LocalBoxEnvironment environment) {
@@ -68,9 +70,16 @@ trait InBoxPendingRound implements BareGitRepoFixture {
 
     TaskState pendingState(String... keys) {
         TaskState.atStageStart('implement').withPendingPolls(keys.toList().withIndex().collect { String key, int i ->
-            new PendingPollRecord(new CheckRef(i, UntrustedText.factory('executor:ci')), 1, rounds.opened(),
+            new PendingPollRecord(new PendingSubject.Check(new CheckRef(i, UntrustedText.factory('executor:ci'))), 1, rounds.opened(),
             new PendingKey(key), Instant.parse('2026-11-12T09:00:00Z'))
         })
+    }
+
+    /** The round's own pending write (design D11 of extract-agent-round-runner): one {@code Round} entry. */
+    TaskState roundPendingState(String key) {
+        TaskState.atStageStart('implement').withPendingPolls([
+            new PendingPollRecord(PendingSubject.ROUND, 1, rounds.opened(), new PendingKey(key), Instant.parse('2026-11-24T09:00:00Z'))
+        ])
     }
 
     String tip() {

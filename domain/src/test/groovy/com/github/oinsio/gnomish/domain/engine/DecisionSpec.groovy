@@ -58,6 +58,19 @@ class DecisionSpec extends Specification {
         body << ['', '   ', '\t', ' \n']
     }
 
+    // FR9 of extract-agent-round-runner: the four-component form records no question; the full form
+    // carries the request it answers, compared by content
+    def "a decision answers the request it was built with, or none"() {
+        given:
+        def asked = new EscalationReport.DecisionNeeded(
+                com.github.oinsio.gnomish.untrustedtext.UntrustedText.agent('Which?'), [])
+
+        expect:
+        new Decision('ship it', null, null, null).answers() == null
+        new Decision('ship it', 'build', 'bob', null, asked).answers() == asked
+        new Decision('ship it', 'build', 'bob', null, asked) != new Decision('ship it', 'build', 'bob', null)
+    }
+
     // FR7: decisions are values — equal content means equal decisions
     def "decisions with the same components are equal values"() {
         given: 'a shared timestamp'

@@ -184,7 +184,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
         // feature's own lifetime, and this is built by a trait helper.
         [
             assemble: { RunOrder order, context, state, AttemptPersistence persistence, credentials, lawBinding ->
-                def ports = new EnginePorts(CheckRouting.of(executor, new ScriptedCheckRounds([verdict]), new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), new RecordingEventListener(),
+                def ports = new EnginePorts(CheckRouting.of(executor, new ScriptedCheckRounds([verdict]), new ScriptedCheckRounds(), new ScriptedCheckRounds()), new RecordingEventListener(),
                 persistence, time, RoundIdentity.inPlace())
                 new Run(null, ports)
             },
@@ -242,7 +242,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
         self = [
             assemble: { RunOrder order, context, state, AttemptPersistence persistence, credentials, lawBinding ->
                 lawBindings << lawBinding.binding()
-                def ports = new EnginePorts(CheckRouting.of(executor, new ScriptedCheckRounds([verdict]), new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), new RecordingEventListener(),
+                def ports = new EnginePorts(CheckRouting.of(executor, new ScriptedCheckRounds([verdict]), new ScriptedCheckRounds(), new ScriptedCheckRounds()), new RecordingEventListener(),
                 persistence, time, RoundIdentity.inPlace())
                 new Run(new RunnerOutcomeLoop(new Engine(), console, LiveConsoleIO.onStderr()), ports)
             },

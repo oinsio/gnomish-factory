@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
+import com.github.oinsio.gnomish.app.port.agent.AnswerFileReading
 import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
@@ -397,7 +398,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
             attemptCommit() == attempt
             stage() == 'implement'
             round() == 2
-            request().isEmpty()
+            answer() == new AnswerFileReading.Absent()
         }
 
         when: 'the state commit lands, registered by its closing push'

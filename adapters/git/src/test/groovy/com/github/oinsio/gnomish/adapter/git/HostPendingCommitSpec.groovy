@@ -111,6 +111,24 @@ class HostPendingCommitSpec extends Specification implements HostSnapshotRound {
     }
 
     // Scenario: git/git-task-persistence / A pending commit is built from the registered commit alone
+    // FR10 (design D11 as amended 2026-11-25): only a pending round commit settles the worktree's lag
+    def "FR20: a pending check's commit leaves the worktree's state.json, index and file, where the check's run has it"() {
+        given:
+        def before = gitOutput(worktree(), 'rev-parse', ':.gnomish-task/state.json')
+        def file = Files.readString(worktree().resolve('.gnomish-task/state.json'))
+
+        when:
+        persistPending('run-1')
+
+        then: 'HEAD moved to the pending commit, the index and the file did not follow it'
+        def pending = tip()
+        gitOutput(worktree(), 'rev-parse', 'HEAD') == pending
+        gitOutput(cloneDir, 'rev-parse', pending + ':.gnomish-task/state.json') != before
+        gitOutput(worktree(), 'rev-parse', ':.gnomish-task/state.json') == before
+        Files.readString(worktree().resolve('.gnomish-task/state.json')) == file
+    }
+
+    // Scenario: git/git-task-persistence / A pending commit is built from the registered commit alone
     def "FR20: on the host the pending commit's ref transaction refuses a branch a pending check moved"() {
         given: 'a check committed in the worktree, moving the task branch above the snapshot'
         commit(worktree(), 'check.txt', 'committed by the check')

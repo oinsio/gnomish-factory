@@ -6,7 +6,8 @@ import java.util.List;
 /**
  * The one ownership list for {@code .gnomish-task/} (FR5, design D11 of
  * harden-task-branch-contract): everything under the state directory is factory-owned except
- * {@code decisions/}, the single gnome-writable path of the decision-file protocol.
+ * {@code decisions/}, the single gnome-writable path: the rounds' answer files ({@code
+ * EnvelopePaths.answerFile}, FR9 of extract-agent-round-runner).
  *
  * <p>Salvage reads it to answer one question — what may a dirty working copy contribute? Only
  * gnome-owned work files. Factory-owned files are restored from the branch tip instead, because a
@@ -36,7 +37,7 @@ final class FactoryOwnedPaths {
     static final String STATE_DIR = EnvelopePaths.DIR_NAME;
 
     /**
-     * The one gnome-writable path beneath it, per the decision-file protocol — again without a
+     * The one gnome-writable path beneath it, the directory of the rounds' answer files — again without a
      * trailing separator, the shape a pathspec exclusion takes.
      */
     static final String GNOME_WRITABLE = EnvelopePaths.DECISIONS_DIR;

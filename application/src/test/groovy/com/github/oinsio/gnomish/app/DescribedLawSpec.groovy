@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory
 import com.github.oinsio.gnomish.domain.egress.AdmittedEndpoint
+import com.github.oinsio.gnomish.executorcontract.Capability
 import com.github.oinsio.gnomish.executorcontract.Describe
 import com.github.oinsio.gnomish.executorcontract.EnforcementLevel
 import com.github.oinsio.gnomish.executorcontract.Role
@@ -17,9 +18,20 @@ import spock.lang.Specification
  */
 class DescribedLawSpec extends Specification {
 
-    private static Describe describe(String version, List<String> credentials) {
-        new Describe(1, UntrustedText.subprocess(version), [Role.TRANSFORM], [], JsonNodeFactory.instance.objectNode(),
+    private static Describe describe(String version, List<String> credentials, List<Capability> capabilities = []) {
+        new Describe(1, UntrustedText.subprocess(version), [Role.TRANSFORM], capabilities, JsonNodeFactory.instance.objectNode(),
         credentials, [], null, [], EnforcementLevel.PROMPT_ONLY, false, false)
+    }
+
+    // FR10 of extract-agent-round-runner (D11): the names whose describe declares poll are derived from
+    //     the same answers, and only those
+    def "FR10: the pollable names the engine receives are the described executors declaring poll"() {
+        when:
+        def law = new DescribedLaw(LawBinding.workingTree(Path.of('/tmp/law')),
+                [remote: describe('1', [], [Capability.POLL]), lint: describe('7', [], [Capability.STREAMS_PROGRESS])])
+
+        then:
+        law.executors().pollable() == ['remote'] as Set
     }
 
     def "FR9: the answer of each described executor is the preflight's, and an undescribed name has none"() {

@@ -2,8 +2,8 @@
  * Engine port interfaces, discovered from the consumer side.
  *
  * <p>Defines the ports the stage engine drives instead of touching the outside
- * world: {@code StageExecutor} (a stage round and every executor check's rounds,
- * design D18 of migrate-verify-to-executor-contract), {@code JudgeVoter},
+ * world: {@code StageExecutor} (a stage round and every check's rounds, design
+ * D18 of migrate-verify-to-executor-contract and D2 of extract-agent-round-runner),
  * {@code EngineEventListener}, {@code AttemptPersistence}, {@code AttemptDelivery}
  * and {@code RoundIdentity}. Pure contracts
  * only — no filesystem, no Jackson, no adapter dependencies; the boundary over

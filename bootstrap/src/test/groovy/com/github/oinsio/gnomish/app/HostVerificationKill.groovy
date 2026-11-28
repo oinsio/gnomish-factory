@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.PendingPollRecord
+import com.github.oinsio.gnomish.domain.engine.PendingSubject
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -95,7 +96,7 @@ final class HostVerificationKill {
      * @return the entry the pending commit carries
      */
     static PendingPollRecord landPending(TaskGit git, Path worktree, String taskId, CurrentRound cell, int round) {
-        def entry = new PendingPollRecord(new CheckRef(0, UntrustedText.manifest(CHECK)), round, cell.opened(),
+        def entry = new PendingPollRecord(new PendingSubject.Check(new CheckRef(0, UntrustedText.manifest(CHECK))), round, cell.opened(),
                 new PendingKey('run-1'), Instant.parse('2026-11-12T09:00:00Z'))
         def registered = stateAt(worktree, cell.closed().registered())
         git.store().attemptPersistence(worktree, taskId, cell).persistPending(taskId, registered.withPendingPolls([entry]))

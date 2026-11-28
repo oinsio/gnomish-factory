@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.EngineEvent
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
+import com.github.oinsio.gnomish.domain.engine.PendingSubject
 import com.github.oinsio.gnomish.domain.engine.port.PendingTurn
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
@@ -35,9 +36,9 @@ class MdcEventListenerPollSpec extends Specification {
 
         where:
         description | event
-        'a poll' | new EngineEvent.CheckPolled(new AttemptKey('TASK-1', 'verify', 3), CHECK, 'scm-status',
+        'a poll' | new EngineEvent.PendingPolled(new AttemptKey('TASK-1', 'verify', 3), new PendingSubject.Check(CHECK), 'scm-status',
                 UntrustedText.subprocess('k-1'), PendingTurn.Origin.ISSUED, Duration.ofSeconds(30), Duration.ofMinutes(9))
-        'a timeout' | new EngineEvent.CheckTimedOut(new AttemptKey('TASK-1', 'verify', 3), CHECK, 'scm-status',
+        'a timeout' | new EngineEvent.PendingTimedOut(new AttemptKey('TASK-1', 'verify', 3), new PendingSubject.Check(CHECK), 'scm-status',
                 UntrustedText.subprocess('k-1'), Duration.ofMinutes(10), new ExecutionResult.Failed(
                         ExecutionResult.FailureClass.QUALITY, UntrustedText.factory('timed out'), [], null))
     }

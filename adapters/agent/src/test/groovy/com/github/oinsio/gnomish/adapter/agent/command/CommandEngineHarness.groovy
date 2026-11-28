@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent.command
 
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramStageExecutor
+import com.github.oinsio.gnomish.app.describe.ProgramBounds
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.Engine
 import com.github.oinsio.gnomish.domain.engine.EnginePorts
@@ -10,7 +11,6 @@ import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
@@ -65,25 +65,23 @@ final class CommandEngineHarness {
         host.materialize('gnomish/TASK-7', null)
         def round = [environment: {
                 host
-            }, decisionFilePath: {
+            }, answerFilePath: {
                 null
-            }, decisionEnvFragment: {
+            }, answerEnvFragment: {
                 [:]
             },
-            closeRound: { }, readDecision: {
-                Optional.empty()
-            }, discard: { }] as RoundEnvironmentSource.Round
+            closeRound: { }, discard: { }] as RoundEnvironmentSource.Round
         def rounds = [openRound: { request ->
                 round
             }, identity: {
                 RoundIdentity.inPlace()
             }] as RoundEnvironmentSource
-        def executor = new ProgramStageExecutor(new CommandExecutorFactory(clock), rounds)
+        def executor = new ProgramStageExecutor(new CommandExecutorFactory(clock, ProgramBounds.DEFAULTS), rounds)
         AttemptPersistence persistence = { String taskId, TaskState state, ToolTrace trace ->
             persisted << state
             traces << trace
         } as AttemptPersistence
-        def ports = new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), { } as EngineEventListener, persistence,
+        def ports = new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), { } as EngineEventListener, persistence,
         VirtualTimeEquipment.on(clock, new VirtualSleeper(clock)), RoundIdentity.inPlace())
         try {
             new Engine().run(new PipelineDefinition('1', new AutonomyLimits(5), [

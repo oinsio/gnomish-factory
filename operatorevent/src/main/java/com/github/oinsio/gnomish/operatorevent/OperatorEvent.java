@@ -30,15 +30,21 @@ public enum OperatorEvent {
     // agent executor and judge adapters
     AGENT_PROGRESS_LISTENER_THREW("GF001"),
     COMPOSITE_PROGRESS_LISTENER_THREW("GF002"),
-    DECISION_FILE_EMPTY("GF003"),
-    DECISION_FILE_NOT_JSON("GF004"),
+    // GF003 and GF004 are retired (extract-agent-round-runner, task 5.4): the decision file's
+    // tolerant read and its empty-file and raw-text fallbacks are gone; an answer file that is not a
+    // valid answer is refused by the one answer read and becomes the round's result. Retired, not
+    // refilled.
     ROUND_DENIALS_UNREADABLE_ON_FINISH("GF005"),
     ROUND_DENIALS_ORPHANED_ON_FAILURE("GF006"),
     ROUND_DENIALS_UNREADABLE_ON_FAILURE("GF007"),
-    JUDGE_CRITERIA_UNREADABLE("GF008"),
+    // GF008 and GF010 are retired (extract-agent-round-runner, task 4.1): a judge check is a check
+    // round, so its criteria preflight and its round's failures are its answer, and the engine's one
+    // line for a judge that cannot verify is GF009, written where the verdict is derived. A retired
+    // code stays retired — the gap is not filled.
     JUDGE_CANNOT_VERIFY_BY_DECISION("GF009"),
-    JUDGE_CANNOT_VERIFY_BY_THROWABLE("GF010"),
-    JUDGE_VERDICT_UNEXTRACTABLE("GF011"),
+    // GF011 is retired (extract-agent-round-runner, task 4.3): a judge's reply is the Claude
+    // dialect's schema-judged answer, a reply it cannot read is a malformed answer whose reason
+    // quotes the final text, and the operator's line for it is GF009. Retired, not refilled.
     TOKEN_USAGE_UNREPORTED("GF012"),
     // git adapter
     PUSH_SKIPPED_HEAD_OFF_BRANCH("GF013"),
@@ -316,9 +322,10 @@ public enum OperatorEvent {
     CONDITION_BOX_GIT_FLOOR_OPENED("GF180"),
     CONDITION_BOX_GIT_FLOOR_SUSTAINED_OPEN("GF181"),
     // domain engine, executor outcome classification (define-executor-contract, FR7): the one WARN of
-    // a round whose executor REPORTED a failure the stage cannot run past (failed/infrastructure, or
-    // pending the stage cannot poll), and the one WARN of a round that reported failed/limit. A
-    // thrown executor failure keeps its own ERROR, EXECUTOR_THREW.
+    // a round whose executor REPORTED a failure the stage cannot run past (failed/infrastructure, a
+    // pending from an executor declaring no poll, or a pending round's wait ended at the pending
+    // ceiling — extract-agent-round-runner, D11), and the one WARN of a round that reported
+    // failed/limit. A thrown executor failure keeps its own ERROR, EXECUTOR_THREW.
     EXECUTOR_REPORTED_FAILURE("GF182"),
     EXECUTOR_BUDGET_EXHAUSTED("GF183"),
     // serve ledger (define-executor-contract, NFR-O2, UX3): the roundOutcome line of a finished
@@ -341,7 +348,15 @@ public enum OperatorEvent {
     // refused a tracker call — the operator's grant, the daemon's truth — so the EGRESS condition
     // opened with the refusal and the key to edit, and past the sustained-open threshold the ERROR.
     CONDITION_EGRESS_OPENED("GF188"),
-    CONDITION_EGRESS_SUSTAINED_OPEN("GF189");
+    CONDITION_EGRESS_SUSTAINED_OPEN("GF189"),
+    // agent round runner (extract-agent-round-runner, FR1, FR8, NFR-R1): an agent CLI's stdout passed
+    // its caps — lines cut at the line cap, events dropped between the round's opening and its latest
+    // lines past the retained cap; one WARN per round, which is still judged by what was kept.
+    AGENT_STDOUT_CAPPED("GF190"),
+    // Claude dialect (extract-agent-round-runner, FR3, FR4): a verdict or decision round's result
+    // event carried no structured output for the --json-schema it was handed, so its answer is read
+    // from the final text instead; one WARN per round.
+    AGENT_ANSWER_FROM_FINAL_TEXT("GF191");
 
     private final String code;
     private final String head;

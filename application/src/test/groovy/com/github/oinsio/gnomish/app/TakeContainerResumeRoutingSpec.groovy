@@ -67,7 +67,7 @@ import spock.lang.Specification
 class TakeContainerResumeRoutingSpec extends Specification implements RunChainFakes {
 
     private static SandboxRunPieces pieces() {
-        new SandboxRunPieces(null, null, null, null, null, null, null, null)
+        new SandboxRunPieces(null, null, null, null, null, null, null)
     }
 
     private TakeDispositionResume disposition(TaskGit git) {

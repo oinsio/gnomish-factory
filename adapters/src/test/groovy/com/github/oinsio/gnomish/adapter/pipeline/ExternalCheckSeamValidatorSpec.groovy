@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.Threshold
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 import java.time.Duration
 import spock.lang.Specification
 
@@ -146,7 +147,7 @@ class ExternalCheckSeamValidatorSpec extends Specification {
             stage([
                 VerifyChecks.builtin('files_exist', [: ]),
                 VerifyChecks.command('./gradlew test'),
-                new VerifyCheck.Judge('acceptance.md', 'model-x', [: ], 1)
+                JudgeChecks.agent('acceptance.md', 'model-x')
             ])
         ], [http: REJECTING, 'github-actions': REJECTING]).isEmpty()
     }

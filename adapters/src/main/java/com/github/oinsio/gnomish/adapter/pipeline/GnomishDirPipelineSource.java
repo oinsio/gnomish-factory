@@ -46,6 +46,9 @@ import java.util.Set;
  *     null, possibly empty (no adapter contributes a validator)
  * @param checkProviderRegistry the built-in executor name → params validator map; never null,
  *     possibly empty (no check's settings are graded)
+ * @param agentSettings the agent executor's settings judge — the Claude dialect's, bound by the
+ *     composition root — handed every agent-cli stage's and judge check's settings ({@link
+ *     AgentSettingsValidator}; FR7 of extract-agent-round-runner); never null
  * @param connections the operator-declared {@code factory.connections} profiles a {@code
  *     tracker.<type>} subsection may reference as {@code connection: <name>} (FR16, design D8/D12 of
  *     add-plugin-architecture), with the adapters' endpoint declarations and the operator's
@@ -57,6 +60,7 @@ import java.util.Set;
 public record GnomishDirPipelineSource(
         Map<String, TrackerSubsectionValidator> trackerValidatorRegistry,
         Map<String, CheckSettingsValidator> checkProviderRegistry,
+        CheckSettingsValidator agentSettings,
         ConnectionAdmission connections)
         implements PipelineSource {
 
@@ -65,11 +69,22 @@ public record GnomishDirPipelineSource(
         checkProviderRegistry = Map.copyOf(checkProviderRegistry);
     }
 
-    /** Convenience for the callers predating named connection profiles: no profile is defined. */
+    /**
+     * Convenience for the callers predating named connection profiles: no profile is defined.
+     *
+     * @param trackerValidatorRegistry the subsection validators; never null
+     * @param checkProviderRegistry the built-ins' params validators; never null
+     * @param agentSettings the agent executor's settings judge; never null
+     */
     public GnomishDirPipelineSource(
             Map<String, TrackerSubsectionValidator> trackerValidatorRegistry,
-            Map<String, CheckSettingsValidator> checkProviderRegistry) {
-        this(trackerValidatorRegistry, checkProviderRegistry, ConnectionAdmission.of(ConnectionProfiles.none()));
+            Map<String, CheckSettingsValidator> checkProviderRegistry,
+            CheckSettingsValidator agentSettings) {
+        this(
+                trackerValidatorRegistry,
+                checkProviderRegistry,
+                agentSettings,
+                ConnectionAdmission.of(ConnectionProfiles.none()));
     }
 
     @Override
@@ -78,6 +93,7 @@ public record GnomishDirPipelineSource(
                         projectDir.resolve(LawBinding.LAW_ROOT),
                         trackerValidatorRegistry,
                         checkProviderRegistry,
+                        agentSettings,
                         connections,
                         Set.of())
                 .outcome();
@@ -88,7 +104,12 @@ public record GnomishDirPipelineSource(
             throws IOException {
         BoundLaw law = openLaw(binding);
         ConfigurationLoad load = PipelineLoader.loadConfiguration(
-                law.source(), trackerValidatorRegistry, checkProviderRegistry, connections, designatorKinds);
+                law.source(),
+                trackerValidatorRegistry,
+                checkProviderRegistry,
+                agentSettings,
+                connections,
+                designatorKinds);
         return new BoundConfiguration(load.outcome(), load.base(), lawCommitOf(law, binding));
     }
 
@@ -99,6 +120,7 @@ public record GnomishDirPipelineSource(
                         law.source(),
                         trackerValidatorRegistry,
                         checkProviderRegistry,
+                        agentSettings,
                         connections,
                         ConfiguredDesignatorKinds.NONE)
                 .outcome();

@@ -77,7 +77,7 @@ class EscalationResumeSpec extends Specification {
         and: 'the context carries the decision exactly when one was given'
         resumption.context().decisions().size() == (decision == null ? 0 : 1)
         decision == null || resumption.context().decisions().first() ==
-                new Decision(decision, 'build', 'operator', NOW)
+                new Decision(decision, 'build', 'operator', NOW, report == DECISION_NEEDED ? report : null)
         resumption.context().taskId() == CONTEXT.taskId()
 
         and: 'nothing is printed on the way through'
@@ -94,6 +94,21 @@ class EscalationResumeSpec extends Specification {
         CANNOT_EXECUTE | null
 
         appended = decision == null ? 'absent' : 'appended'
+    }
+
+    // FR9 of extract-agent-round-runner: the decision records the question and options of the
+    //     escalated report it consumes, as they were minted
+    def "a decision answering a DecisionNeeded records its question and options"() {
+        when:
+        def resumption = resume.decide(CONTEXT, new TaskOutcome.Escalated(BURNED, DECISION_NEEDED), 'use postgres')
+
+        then:
+        def answers = resumption.context().decisions().last().answers()
+        answers.question() == UntrustedText.agent('which database?')
+        answers.options() == [
+            UntrustedText.agent('postgres'),
+            UntrustedText.agent('sqlite')
+        ]
     }
 
     // FR1 of make-checkpoint-gate-durable: the decision is scoped to the stage the position names —

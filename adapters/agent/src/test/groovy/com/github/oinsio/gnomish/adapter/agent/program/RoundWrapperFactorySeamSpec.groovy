@@ -2,7 +2,9 @@ package com.github.oinsio.gnomish.adapter.agent.program
 
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
+import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.executorcontract.Executor
+import com.github.oinsio.gnomish.executorcontract.ExecutorRequest
 import com.github.oinsio.gnomish.executorcontract.ExecutorResult
 import com.github.oinsio.gnomish.executorcontract.FailureClass
 import com.github.oinsio.gnomish.executorcontract.Status
@@ -17,7 +19,9 @@ import spock.lang.Specification
  * The shared round wrapper over a factory that is not a program's (design D2 of add-command-executor):
  * {@link ProgramStageExecutor} asks the factory for the request before the round opens and for the
  * executor in the open round's environment, and maps the executor's contract result through the one
- * mapping — so a built-in entry runs its rounds through this wrapper, not a second one.
+ * mapping — so a built-in entry runs its rounds through this wrapper, not a second one. A factory that
+ * says nothing more keeps the defaults: its request is not changed by the open round, its executor is
+ * bound to the round's environment, and the wrapper's refusals name it a program executor.
  */
 class RoundWrapperFactorySeamSpec extends Specification {
 
@@ -29,24 +33,40 @@ class RoundWrapperFactorySeamSpec extends Specification {
 
     def round = Stub(RoundEnvironmentSource.Round) {
         environment() >> environment
-        readDecision() >> Optional.empty()
     }
 
     def rounds = Stub(RoundEnvironmentSource) {
         openRound(_) >> round
     }
 
+    /** A factory of the abstract methods alone, so the wrapper runs the interface's defaults. */
+    private static RoundExecutorFactory defaults(TaskExecutionEnvironment bound, Executor run) {
+        new RoundExecutorFactory() {
+                    @Override
+                    String name() {
+                        'command'
+                    }
+
+                    @Override
+                    ExecutorRequest request(StageExecutor.Request round) {
+                        ProgramFixtures.request()
+                    }
+
+                    // Only the open round's environment gets the executor: any other fails the round.
+                    @Override
+                    Executor executor(TaskExecutionEnvironment environment) {
+                        assert environment.is(bound)
+                        run
+                    }
+                }
+    }
+
     private RoundExecutorFactory factory(ExecutorResult result) {
+        // The request the open round sends is the one built before it opened, unchanged by default.
         def run = Stub(Executor) {
             start(ProgramFixtures.request()) >> result
         }
-        // Only the open round's environment gets the executor: any other answers a default stub,
-        // whose null result fails the round as infrastructure.
-        Stub(RoundExecutorFactory) {
-            name() >> 'command'
-            request(_) >> ProgramFixtures.request()
-            executor(environment) >> run
-        }
+        defaults(environment, run)
     }
 
     // FR8 of add-command-executor (D2): the factory's executor runs in the round's environment and its result is mapped
@@ -76,10 +96,7 @@ class RoundWrapperFactorySeamSpec extends Specification {
         def source = Stub(RoundEnvironmentSource) {
             openRound(_) >> broken
         }
-        def factory = Stub(RoundExecutorFactory) {
-            name() >> 'command'
-            request(_) >> ProgramFixtures.request()
-        }
+        def factory = defaults(failing, Stub(Executor))
 
         when:
         def result = new ProgramStageExecutor(factory, source).execute(ProgramFixtures.round(WORKSPACE))
@@ -87,6 +104,8 @@ class RoundWrapperFactorySeamSpec extends Specification {
         then:
         def failed = result.status() as ExecutionResult.Failed
         failed.failureClass() == ExecutionResult.FailureClass.INFRASTRUCTURE
-        failed.reason().raw().contains("'command': the round failed before its result was read")
+        // FR15 of extract-agent-round-runner (D13): a dead guard is named by the one probe owner
+        failed.reason().raw().contains(
+                "program executor 'command': the egress guard of its environment was not running before the request: guard down")
     }
 }

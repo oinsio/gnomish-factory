@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine;
 
-import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -62,27 +62,34 @@ final class CheckRoundAnswers {
     }
 
     /**
-     * The polled check of a round that ended: its answer and the outcome naming its status.
+     * The polled check of a round that ended: its answer, the outcome naming its status, and the
+     * usage the round reported, which a judge check's participant entry carries (FR4 of
+     * extract-agent-round-runner).
      *
-     * @param check the executor check; never null
+     * @param executor the executor the check's rounds ran, as {@link DescribedExecutors} names it;
+     *     never null
      * @param result the round's result, completed or failed; never null
      * @param resumedKey the prefix of the key a resume took from the pending record, or null
      * @return the polled check; never null
      */
-    static PolledCheck polled(VerifyCheck.Executor check, ExecutionResult result, @Nullable UntrustedText resumedKey) {
-        return new PolledCheck(of(result), new CheckOutcome(check.executorName(), result.status(), resumedKey));
+    static PolledCheck polled(RoundExecutor executor, ExecutionResult result, @Nullable UntrustedText resumedKey) {
+        return new PolledCheck(
+                of(result),
+                new CheckOutcome(executor, result.status(), resumedKey),
+                result.usage().byModel());
     }
 
     /**
-     * The polled check the engine resolved to {@code failed}: a timeout, an undelivered attempt.
+     * The polled check the engine resolved to {@code failed}: a timeout, an undelivered attempt. No
+     * round reported it, so it carries no usage.
      *
-     * @param check the executor check; never null
+     * @param executor the executor the check names, as {@link DescribedExecutors} names it; never null
      * @param failed the failure the engine resolved the check to; never null
      * @param resumedKey the prefix of the key a resume took from the pending record, or null
      * @return the polled check; never null
      */
     static PolledCheck polled(
-            VerifyCheck.Executor check, ExecutionResult.Failed failed, @Nullable UntrustedText resumedKey) {
-        return new PolledCheck(of(failed), new CheckOutcome(check.executorName(), failed, resumedKey));
+            RoundExecutor executor, ExecutionResult.Failed failed, @Nullable UntrustedText resumedKey) {
+        return new PolledCheck(of(failed), new CheckOutcome(executor, failed, resumedKey), Map.of());
     }
 }

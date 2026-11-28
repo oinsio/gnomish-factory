@@ -23,7 +23,8 @@ import org.jspecify.annotations.Nullable;
  * <p>Implements FR7, FR11, D2, D5a of load-pipeline-config; FR12, FR13 of
  * add-sandbox-core (sandbox mapping); FR9, FR10 of define-executor-contract (the
  * {@code program} type and the executor {@code name}); FR1, FR2 of add-command-executor (the
- * {@code command} type and the executor {@code command}).
+ * {@code command} type and the executor {@code command}); FR13 of extract-agent-round-runner (the
+ * one block mapping, for a stage and a {@code judge} check).
  */
 final class StageDefinitionMapper {
 
@@ -56,18 +57,52 @@ final class StageDefinitionMapper {
         return mapped;
     }
 
+    /**
+     * The one mapping of an executor block (design D12 of extract-agent-round-runner): a stage's
+     * {@code executor:} and a {@code judge} check's are the same {@link ExecutorDto}, mapped here
+     * and nowhere else, so the block's {@code model} and {@code settings} keys have one reader
+     * ({@code ExecutorBlockOwnerSpec} in {@code :bootstrap}). An absent block maps to an {@code api}
+     * block with a blank model, which the structural tier has already reported for a stage; a
+     * {@code judge} check reports its own absent block ({@link #mapJudgeExecutor}).
+     *
+     * @param manifest the stage manifest path, stamped into any located error
+     * @param where the block's location: {@code executor} for a stage's, {@code
+     *     verify[<i>].executor} for a judge check's
+     * @param executor the block, or {@code null} when absent
+     * @param errors the caller's mutable error accumulator
+     * @return the typed block; never null
+     */
     static StageDefinition.Executor mapExecutor(
-            String manifest, @Nullable ExecutorDto executor, List<ConfigError> errors) {
+            String manifest, String where, @Nullable ExecutorDto executor, List<ConfigError> errors) {
         if (executor == null) {
             return new StageDefinition.Executor(ExecutorType.API, "", Map.of());
         }
         return new StageDefinition.Executor(
                 mapExecutorType(executor.type()),
                 PipelineMapper.orEmpty(executor.model()),
-                OpaqueSettings.copy(manifest, "executor.settings", executor.settings(), errors),
+                OpaqueSettings.copy(manifest, where + ".settings", executor.settings(), errors),
                 mapSandbox(executor.sandbox()),
                 executor.name(),
                 mapCommand(executor.command()));
+    }
+
+    /**
+     * The block of {@code judge} check {@code index}, through {@link #mapExecutor} at {@code
+     * verify[<index>].executor} (design D12 of extract-agent-round-runner). No judge is defaulted:
+     * an absent block is a located error, which discards the definition before any domain rule
+     * could report a blank model of a block nobody declared.
+     */
+    static StageDefinition.Executor mapJudgeExecutor(
+            String manifest, int index, @Nullable ExecutorDto executor, List<ConfigError> errors) {
+        String where = "verify[%d].executor".formatted(index);
+        if (executor == null) {
+            errors.add(new ConfigError(
+                    manifest,
+                    where,
+                    "missing required field '%s'; a judge check declares the executor block that judges, as a stage declares its own"
+                            .formatted(where)));
+        }
+        return mapExecutor(manifest, where, executor, errors);
     }
 
     /**

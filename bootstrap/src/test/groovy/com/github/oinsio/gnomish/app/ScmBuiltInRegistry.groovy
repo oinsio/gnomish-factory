@@ -65,6 +65,6 @@ final class ScmBuiltInRegistry {
         def equipment = new ProgramRoundEquipment(ProgramBounds.DEFAULTS, VirtualTimeEquipment.on(clock),
                 TestChildEnvironment.hostAllowlist().programGrant(), Path.of('/tmp'), LastRegisteredCommit.NONE)
         ExecutorRegistry.of(described, definition, PipelineLaw.ofContent([:]), equipment,
-        BuiltInEntriesFixture.of(clock, TOKENS), null)
+        BuiltInEntriesFixture.of(clock, TOKENS), null, AgentEntryFixture.idle(equipment))
     }
 }

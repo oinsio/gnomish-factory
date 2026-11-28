@@ -13,8 +13,9 @@ instructions: stages/write-file/instructions.md
 verify:
   - type: judge
     criteriaFile: stages/write-file/acceptance.md
-    model: judge-model
-    settings:
-      maxTurns: 3
-    votes: 1
+    executor:
+      type: agent-cli
+      model: judge-model
+      settings:
+        maxTurns: 3
 advancement: auto

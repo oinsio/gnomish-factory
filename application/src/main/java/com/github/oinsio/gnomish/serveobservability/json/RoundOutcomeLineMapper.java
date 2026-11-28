@@ -7,7 +7,8 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 /**
  * Maps a {@link RoundOutcomeLine} to its JSON-contract DTO (NFR-O2, UX3 of
  * define-executor-contract), the one ledger mapping that reads a carrier: the executor's describe
- * version and a resumed check's key prefix (UX3 of migrate-verify-to-executor-contract) are the
+ * version and a resumed or pending key's prefix (UX3 of migrate-verify-to-executor-contract and of
+ * extract-agent-round-runner) are the
  * executor's own text, written verbatim to the ledger's machine medium, so this class
  * is an {@link UntrustedExit} and {@link LedgerJsonMapper}, whose every other field the factory
  * minted, stays outside the allowlist. JSON escaping keeps the line one line whatever the version
@@ -24,6 +25,7 @@ final class RoundOutcomeLineMapper {
     static RoundOutcomeLineDto toDto(RoundOutcomeLine line) {
         UntrustedText version = line.executorVersion();
         UntrustedText resumedKey = line.resumedKey();
+        UntrustedText pendingKey = line.pendingKey();
         return new RoundOutcomeLineDto(
                 1,
                 "roundOutcome",
@@ -36,6 +38,7 @@ final class RoundOutcomeLineMapper {
                 line.role(),
                 line.status(),
                 line.check(),
-                resumedKey == null ? null : resumedKey.raw());
+                resumedKey == null ? null : resumedKey.raw(),
+                pendingKey == null ? null : pendingKey.raw());
     }
 }

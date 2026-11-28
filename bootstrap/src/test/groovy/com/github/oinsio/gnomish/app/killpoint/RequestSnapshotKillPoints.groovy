@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.app.killpoint
 
 import com.github.oinsio.gnomish.adapter.agent.ResumeVerificationStageExecutor
+import com.github.oinsio.gnomish.adapter.git.RoundSubject
 import com.github.oinsio.gnomish.adapter.git.SandboxRoundEnvironmentSource
-import com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages
 import com.github.oinsio.gnomish.adapter.git.SnapshotTipCheck
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.TrackerWrite
@@ -57,7 +57,7 @@ final class RequestSnapshotKillPoints {
 
     static final String STAGE = 'build'
 
-    static final String REQUEST = '{"question":"which db?","options":["pg","sqlite"]}'
+    static final String REQUEST = '{"kind":"decision-request","question":"which db?","options":["pg","sqlite"]}'
 
     static final String REPLY = 'pg'
 
@@ -103,9 +103,9 @@ final class RequestSnapshotKillPoints {
         def now = Instant.parse('2026-01-01T00:00:00Z')
         objects.commit(new CommitRequest(ref, Optional.of(tip), tip,
                 [
-                    new TreeEdit.PutFile(round.decisionFilePath().toString(), REQUEST.getBytes(StandardCharsets.UTF_8))
+                    new TreeEdit.PutFile(round.answerFilePath().toString(), REQUEST.getBytes(StandardCharsets.UTF_8))
                 ],
-                new CommitMetadata(identity, now, identity, now, ServiceCommitMessages.snapshot(STAGE, 0, rounds.opened())))
+                new CommitMetadata(identity, now, identity, now, RoundSubject.snapshot(STAGE, 0, rounds.opened())))
                 // The snapshot is a closing commit: it lands with its register in one transaction,
                 // as the admission lands an in-box snapshot (design D13, D18 of tighten-spec-contract).
                 .alongside('refs/gnomish-factory/' + TaskIdSanitizer.sanitize(world.taskId)))
@@ -126,7 +126,7 @@ final class RequestSnapshotKillPoints {
             agentRounds.incrementAndGet()
             throw new AssertionError('no agent round may run for a pending verification')
         } as StageExecutor
-        def result = new ResumeVerificationStageExecutor(agent, new CurrentRound(), pending.get())
+        def result = new ResumeVerificationStageExecutor(agent, pending.get())
                 .execute(request(world, pending.get().round()))
         if (result.answer() instanceof ExecutionResult.DecisionRequest) {
             world.store.recordOutcome(world.taskId, new TaskOutcome.Escalated(TaskState.atStageStart(STAGE),
@@ -142,8 +142,9 @@ final class RequestSnapshotKillPoints {
         world.store.appendDecision(world.taskId, new Decision(REPLY, null, null, null), TaskState.atStageStart(STAGE))
         def rounds = new CurrentRound()
         def next = roundSource(world, rounds).openRound(request(world, 0))
-        assert next.readDecision().isEmpty(): 'the next round read the answered request'
-        assert next.decisionFilePath().toString().endsWith("-${rounds.opened().commit()}.json")
+        assert next.environment().readFile(next.answerFilePath().toString(), 1).isEmpty():
+        'the next round\'s own path holds the answered request'
+        assert next.answerFilePath().toString().endsWith("-${rounds.opened().commit()}.json")
     }
 
     private static SandboxRoundEnvironmentSource roundSource(KillPointWorld world, CurrentRound rounds) {

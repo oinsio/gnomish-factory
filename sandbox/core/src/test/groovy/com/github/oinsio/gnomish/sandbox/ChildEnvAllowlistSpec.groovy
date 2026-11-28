@@ -13,7 +13,6 @@ import spock.lang.Specification
 class ChildEnvAllowlistSpec extends Specification {
 
     // Scenario: sandbox/execution-environment / A credential passthrough name fails startup
-    // Scenario: executor/agent-executor / Credential variable cannot be allowlisted
     def "FR9: a passthrough name declared as a credential is refused at construction, naming the variable"() {
         when:
         ChildEnvAllowlist.of([
@@ -117,7 +116,7 @@ class ChildEnvAllowlistSpec extends Specification {
 
     // FR9, D6: the operator passthrough adds the one variable it names to the base set and the
     //     factory-set layer, and a name that merely shares its prefix stays behind
-    // Scenario: executor/agent-executor / Passthrough names match exactly
+    // Scenario: sandbox/execution-environment / Passthrough names are exact
     def "FR9: a round receives the passthrough variable itself, beside base and factory-set, and no prefix sibling"() {
         given:
         def factoryEnv = [PATH: '/usr/bin', HOME: '/home/op', NPM_TOKEN: 'n', NPM_TOKEN_CI: 'ci', NPM_TOKENS: 'ts',
@@ -125,8 +124,8 @@ class ChildEnvAllowlistSpec extends Specification {
         def allowlist = ChildEnvAllowlist.of(['NPM_TOKEN'], [], valuesOf(factoryEnv))
 
         expect:
-        allowlist.compose(['PATH', 'HOME'], [GNOMISH_DECISION_FILE: '/d.json']) ==
-        [PATH: '/usr/bin', HOME: '/home/op', NPM_TOKEN: 'n', GNOMISH_DECISION_FILE: '/d.json']
+        allowlist.compose(['PATH', 'HOME'], [GNOMISH_ANSWER_FILE: '/d.json']) ==
+        [PATH: '/usr/bin', HOME: '/home/op', NPM_TOKEN: 'n', GNOMISH_ANSWER_FILE: '/d.json']
     }
 
     // NFR-S3 of tighten-spec-contract: none() resolves no value at all — it reads no environment,

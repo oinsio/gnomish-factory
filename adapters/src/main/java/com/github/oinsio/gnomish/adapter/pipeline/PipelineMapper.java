@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.ConnectionProfiles;
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorDeclaration;
+import com.github.oinsio.gnomish.domain.pipeline.MechanismFieldErrors;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.Sandbox;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
@@ -168,7 +169,7 @@ public final class PipelineMapper {
                 orEmpty(dto.purpose()),
                 StageDefinitionMapper.mapInputs(dto.inputs()),
                 StageDefinitionMapper.mapOutputs(dto.outputs()),
-                StageDefinitionMapper.mapExecutor(manifest, dto.executor(), errors),
+                StageDefinitionMapper.mapExecutor(manifest, MechanismFieldErrors.STAGE_BLOCK, dto.executor(), errors),
                 orEmpty(dto.instructions()),
                 VerifyCheckMapper.mapAll(manifest, dto.verify(), credentialed, errors),
                 StageDefinitionMapper.resolveLimits(defaultLimit, dto.autonomy()),

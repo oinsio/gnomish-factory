@@ -4,20 +4,20 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Which executor ran one round, as the round's log line and ledger line name it (NFR-O2, UX3 of
- * define-executor-contract): the executor's {@code name} and, for an executor that answered
- * describe, its describe {@code version}. An executor with no describe (an {@code agent-cli} stage)
- * has no version, and its line names it by the stage's executor type alone.
+ * Which executor ran one round or one executor check, as its log line, ledger line and participant
+ * entry name it (NFR-O2, UX3 of define-executor-contract; NFR-O1 of extract-agent-round-runner): the
+ * registry entry the executor block resolved to — the name dispatch resolved, {@code claude} for an
+ * {@code agent-cli} block — and that entry's describe {@code version}: {@code built-in} for a built-in,
+ * the described version for a program, none for a program the run did not describe.
  *
- * <p>The version is the executor's own free text and stays a carrier (NFR-S2); the name is a law name
- * or an executor type word, held non-blank. Built by {@link DescribedExecutors#executorOf} from the
- * stage's {@code executor.name} and the run's describe versions. Inert value data compared by content.
+ * <p>The version is the executor's own free text and stays a carrier (NFR-S2); the name is a registry
+ * name, held non-blank. Built only by {@link DescribedExecutors#executorOf}, the one owner of the name
+ * a record carries (design D12 of extract-agent-round-runner). Inert value data compared by content.
  *
- * <p>Implements NFR-O2, UX3 of define-executor-contract.
+ * <p>Implements NFR-O2, UX3 of define-executor-contract; NFR-O1, FR14 of extract-agent-round-runner.
  *
- * @param name the executor's law name ({@code executor.name}), or the stage's executor type word when
- *     the stage names no executor; never blank
- * @param version the executor's describe version; null when the executor answered no describe
+ * @param name the registry entry the block resolved to; never blank
+ * @param version the entry's describe version; null for a program the run did not describe
  */
 public record RoundExecutor(String name, @Nullable UntrustedText version) {
 

@@ -97,7 +97,7 @@ class HostSnapshotMediumSpec extends Specification implements HostSnapshotRound 
     def "FR19: the worktree medium judges #shape"() {
         given:
         setup.call(this)
-        def order = new SnapshotOrder(new AttemptKey(TASK, 'implement', ROUND), cell.opened(), 'unused')
+        def order = new SnapshotOrder(new AttemptKey(TASK, 'implement', ROUND), cell.opened(), 'unused', cell.registeredChain())
 
         expect:
         new WorktreeSnapshot(git.call(this), worktree(), TASK, ClaimEpochSource.NONE).judge(order).getClass().simpleName == verdict
@@ -179,7 +179,7 @@ class HostSnapshotMediumSpec extends Specification implements HostSnapshotRound 
 
         when: 'the medium is judged and nothing is committed: the state a kill before the transaction leaves'
         def verdict = new WorktreeSnapshot(runner, worktree(), TASK, ClaimEpochSource.NONE).judge(
-                new SnapshotOrder(new AttemptKey(TASK, 'implement', ROUND), cell.opened(), 'unused'))
+                new SnapshotOrder(new AttemptKey(TASK, 'implement', ROUND), cell.opened(), 'unused', cell.registeredChain()))
 
         then:
         verdict instanceof RangeVerdict.Clean

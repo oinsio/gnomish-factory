@@ -31,8 +31,9 @@ verify:
     timeout: 5m
   - type: judge
     criteriaFile: stages/implement/acceptance.md
-    model: judge-model
-    settings:
-      maxTurns: 3
-    votes: 3
+    executor:
+      type: agent-cli
+      model: judge-model
+      settings:
+        maxTurns: 3
 advancement: manual

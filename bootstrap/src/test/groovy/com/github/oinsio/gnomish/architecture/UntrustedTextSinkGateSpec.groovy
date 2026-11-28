@@ -316,6 +316,10 @@ class UntrustedTextSinkGateSpec extends Specification {
         // `state.json` / `status --json` / usage-report DTOs (`StateCheckDto`, `status/json/CheckDto`,
         // `usage/json/CheckDto`) — the carrier/String twin `details` and `resumedKey` already are,
         // and like them it stays decided wherever the receiver's type is declared.
+        // Task 6.3 of extract-agent-round-runner (design D11) added `pendingKey`: a carrier on
+        // `EngineEvent.ExecutionFinished`, `PendingRun` and `RoundOutcomeLine` (the prefix of the key a
+        // pending transform round's start returned, the executor's text), a plain String on
+        // `RoundOutcomeLineDto`, and a `PendingKey` on the pending record — the twin `resumedKey` is.
         // What this list no longer means is "rule (c) is silent here": since the qualified
         // vocabulary landed, a name on it is still decided wherever the receiver's type is
         // declared in the same source (`CarrierAccessors.qualifiedNamesIn`, the three features
@@ -337,6 +341,7 @@ class UntrustedTextSinkGateSpec extends Specification {
             'model',
             'name',
             'note',
+            'pendingKey',
             'question',
             'reason',
             'recorded',

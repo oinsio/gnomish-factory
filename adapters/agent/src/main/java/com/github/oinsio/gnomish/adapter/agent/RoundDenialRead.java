@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Reading a round's egress denials, on the one rule that makes it safe to call from either end
- * of {@link ExecutorRoundExecution}: <b>this read never brings a round down</b>. The port's
+ * of a round ({@code ProgramStageExecutor}, the shared round wrapper): <b>this read never brings a round down</b>. The port's
  * answer is observability of work already done — a finished round's usage, trace and committed
  * snapshot all exist by the time it is asked, and a failed round's own infrastructure failure is
  * what the engine must escalate on — so a throwing environment is caught, logged and reported as

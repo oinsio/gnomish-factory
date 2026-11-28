@@ -1,8 +1,10 @@
 package com.github.oinsio.gnomish.adapter.agent.program;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.github.oinsio.gnomish.adapter.agent.RoundScratchDirectory;
 import com.github.oinsio.gnomish.app.describe.ProgramChannel;
+import com.github.oinsio.gnomish.app.port.agent.AnswerFileRead;
+import com.github.oinsio.gnomish.app.port.agent.AnswerFileReading;
+import com.github.oinsio.gnomish.executorcontract.ExecutorContractJson;
 import com.github.oinsio.gnomish.executorcontract.ExecutorResult;
 import com.github.oinsio.gnomish.executorcontract.ReadResult;
 import com.github.oinsio.gnomish.executorcontract.ResultFileReader;
@@ -24,21 +26,21 @@ import java.time.Duration;
  * reports no wall time takes the one the factory measured. Nothing here deletes or rewrites a file,
  * so a re-read of the same files reads the same result (NFR-R1).
  *
- * <p>Implements FR5, FR6, NFR-R1, NFR-S2 of define-executor-contract.
+ * <p>The answer file is read by the one answer read every answer file goes through ({@link
+ * AnswerFileRead}), and a refused one is the run's result by the one mapping ({@link
+ * AnswerOutcome#refused}), which the agent round and the recovery of a snapshot share (FR21, NFR-R5
+ * of extract-agent-round-runner, design D15).
+ *
+ * <p>Implements FR5, FR6, NFR-R1, NFR-S2 of define-executor-contract; FR1, FR21 of
+ * extract-agent-round-runner.
  */
-final class ProgramResultRead {
+public final class ProgramResultRead {
 
     /** The result file's cap: one MiB. */
     static final int RESULT_FILE_CAP_BYTES = 1024 * 1024;
 
-    /** The answer file's cap: four MiB, room for a SARIF log at its result cap. */
-    static final int ANSWER_FILE_CAP_BYTES = 4 * 1024 * 1024;
-
     private static final ResultFileReader RESULT_READER =
             new ResultFileReader(RESULT_FILE_CAP_BYTES, UntrustedText::subprocess);
-
-    private static final ResultFileReader ANSWER_READER =
-            new ResultFileReader(ANSWER_FILE_CAP_BYTES, UntrustedText::subprocess);
 
     private ProgramResultRead() {}
 
@@ -87,16 +89,11 @@ final class ProgramResultRead {
 
     private static ExecutorResult withAnswerFile(
             TaskExecutionEnvironment environment, String answerFile, ExecutorResult result, FailureContext context) {
-        ReadResult<JsonNode> read =
-                ANSWER_READER.readJson(limit -> environment.readFile(answerFile, limit), JsonNode.class);
-        return switch (read) {
-            case ReadResult.Absent<JsonNode> ignored -> result;
-            case ReadResult.Parsed<JsonNode> parsed -> result.withAnswer(parsed.value());
-            case ReadResult.Malformed<JsonNode> malformed ->
-                context.failure(
-                        "wrote a malformed answer file: " + malformed.reason().excerpt(512));
-            case ReadResult.Truncated<JsonNode> ignored ->
-                context.failure("wrote an answer file over the cap of " + ANSWER_FILE_CAP_BYTES + " bytes");
+        return switch (AnswerFileRead.in(environment, answerFile, UntrustedText::subprocess)) {
+            case AnswerFileReading.Absent ignored -> result;
+            case AnswerFileReading.Answered answered ->
+                result.withAnswer(ExecutorContractJson.answerTree(answered.answer()));
+            case AnswerFileReading.Refused refused -> context.refused(refused);
         };
     }
 
@@ -126,7 +123,12 @@ final class ProgramResultRead {
         }
 
         ExecutorResult failure(String cause) {
-            return ProgramFailures.infrastructure(executor, cause, stderr.tailForFailure());
+            return ProgramFailures.infrastructure(
+                    ProgramFailures.Subject.PROGRAM, executor, cause, stderr.tailForFailure());
+        }
+
+        ExecutorResult refused(AnswerFileReading.Refused refused) {
+            return AnswerOutcome.refused(ProgramFailures.Subject.PROGRAM, executor, refused, stderr.tailForFailure());
         }
     }
 }

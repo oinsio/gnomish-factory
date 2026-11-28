@@ -11,8 +11,8 @@ import org.gradle.process.ProcessForkOptions
  * {@code Test} task and the {@code pitest} task, beside {@link AdversarialGitConfig#applyTo}.
  *
  * <p>Gradle's {@code Test.environment} defaults to the environment of the build process, so a
- * build launched by a gnome — whose agent process holds {@code GNOMISH_DECISION_FILE} for its
- * round — forked test JVMs that saw the gnome's decision file, and a fixture that inherited it
+ * build launched by a gnome — whose agent process holds {@code GNOMISH_ANSWER_FILE} for its
+ * round — forked test JVMs that saw the gnome's answer file, and a fixture that inherited it
  * wrote a scenario's decision into the real round. Subtractive, not an allowlist: the test JVM
  * legitimately needs the machine's Docker, Gradle and Testcontainers variables, and listing the
  * operator's tooling here would be a maintenance list. The only {@code GNOMISH_*} variables a test

@@ -4,59 +4,54 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorUsage;
 import com.github.oinsio.gnomish.domain.engine.TokenUsage;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.Map;
-import org.jspecify.annotations.Nullable;
 
 /**
- * A live progress signal emitted by {@code adapter.agent.StreamJsonParser}'s parse loop as it
- * recognizes an event on a round's stream-json output, delivered to an {@link
- * AgentProgressListener} (design D10). Unlike {@code adapter.agent.AgentEvent} — the durable
- * per-line wire model later folded into {@link ExecutorUsage} / {@code
- * adapter.agent.ToolTraceBuilder} — a progress event exists only for the moment of observation:
- * it carries the minimum a live subscriber (an SLF4J renderer, a mid-round harvest poll)
- * needs to report a round in flight, not the full wire payload.
+ * A live progress signal a round's dialect recognizes on the agent CLI's output, delivered to an
+ * {@link AgentProgressListener} (design D10 of add-agent-executor). Unlike the dialect's own per-line
+ * wire model — later folded into {@link ExecutorUsage} and the tool trace — a progress event exists
+ * only for the moment of observation: it carries the minimum a live subscriber (an SLF4J renderer, a
+ * mid-round harvest poll) needs to report a round in flight, not the full wire payload.
  *
- * <p>Three variants cover FR7's three live-progress facts: a round starting
- * (model, session id), a top-level tool call starting, and a round finishing
- * (result subtype, token summary, and the {@code result} event's final-message
- * text, per design D9(c) — "the final message becomes the round summary ... it
- * rides the {@code RoundFinished} progress event and the log, not the domain").
- * Judge rounds feed the same event stream as executor rounds — this type does
- * not distinguish the two; that distinction belongs to which listeners a caller
- * wires (FR7).
+ * <p>Three variants cover the three live-progress facts: a round starting (model), a top-level tool
+ * call starting (tool name), and a round finishing (token usage and the final-message text, per
+ * design D9(c) of add-agent-executor — "the final message becomes the round summary ... it rides the
+ * {@code RoundFinished} progress event and the log, not the domain"). Judge rounds feed the same
+ * event stream as executor rounds — this type does not distinguish the two; that distinction
+ * belongs to which listeners a caller wires.
  *
- * <p>Implements FR7, D9, D10 of add-agent-executor.
+ * <p>The events are vendor-neutral (FR6 of extract-agent-round-runner): model, tool name, final
+ * summary and usage, and nothing a particular CLI's wire format names. The session id is not here —
+ * it travels as the continuation key in the round's result (design D4 of that change) — and neither
+ * is a result subtype: how a round ended is the dialect's status mapping, not a progress fact.
+ *
+ * <p>Implements FR7, D9, D10 of add-agent-executor; FR6 of extract-agent-round-runner.
  */
 public sealed interface AgentProgressEvent {
 
     /**
-     * A round has started: emitted when {@code adapter.agent.StreamJsonParser} recognizes the
-     * round's {@code system}/{@code init} event.
+     * A round has started: emitted when the dialect recognizes the event that opens the round.
      *
-     * @param model the round's main model id, verbatim from {@code
-     *     adapter.agent.AgentEvent.InitEvent#model()}; never blank
-     * @param sessionId the CLI's session id for this round, verbatim from {@code
-     *     adapter.agent.AgentEvent.InitEvent#sessionId()}; never blank
+     * @param model the round's main model id, verbatim as the CLI reported it; never blank
      */
-    record RoundStarted(UntrustedText model, UntrustedText sessionId) implements AgentProgressEvent {
+    record RoundStarted(UntrustedText model) implements AgentProgressEvent {
 
         public RoundStarted {
             requireNonBlank(model, "model");
-            requireNonBlank(sessionId, "sessionId");
         }
     }
 
     /**
      * A top-level tool call has started: emitted once per top-level {@code
-     * adapter.agent.ContentBlock.ToolUse} block, in the order encountered, when {@code
-     * adapter.agent.StreamJsonParser} recognizes an {@code assistant} event whose {@code
-     * adapter.agent.AgentEvent.AssistantEvent#parentToolUseId()} is {@code null} — the same
-     * top-level notion {@code adapter.agent.ToolTraceBuilder} applies post-hoc, checked inline
+     * adapter.agent.claude.ContentBlock.ToolUse} block, in the order encountered, when {@code
+     * adapter.agent.claude.StreamJsonParser} recognizes an {@code assistant} event whose {@code
+     * adapter.agent.claude.AgentEvent.AssistantEvent#parentToolUseId()} is {@code null} — the same
+     * top-level notion {@code adapter.agent.claude.ToolTraceBuilder} applies post-hoc, checked inline
      * here as each line is parsed (FR7: "top-level tool started"). A nested
      * subagent tool call (non-null {@code parentToolUseId}) never produces this
      * event.
      *
      * @param name the tool's name, verbatim from {@code
-     *     adapter.agent.ContentBlock.ToolUse#name()} and minted as agent text where it is read
+     *     adapter.agent.claude.ContentBlock.ToolUse#name()} and minted as agent text where it is read
      *     off the stream; never blank
      */
     record ToolStarted(UntrustedText name) implements AgentProgressEvent {
@@ -67,38 +62,21 @@ public sealed interface AgentProgressEvent {
     }
 
     /**
-     * A round has finished: emitted when {@code adapter.agent.StreamJsonParser} recognizes the
-     * round's {@code result} event, carrying the three facts the spec's "round
-     * finished" line enumerates — result subtype, token summary, final-message
-     * summary. {@code summary} is {@code adapter.agent.AgentEvent.ResultEvent#result()}
-     * verbatim (design D9(c)) — the same text the domain never sees as decision
-     * data, only as a log line and this event. {@code tokensByModel} is derived
-     * the same way {@code adapter.agent.AgentRoundResultExtractor}'s telemetry is (task 3.3):
-     * {@code adapter.agent.AgentEvent.ResultEvent#modelUsage()} when present, else the flat
-     * {@code adapter.agent.AgentEvent.ResultEvent#usage()} keyed by the round's {@code
-     * adapter.agent.AgentEvent.InitEvent#model()} — best-effort, empty when neither wire shape
-     * was interpretable (NFR-R2).
+     * A round has finished: emitted when the dialect recognizes the event that closes the round,
+     * carrying its token usage and its final-message summary — the same text the domain never sees
+     * as decision data, only as a log line and this event (design D9(c) of add-agent-executor).
+     * {@code tokensByModel} is derived the same way the round's usage is: best-effort, empty when
+     * the wire reported nothing interpretable.
      *
-     * <p>Carries no {@code sessionId}: unlike {@link RoundStarted} / {@link
-     * ToolStarted}, which report facts about an event mid-stream, a listener
-     * receives {@code RoundStarted} and {@code RoundFinished} for the same round
-     * as a strictly ordered pair on one subscriber instance scoped to that round
-     * (mirroring how {@code adapter.agent.StreamJsonParser#parse} itself is called once per
-     * round) — correlation by field is redundant with correlation by call order,
-     * and the result event's session id carries no information {@code
-     * RoundStarted} did not already report.
+     * <p>Carries no correlation id: a listener receives {@code RoundStarted} and {@code
+     * RoundFinished} for the same round as a strictly ordered pair on one subscriber scoped to that
+     * round, so correlation by call order is all a listener needs.
      *
-     * @param subtype the result event's {@code subtype} (e.g. {@code "success"},
-     *     {@code "error_max_turns"}), verbatim from {@code
-     *     adapter.agent.AgentEvent.ResultEvent#subtype()}, or {@code null} if the wire event
-     *     carried none
-     * @param tokensByModel the round's token usage keyed by resolved model id;
-     *     defensively copied, unmodifiable, empty when unreported
-     * @param summary the round's final-message text, verbatim from {@code
-     *     adapter.agent.AgentEvent.ResultEvent#result()}; never null, possibly empty
+     * @param tokensByModel the round's token usage keyed by resolved model id; defensively copied,
+     *     unmodifiable, empty when unreported
+     * @param summary the round's final-message text, verbatim; never null, possibly empty
      */
-    record RoundFinished(@Nullable String subtype, Map<String, TokenUsage> tokensByModel, UntrustedText summary)
-            implements AgentProgressEvent {
+    record RoundFinished(Map<String, TokenUsage> tokensByModel, UntrustedText summary) implements AgentProgressEvent {
 
         public RoundFinished {
             tokensByModel = Map.copyOf(tokensByModel);

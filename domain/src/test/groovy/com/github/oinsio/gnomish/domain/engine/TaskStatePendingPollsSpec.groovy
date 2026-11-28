@@ -28,8 +28,8 @@ class TaskStatePendingPollsSpec extends Specification {
     AdvancementSpec.stage('test', AdvancementMode.AUTO, []))
 
     static PendingPollRecord poll(int check, String key) {
-        new PendingPollRecord(new CheckRef(check, UntrustedText.manifest('executor:scm-status:' + key)), 1, TOKEN,
-                new PendingKey(key), SINCE)
+        new PendingPollRecord(new PendingSubject.Check(new CheckRef(check,
+                UntrustedText.manifest('executor:scm-status:' + key))), 1, TOKEN, new PendingKey(key), SINCE)
     }
 
     static AttemptRecord round(AttemptRecord.Result result) {

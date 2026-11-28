@@ -78,21 +78,21 @@ class UsageWireVocabularySpec extends Specification {
 
     def "FR15: an entry is written in the record shape: vote and wall time only when present, tools and models always"() {
         given:
-        def entry = new ParticipantUsageDto(Role.TRANSFORM, 'agent-cli', null, RecordedProvenance.ABSENT, null, [], [:])
+        def entry = new ParticipantUsageDto(Role.TRANSFORM, 'claude', null, RecordedProvenance.ABSENT, null, [], [:])
 
         expect:
         RECORD_MAPPER.writeValueAsString(entry) ==
-                '{"role":"transform","executor":"agent-cli","provenance":"absent","byTool":[],"byModel":{}}'
+                '{"role":"transform","executor":"claude","provenance":"absent","byTool":[],"byModel":{}}'
     }
 
     def "FR15: an unpriced model carries no costUsd key, a priced one carries its cost"() {
         given:
-        def entry = new ParticipantUsageDto(Role.VERDICT, 'agent-cli', 0, RecordedProvenance.REPORTED, null, [],
+        def entry = new ParticipantUsageDto(Role.VERDICT, 'claude', 0, RecordedProvenance.REPORTED, null, [],
         ['a': new ModelUsage(1, 2, 3, 4, null), 'b': new ModelUsage(1, 2, 3, 4, new BigDecimal('0.1607'))])
 
         expect:
         RECORD_MAPPER.writeValueAsString(entry) ==
-                '{"role":"verdict","executor":"agent-cli","vote":0,"provenance":"reported","byTool":[],"byModel":' +
+                '{"role":"verdict","executor":"claude","vote":0,"provenance":"reported","byTool":[],"byModel":' +
                 '{"a":{"input":1,"output":2,"cacheCreation":3,"cacheRead":4},' +
                 '"b":{"input":1,"output":2,"cacheCreation":3,"cacheRead":4,"costUsd":0.1607}}}'
     }

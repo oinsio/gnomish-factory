@@ -1,7 +1,7 @@
 # Stream-json reference dumps (parser fixtures)
 
 Committed `*.reference.json` fixtures the stream-json parser's specs
-(`StreamJsonReferenceDumpSpec`, `src/test/groovy/.../adapter/agent/`) run
+(`StreamJsonReferenceDumpSpec` and `ClaudeDialectReferenceReplaySpec`, `src/test/groovy/.../adapter/agent/claude/`) run
 against directly — design D11 layer 1 of add-agent-executor, closing the
 format-drift risk M3 and Q1 name. Each file is one round's full
 `--output-format stream-json --verbose` transcript, one JSON object per

@@ -227,7 +227,7 @@ There is no human stand-in for any of these roles. The interactive-mode flag of 
 
 ## Manifest settings vs. installation properties
 
-An `agent-cli` stage's `executor.settings` (and a `judge` check's own `settings`) accept exactly four keys — `allowedTools`, `disallowedTools`, `maxTurns`, `roundTimeout` — and a `command` stage's accept only `roundTimeout`, all validated at startup before any round runs; an unrecognized key or malformed value is a startup error naming the stage/check and the key. These are portable, repo-level settings that travel with the pipeline definition.
+An `agent-cli` executor block's `settings` — a stage's `executor.settings`, and a `judge` check's `executor.settings`, since a `judge` check declares who judges with the same `executor:` block a stage declares (`type`, `model`, `settings`, and `name` for a `program`) and has no `model`, `settings` or `votes` of its own — accept exactly four keys — `allowedTools`, `disallowedTools`, `maxTurns`, `roundTimeout` — and a `command` stage's accept only `roundTimeout`, all validated at startup before any round runs; an unrecognized key or malformed value is a startup error naming the stage/check and the key. These are portable, repo-level settings that travel with the pipeline definition.
 
 Installation-level configuration — things that are true of *this machine*, not the repo — lives in `factory.*` settings instead, never the manifest: the host file `~/.gnomish/factory.yaml`, the project file `~/.gnomish/projects/<name>/project.yaml`, or the command line, each key only where its level allows (see [`operator-guide.md` → *Setting up a project*](operator-guide.md#setting-up-a-project)). The settings relevant to `run`, with their level:
 

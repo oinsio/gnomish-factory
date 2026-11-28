@@ -13,9 +13,9 @@
 #   - prints the scenario's scripted stream-json to stdout, one event per line
 #   - copies the scenario's workspace-files/ tree (if any) into the cwd the
 #     caller launched us in — the fake's stand-in for "the agent wrote files"
-#   - writes the scenario's decision.json (if any) to $GNOMISH_DECISION_FILE,
-#     when that env var is set — the fake's stand-in for the decision-file
-#     protocol (D1)
+#   - writes the scenario's decision.json (if any) to $GNOMISH_ANSWER_FILE,
+#     when that env var is set — the fake's stand-in for a decision request
+#     in the answer file (FR9 of extract-agent-round-runner)
 #   - sleeps for the scenario's sleep-seconds (if any) before exiting — the
 #     fake's stand-in for a hung CLI, so roundTimeout-kill tests observe a
 #     real killed OS process (FR13)
@@ -158,14 +158,14 @@ if [ -d "$SCENARIO_DIR/workspace-files" ]; then
     cp -R "$SCENARIO_DIR/workspace-files/." .
 fi
 
-# 3. Decision-file protocol stand-in (D1): only written when the caller wired
-# $GNOMISH_DECISION_FILE, mirroring the real adapter's per-round temp path.
-# Parent directories are created like the real CLI's Write tool would — the
-# in-branch transport of add-sandbox-core (FR23, D17) names a path under
+# 3. Answer-file stand-in (FR9, D3 of extract-agent-round-runner): the decision
+# request is only written when the caller wired $GNOMISH_ANSWER_FILE, the path
+# the factory named for the round. Parent directories are created like the real
+# CLI's Write tool would — a branch mode names a path under
 # .gnomish-task/decisions/ that need not exist yet in a fresh working copy.
-if [ -f "$SCENARIO_DIR/decision.json" ] && [ -n "${GNOMISH_DECISION_FILE:-}" ]; then
-    mkdir -p "$(dirname "$GNOMISH_DECISION_FILE")"
-    cp "$SCENARIO_DIR/decision.json" "$GNOMISH_DECISION_FILE"
+if [ -f "$SCENARIO_DIR/decision.json" ] && [ -n "${GNOMISH_ANSWER_FILE:-}" ]; then
+    mkdir -p "$(dirname "$GNOMISH_ANSWER_FILE")"
+    cp "$SCENARIO_DIR/decision.json" "$GNOMISH_ANSWER_FILE"
 fi
 
 # 4. Optional sleep before exiting — the fake's stand-in for a hung CLI

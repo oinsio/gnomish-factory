@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Participants
+import com.github.oinsio.gnomish.domain.engine.PendingSubject
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.RoundExecutor
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -154,15 +155,15 @@ class SummaryAccumulatorListenerSpec extends Specification {
         listener.onEvent(new EngineEvent.RunStarted(TASK_ID, new Position.AtStage('implement'), 0))
         listener.onEvent(new EngineEvent.AttemptStarted(key))
         listener.onEvent(new EngineEvent.CheckStarted(key, new CheckRef(0, UntrustedText.manifest('files_exist'))))
-        listener.onEvent(new EngineEvent.CheckPolled(key, new CheckRef(0, UntrustedText.manifest('files_exist')),
+        listener.onEvent(new EngineEvent.PendingPolled(key, new PendingSubject.Check(new CheckRef(0, UntrustedText.manifest('files_exist'))),
                 'scm-status', UntrustedText.subprocess('k-1'), PendingTurn.Origin.ISSUED, Duration.ofSeconds(30),
                 Duration.ofMinutes(9)))
-        listener.onEvent(new EngineEvent.CheckTimedOut(key, new CheckRef(0, UntrustedText.manifest('files_exist')),
+        listener.onEvent(new EngineEvent.PendingTimedOut(key, new PendingSubject.Check(new CheckRef(0, UntrustedText.manifest('files_exist'))),
                 'scm-status', UntrustedText.subprocess('k-1'), Duration.ofMinutes(10), new ExecutionResult.Failed(
                         ExecutionResult.FailureClass.QUALITY, UntrustedText.factory('timed out'), [], null)))
         listener.onEvent(new EngineEvent.CheckFinished(key,
                 new CheckResult(new CheckRef(0, UntrustedText.manifest('files_exist')), new Verdict.Pass(null, []), Duration.ZERO), null))
-        listener.onEvent(new EngineEvent.ExecutionFinished(key, Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed()))
+        listener.onEvent(new EngineEvent.ExecutionFinished(key, Participants.transform('ghost', ExecutorUsage.none()), new RoundExecutor('ghost', null), new ExecutionResult.Completed()))
         listener.onEvent(new EngineEvent.AttemptFinished(key, state(), new ToolTrace(key, [])))
         listener.onEvent(new EngineEvent.TaskFinished(TASK_ID, new TaskOutcome.Completed(state())))
 

@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor
+import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.BestEffortClosingPush
@@ -17,7 +17,6 @@ import com.github.oinsio.gnomish.adapter.git.VirtualTimeGitRetries
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.TrackerWrite
-import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
@@ -25,10 +24,10 @@ import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Engine
 import com.github.oinsio.gnomish.domain.engine.EnginePorts
+import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
@@ -59,7 +58,7 @@ import java.time.Instant
  * <p><b>The park.</b> A fresh container run cannot close a round daemon-free — over the scripted
  * docker a round never lands its snapshot ({@code ContainerResumeRunnerSpec}) — so the run is
  * driven one layer down, the way {@code RoundTokenIdentitySpec} drives it: the domain {@link
- * Engine} over the real round adapters ({@link CliStageExecutor} with the fake agent, {@link
+ * Engine} over the real round adapters (the {@code claude} entry's stage half ({@link ClaudeStageFixture}) with the fake agent, {@link
  * SandboxRoundEnvironmentSource}, {@link EnvironmentAttemptPersistence}) and a {@link
  * LocalBoxEnvironment} for the box. The round commit that leaves the gate or the stop is therefore
  * the production one; the park is recorded through {@link ContainerRunSupport#recordPark}, the
@@ -111,6 +110,18 @@ class ContainerContinuationMedium implements ContinuationMedium, BareGitRepoFixt
                 new GitObjectsTaskRepository(objects, new VirtualClock(Instant.parse('2026-01-01T00:00:00Z')), ClaimEpochSource.NONE, DenialCursorSource.NONE),
                 runner, cloneDir, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock()).createTask(context(taskId),
                 TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), first)
+        def outcome = drive(taskId, definition, FakeAgentSupport.propertiesFor(scenario), context(taskId), first)
+        assert outcome instanceof TaskOutcome.Paused || outcome instanceof TaskOutcome.Escalated: "the run of ${taskId} did not park: ${outcome}"
+        support(cloneDir, taskId, segments(definition)).recordPark(outcome, TrackerWrite.NONE)
+    }
+
+    /**
+     * One drive of the engine from {@code first}, in a fresh local box over the clone's tip, with
+     * {@code agent} playing the rounds — the park's own drive, and a second instance's next round
+     * after an answer, started from the record (NFR-R2 of extract-agent-round-runner).
+     */
+    TaskOutcome drive(String taskId, PipelineDefinition definition, FactoryProperties agent, TaskContext context, TaskState first) {
+        def objects = objects()
         def rounds = new CurrentRound()
         def box = new LocalBoxEnvironment(cloneDir, Files.createTempDirectory(root, 'box'))
         def lease = new EnvironmentLease({
@@ -118,8 +129,7 @@ class ContainerContinuationMedium implements ContinuationMedium, BareGitRepoFixt
         }, TaskIdSanitizer.branchName(taskId), segments(definition))
         def source = new SandboxRoundEnvironmentSource(lease, runner, cloneDir, taskId, rounds, new VirtualClock())
         // Ahead of the fixed instant the local box stamps process starts with, so wall time is positive.
-        def executor = new CliStageExecutor(FakeAgentSupport.propertiesFor(scenario), new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)),
-                { e -> } as AgentProgressListener, ChildEnvAllowlist.none(), LAW, source)
+        def executor = ClaudeStageFixture.executor(agent, new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)), ChildEnvAllowlist.none(), LAW, source)
         // Behind the closing push, as ContainerRunSupport#persistence assembles it (design D13).
         def persistence = new PushBestEffortAttemptPersistence(
                 new EnvironmentAttemptPersistence(box, runner, cloneDir, objects, rounds, ClaimEpochSource.NONE),
@@ -127,12 +137,9 @@ class ContainerContinuationMedium implements ContinuationMedium, BareGitRepoFixt
         def clock = new VirtualClock()
         // The engine's check rounds through the run's check dispatch, as the run assembly routes them
         // (task 4.2f of migrate-verify-to-executor-contract).
-        def ports = new EnginePorts(HandAssembledCheckDispatch.routed(executor, definition, cloneDir), new ScriptedJudgeVoter(), new RecordingEventListener(), persistence,
+        def ports = new EnginePorts(HandAssembledCheckDispatch.routed(executor, definition, cloneDir), new RecordingEventListener(), persistence,
                 VirtualTimeEquipment.on(clock), source.identity())
-        def outcome = new Engine().run(definition, context(taskId), first,
-                new DirectoryWorkspace(Files.createTempDirectory(root, 'workspace')), ports)
-        assert outcome instanceof TaskOutcome.Paused || outcome instanceof TaskOutcome.Escalated: "the run of ${taskId} did not park: ${outcome}"
-        support(cloneDir, taskId, segments(definition)).recordPark(outcome, TrackerWrite.NONE)
+        new Engine().run(definition, context, first, new DirectoryWorkspace(Files.createTempDirectory(root, 'workspace')), ports)
     }
 
     @Override

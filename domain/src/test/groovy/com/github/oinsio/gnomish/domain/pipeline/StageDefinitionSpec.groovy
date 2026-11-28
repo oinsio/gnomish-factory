@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.domain.pipeline
 
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 import java.time.Duration
 import spock.lang.Specification
 
@@ -74,7 +74,7 @@ class StageDefinitionSpec extends Specification {
             VerifyChecks.builtin('files_exist', [paths: ['README.md']]),
             VerifyChecks.command('./gradlew check'),
             VerifyChecks.external('ci/build', 'ci-platform', Duration.ofSeconds(30), Duration.ofMinutes(15), VerifyCheck.TimeoutClass.QUALITY),
-            new VerifyCheck.Judge('stages/implement/acceptance.md', 'claude-sonnet-4-5', [:], 3),
+            JudgeChecks.agent('stages/implement/acceptance.md', 'claude-sonnet-4-5'),
         ]
 
         expect: 'the stage presents the checks in exactly the declared order'

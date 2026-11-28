@@ -17,7 +17,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
@@ -38,7 +37,7 @@ import spock.lang.Specification
 /**
  * NFR-O1 of migrate-verify-to-executor-contract: each poll's line is written under the task's MDC
  * — the {@code stage} and {@code attempt} {@link MdcEventListener} sets from the poll's own {@link
- * com.github.oinsio.gnomish.domain.engine.EngineEvent.CheckPolled} before {@link
+ * com.github.oinsio.gnomish.domain.engine.EngineEvent.PendingPolled} before {@link
  * LoggingEventListener} renders it ({@code taskId} is the runner's, set before the engine starts).
  * A real engine run on virtual time, the two listeners composed in the order the runners compose
  * them.
@@ -63,7 +62,6 @@ class PendingPollMdcSpec extends Specification {
             result(new ExecutionResult.Completed(), null)
         ])
         def ports = new EnginePorts(CheckRouting.of(stages, new ScriptedCheckRounds(), new ScriptedCheckRounds(), checks),
-                new ScriptedJudgeVoter(),
                 new CompositeEngineEventListener([
                     new MdcEventListener(),
                     new LoggingEventListener()

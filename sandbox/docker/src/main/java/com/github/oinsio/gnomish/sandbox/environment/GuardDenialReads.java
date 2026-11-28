@@ -139,7 +139,7 @@ final class GuardDenialReads {
      * {@code GuardDenialReads} belongs to one {@link EgressGuard}, which belongs to the
      * {@code ContainerEnvironments} of one environment key — one serve slot's lease — and the only
      * caller of {@link EgressGuard#readDenials()} is the round's own thread, at the two ends of
-     * {@code ExecutorRoundExecution} (close, or the failure drain), one round at a time. So the
+     * the shared round wrapper, {@code ProgramStageExecutor} (close, or the failure drain), one round at a time. So the
      * reads of one instance are serial, which is also why phase three needs no revalidation: no
      * other thread can have moved {@link #since} or the restored position between the phases.
      * {@link #cursor()}, {@link #restore} and {@link #sourceRecreated} may be called from

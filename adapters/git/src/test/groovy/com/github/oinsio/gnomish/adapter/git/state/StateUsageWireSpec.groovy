@@ -40,8 +40,8 @@ class StateUsageWireSpec extends Specification {
         given:
         def usage = AttemptRecords.executed(new ExecutorUsage(Duration.ofSeconds(2), [], Unpriced.of(["m": new TokenUsage(1, 2, 3, 4)]))) +
         [
-            Participants.verdict('agent-cli', 0, Unpriced.of(["m": new TokenUsage(5, 6, 0, 0)])),
-            Participants.verdict('agent-cli', 1, [:])
+            Participants.verdict('claude', 0, Unpriced.of(["m": new TokenUsage(5, 6, 0, 0)])),
+            Participants.verdict('claude', 1, [:])
         ]
         def record = AttemptRecords.of(0, AttemptRecord.Result.PASSED, startedAt, [], usage, [], Stop.none())
         def state = new TaskState(new Position.AtStage("implement"), 0, [record], UsageSnapshot.EMPTY, ExecutorVersions.none())
@@ -97,7 +97,7 @@ class StateUsageWireSpec extends Specification {
     def "FR15: a recorded model without a cost carries no cost, never a zero cost, and a priced one keeps it"() {
         given:
         def entry = new com.github.oinsio.gnomish.domain.engine.ParticipantUsage(
-                com.github.oinsio.gnomish.domain.engine.ExecutorRole.TRANSFORM, 'agent-cli', null,
+                com.github.oinsio.gnomish.domain.engine.ExecutorRole.TRANSFORM, 'claude', null,
                 com.github.oinsio.gnomish.domain.engine.UsageProvenance.REPORTED, null, [],
                 ["unpriced": new ModelUsage(new TokenUsage(1, 1, 0, 0), null),
                     "priced": new ModelUsage(new TokenUsage(1, 1, 0, 0), new BigDecimal("0.0042"))])

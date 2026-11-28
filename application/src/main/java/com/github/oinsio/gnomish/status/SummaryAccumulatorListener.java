@@ -71,8 +71,8 @@ public final class SummaryAccumulatorListener implements EngineEventListener {
             case EngineEvent.AttemptStarted _,
                     EngineEvent.ExecutionFinished _,
                     EngineEvent.CheckStarted _,
-                    EngineEvent.CheckPolled _,
-                    EngineEvent.CheckTimedOut _,
+                    EngineEvent.PendingPolled _,
+                    EngineEvent.PendingTimedOut _,
                     EngineEvent.CheckFinished _,
                     EngineEvent.AttemptFinished _ -> {}
         }

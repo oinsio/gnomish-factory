@@ -121,7 +121,7 @@ class BuiltInVerdictUsageSpec extends Specification {
                 definition, PipelineLaw.ofContent([:]), equipment, BuiltInEntriesFixture.scripted(clock,
                 [GNOMISH_SCM_STATUS_TOKEN: 'token', GNOMISH_GITHUB_ACTIONS_TOKEN: 'token'], { request ->
                     new HttpCheckExchange.Response(200, 'ok')
-                } as HttpCheckExchange), null)
+                } as HttpCheckExchange), null, AgentEntryFixture.idle(equipment))
     }
 
     private com.github.oinsio.gnomish.domain.engine.port.Workspace workspaceOf(VerifyCheck.Executor check) {

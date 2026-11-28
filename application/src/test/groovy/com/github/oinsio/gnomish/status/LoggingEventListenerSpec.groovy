@@ -81,7 +81,7 @@ class LoggingEventListenerSpec extends Specification {
 
         when:
         def events = capture {
-            listener.onEvent(new EngineEvent.ExecutionFinished(key(), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed()))
+            listener.onEvent(new EngineEvent.ExecutionFinished(key(), Participants.transform('ghost', ExecutorUsage.none()), new RoundExecutor('ghost', null), new ExecutionResult.Completed()))
         }
 
         then:

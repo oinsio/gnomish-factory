@@ -8,7 +8,7 @@ import java.util.Map;
 
 /**
  * Derives a round's per-tool {@link ToolUsage} aggregates from the top-level
- * {@link ToolCall} trace {@link ToolTraceBuilder} builds (design D3): {@code
+ * {@link ToolCall} trace {@link com.github.oinsio.gnomish.adapter.agent.claude.ToolTraceBuilder} builds (design D3): {@code
  * ExecutorUsage.tools} is derived from the trace, never tracked separately, so
  * the trace stays the one source of truth (FR6).
  *

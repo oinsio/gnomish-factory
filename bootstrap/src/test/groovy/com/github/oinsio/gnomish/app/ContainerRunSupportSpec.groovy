@@ -15,11 +15,12 @@ import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
 import com.github.oinsio.gnomish.adapter.scm.actions.GithubActionsExecutor
 import com.github.oinsio.gnomish.adapter.scm.status.ScmStatusExecutor
 import com.github.oinsio.gnomish.app.port.TrackerWrite
+import com.github.oinsio.gnomish.app.port.agent.AnswerFileReading
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.git.PendingVerification
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
-import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
@@ -61,8 +62,7 @@ import spock.lang.TempDir
 /**
  * FR5, FR6, FR21, FR25, D19 of add-sandbox-core: the per-run container support bundle's terminal
  * and lifecycle operations, daemon-free over a scripted fake docker CLI — the aborted boundary
- * records on the branch and pushes best-effort, keep semantics dispose the fresh judge box while
- * stopping (not removing) the round box, {@code --discard-work} disposal tears down the round
+ * records on the branch and pushes best-effort, keep semantics stop (not remove) the round box, {@code --discard-work} disposal tears down the round
  * key's objects, and a disappeared branch is reported honestly.
  */
 class ContainerRunSupportSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture, RegisteredBranchFixture {
@@ -306,8 +306,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         given: 'a created task and a materialized box, about to be parked and kept'
         def support = support()
         createTask(support)
-        def attemptCommit = ClosedRounds.at(gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1').trim())
-        support.pieces(null).judgeEnvironments().environmentFor(new RecordedAttemptCommitWorkspace(attemptCommit))
+        support.lease().environmentFor('build')
         def beforePark = tipOfTaskBranch()
 
         when: 'the park lands its durable intent, then its receipt, and the box is kept'
@@ -341,26 +340,19 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         gitOutput(cloneDir, 'log', '--format=%s', "${since}..${tipOfTaskBranch()}").readLines()*.trim().findAll()
     }
 
-    // FR6, D9: keep semantics — the fresh judge box holds nothing durable and is disposed; the
-    // round box is stopped (never removed), keeping volume and network for salvage and resume.
-    def "keepStopped disposes the materialized judge box and stops the round box"() {
-        given: 'a judge box materialized for an attempt commit (scripted docker, self-check passes)'
+    // FR6: keep semantics — the round box is stopped (never removed), keeping volume and network for
+    // salvage and resume; a check's fresh box was released when its request ended (design D2 of
+    // extract-agent-round-runner), so nothing else is left to dispose.
+    def "keepStopped stops the round box"() {
+        given: 'a materialized round box'
         def support = support()
         createTask(support)
-        def attemptCommit = ClosedRounds.at(gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1').trim())
-        support.pieces(null).judgeEnvironments().environmentFor(new RecordedAttemptCommitWorkspace(attemptCommit))
+        support.lease().environmentFor('build')
 
         when:
         support.keepStopped()
 
-        then: 'the judge box (role suffix -j) is removed'
-        docker.runs.contains([
-            'rm',
-            '-f',
-            'gnomish-box-' + KEY + '-j'
-        ])
-
-        and: 'the round box is stopped, not removed'
+        then: 'the round box is stopped, not removed'
         docker.runs.contains(['stop', 'gnomish-box-' + KEY])
         !docker.runs.contains([
             'rm',
@@ -804,30 +796,20 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         support('T-1').branch() == 'gnomish/T-1'
     }
 
-    // D19: completeAndDispose is proven — via its real, observable effects, since its three
-    // collaborators are private fields with no seam for mock injection — to invoke all three of
-    // FreshJudgeEnvironments::disposeCurrent (the judge box is force-removed), EnvironmentLease::
-    // dispose (the round box is force-removed too, not merely stopped — unlike keepStopped), and
-    // the lifecycle push (the outcome commit reaches origin).
-    def "completeAndDispose disposes the judge box, disposes the round box, and pushes the outcome to origin"() {
-        given: 'a round box and a judge box both materialized'
+    // D19: completeAndDispose is proven — via its real, observable effects, since its collaborators
+    // are private fields with no seam for mock injection — to invoke both EnvironmentLease::dispose
+    // (the round box is force-removed, not merely stopped — unlike keepStopped) and the lifecycle
+    // push (the outcome commit reaches origin).
+    def "completeAndDispose disposes the round box and pushes the outcome to origin"() {
+        given: 'a round box materialized'
         def support = support()
         createTask(support)
         support.lease().environmentFor('build')
-        def attemptCommit = ClosedRounds.at(gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1').trim())
-        support.pieces(null).judgeEnvironments().environmentFor(new RecordedAttemptCommitWorkspace(attemptCommit))
 
         when:
         support.completeAndDispose(TaskState.atStageStart('build'))
 
-        then: 'the judge box (role suffix -j) was force-removed (FreshJudgeEnvironments::disposeCurrent)'
-        docker.runs.contains([
-            'rm',
-            '-f',
-            'gnomish-box-' + KEY + '-j'
-        ])
-
-        and: 'the round box was force-removed too — disposed, not merely stopped (EnvironmentLease::dispose)'
+        then: 'the round box was force-removed too — disposed, not merely stopped (EnvironmentLease::dispose)'
         docker.runs.contains([
             'rm',
             '-f',
@@ -929,7 +911,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         def pieces = support.pieces(null)
 
         when: 'the resume executor would restore an interrupted round into the pieces cell'
-        pieces.rounds().restore(new PendingVerification('abc123', 'work', 0, RoundToken.of('0a1b2c'), Optional.empty(), 'abc123', ['abc123']))
+        pieces.rounds().restore(new PendingVerification('abc123', 'work', 0, RoundToken.of('0a1b2c'), RoundClose.VERIFIABLE, new AnswerFileReading.Absent(), 'abc123', ['abc123']))
 
         then: 'the check workspace reads that round, and a second pieces bundle hands the same cell'
         support.workspace().attemptCommitSha() == 'abc123'
@@ -953,5 +935,22 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         noExceptionThrown()
         hasLeftovers
         docker.starts.any { it.contains('git status --porcelain') }
+    }
+
+    // FR11, NFR-R3 of extract-agent-round-runner (design D11, "Resume"): the box of a resumed pending
+    //     round is reset in the leased environment, so its poll runs at the registered commit.
+    def "discardLeftovers resets the currently leased environment's working copy to its HEAD"() {
+        given:
+        def support = support()
+        createTask(support)
+        support.lease().environmentFor('build')
+
+        when:
+        support.discardLeftovers()
+
+        then:
+        docker.starts.any {
+            it.contains('git reset --hard HEAD && git clean -fd')
+        }
     }
 }

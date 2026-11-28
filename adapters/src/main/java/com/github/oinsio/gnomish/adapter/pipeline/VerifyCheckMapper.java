@@ -33,7 +33,8 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Implements FR2, FR11, D2, D5, D5a of load-pipeline-config; FR9 of
  * add-external-check-github-actions; FR13, FR16 of add-sandbox-core; FR7, FR13 of
- * add-plugin-architecture; FR1, UX2, NFR-S1 of migrate-verify-to-executor-contract.
+ * add-plugin-architecture; FR1, UX2, NFR-S1 of migrate-verify-to-executor-contract; FR13, UX1 of
+ * extract-agent-round-runner (the judge's executor block, through the one block mapping).
  */
 final class VerifyCheckMapper {
 
@@ -99,9 +100,7 @@ final class VerifyCheckMapper {
             case VerifyCheckDto.Judge judge ->
                 new VerifyCheck.Judge(
                         PipelineMapper.orEmpty(judge.criteriaFile()),
-                        PipelineMapper.orEmpty(judge.model()),
-                        OpaqueSettings.copy(manifest, "verify[%d].settings".formatted(index), judge.settings(), errors),
-                        judge.votes() == null ? 0 : judge.votes());
+                        StageDefinitionMapper.mapJudgeExecutor(manifest, index, judge.executor(), errors));
         };
     }
 

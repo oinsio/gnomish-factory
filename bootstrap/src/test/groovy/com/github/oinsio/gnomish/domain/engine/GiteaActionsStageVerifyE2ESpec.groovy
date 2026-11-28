@@ -11,9 +11,9 @@ import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
+import com.github.oinsio.gnomish.domain.engine.port.PendingTurn
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.BuiltInExecutors
@@ -175,15 +175,27 @@ class GiteaActionsStageVerifyE2ESpec extends Specification implements BareGitRep
         def client = new GithubWorkflowRuns(new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(gitea.apiBaseUrl())), gitea.adminToken()), GiteaContainerFixture.ADMIN_USER, GiteaContainerFixture.REPO_NAME, clock)
         // The check round of the github-actions built-in over the live client, through the wrapper
         //     and the one contract → domain mapping (task 4.2f of migrate-verify-to-executor-contract).
-        def rounds = { StageExecutor.Request request ->
+        def bind = { StageExecutor.Request request ->
             new CheckRound(new GithubActionsExecutor(client, request.check(), request.workspace()), null, request.check())
-            .execute(request)
-        } as StageExecutor
+        }
+        def rounds = new StageExecutor() {
+                    @Override
+                    ExecutionResult execute(StageExecutor.Request request) {
+                        bind(request).execute(request)
+                    }
+
+                    @Override
+                    ExecutionResult poll(StageExecutor.Request request, PendingTurn turn) {
+                        bind(request).poll(request, turn)
+                    }
+                }
         def listener = new RecordingEventListener()
+        def persistence = new InMemoryAttemptPersistence()
+        def checkRounds = new CheckRounds(new EnginePorts(rounds, listener, persistence, time, RoundIdentity.inPlace()),
+                new PendingPoll(rounds, persistence, time, listener))
         new VerifyOrchestrator(
-                new PendingPoll(rounds, new InMemoryAttemptPersistence(), AttemptDelivery.assumedDelivered(), time,
-                listener),
-                new JudgeVoting(new ScriptedJudgeVoter()),
+                checkRounds,
+                DescribedExecutors.none(),
                 clock,
                 listener)
     }

@@ -114,7 +114,7 @@ class OptionalUsageSpec extends Specification {
         def attempt = AttemptRecords.of(0, AttemptRecord.Result.PASSED, Instant.parse("2026-07-16T14:35:10Z"), [], [
             Participants.transform(AttemptRecords.EXECUTOR, new ExecutorUsage(null, [],
             ['m': new ModelUsage(new TokenUsage(1, 2, 3, 4), new BigDecimal('0.25'))])),
-            Participants.verdict(Participants.JUDGE_EXECUTOR, 0, ['j': new ModelUsage(new TokenUsage(5, 6, 7, 8), null)])
+            Participants.verdict('claude', 0, ['j': new ModelUsage(new TokenUsage(5, 6, 7, 8), null)])
         ], [], Stop.none())
         def state = new TaskState(new Position.AtStage("review"), 0, [attempt], UsageFold.foldAll([attempt]), ExecutorVersions.none())
         def context = new TaskContext("manual-task-2", UntrustedText.tracker("Judged task"), UntrustedText.tracker("body"), [])

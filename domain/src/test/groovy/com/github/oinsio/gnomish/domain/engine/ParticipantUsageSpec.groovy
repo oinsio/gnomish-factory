@@ -14,7 +14,7 @@ class ParticipantUsageSpec extends Specification {
     private static final TokenUsage TOKENS = new TokenUsage(1, 2, 3, 4)
 
     private static ParticipantUsage entry(ExecutorRole role, Integer vote) {
-        new ParticipantUsage(role, 'agent-cli', vote, UsageProvenance.REPORTED, Duration.ofSeconds(1), [],
+        new ParticipantUsage(role, 'claude', vote, UsageProvenance.REPORTED, Duration.ofSeconds(1), [],
         ['m': new ModelUsage(TOKENS, null)])
     }
 
@@ -37,7 +37,7 @@ class ParticipantUsageSpec extends Specification {
     def "FR15: a verdict entry carries vote 0, and every other role none"() {
         expect:
         entry(ExecutorRole.VERDICT, 0).vote() == 0
-        entry(ExecutorRole.VERDICT, 0).executor() == 'agent-cli'
+        entry(ExecutorRole.VERDICT, 0).executor() == 'claude'
         entry(role, null).vote() == null
 
         where:

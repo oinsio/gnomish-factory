@@ -5,11 +5,11 @@ import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.engine.port.PendingTurn
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyingStages
@@ -20,7 +20,7 @@ import java.time.Instant
 import spock.lang.Specification
 
 /**
- * Shared fixture of the {@link PendingPoll} specs (design D2, D19, D21 of
+ * Shared fixture of the {@link PendingPoll} and {@link CheckRounds} specs (design D2, D19, D21 of
  * migrate-verify-to-executor-contract): the poll over fake ports on virtual time — a scripted {@code
  * StageExecutor} answering the check rounds, the in-memory persistence recording each pending write,
  * a virtual clock advanced only by the virtual sleeper — and builders for the round, the check and
@@ -73,24 +73,33 @@ abstract class PendingPollSpecBase extends Specification {
     }
 
     static PendingPollRecord entry(CheckRef check, String key, Instant since, RoundToken token = TOKEN, int attempt = 0) {
-        new PendingPollRecord(check, attempt, token, new PendingKey(key), since)
+        new PendingPollRecord(new PendingSubject.Check(check), attempt, token, new PendingKey(key), since)
     }
 
-    PendingPoll poll(ScriptedExecutor executor, AttemptDelivery delivery = AttemptDelivery.assumedDelivered()) {
-        new PendingPoll(executor, persistence, delivery, VirtualTimeEquipment.on(clock, sleeper), events)
+    /** The one owner of pending work, over the fake ports and virtual time. */
+    PendingPoll poll(ScriptedExecutor executor) {
+        new PendingPoll(executor, persistence, VirtualTimeEquipment.on(clock, sleeper), events)
     }
 
-    /** The verify chain with {@code poll} as the owner of its executor checks' rounds. */
-    VerifyOrchestrator orchestrator(PendingPoll poll) {
-        new VerifyOrchestrator(poll, new JudgeVoting(new ScriptedJudgeVoter()), clock, new RecordingEventListener())
+    /** A check's entry into {@link #poll}, its polled checks asked behind {@code delivery}. */
+    CheckRounds checkRounds(ScriptedExecutor executor, AttemptDelivery delivery = AttemptDelivery.assumedDelivered()) {
+        def time = VirtualTimeEquipment.on(clock, sleeper)
+        def ports = new EnginePorts(executor, events, persistence, time, delivery, DescribedExecutors.none(),
+                RoundIdentity.inPlace())
+        new CheckRounds(ports, poll(executor))
+    }
+
+    /** The verify chain with {@code checkRounds} as the owner of its executor checks' rounds. */
+    VerifyOrchestrator orchestrator(CheckRounds checkRounds) {
+        new VerifyOrchestrator(checkRounds, DescribedExecutors.none(), clock, new RecordingEventListener())
     }
 
     /** The turns the executor was asked with, in order: null for a start, else origin and key. */
     static List<List<Object>> turns(ScriptedExecutor executor) {
-        executor.requests.collect {
-            it.pending() == null ? null : [
-                it.pending().origin(),
-                it.pending().key().value()
+        executor.turns.collect {
+            it == null ? null : [
+                it.origin(),
+                it.key().value()
             ]
         }
     }

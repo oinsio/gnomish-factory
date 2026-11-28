@@ -26,13 +26,13 @@ class EngineEventTaskIdSpec extends Specification {
         new CheckResult(sampleCheckRef(), new Verdict.Pass(null, []), Duration.ofMillis(5))
     }
 
-    private static EngineEvent.CheckPolled samplePolled(AttemptKey key = sampleKey()) {
-        new EngineEvent.CheckPolled(key, sampleCheckRef(), 'scm-status', UntrustedText.subprocess('k-1'),
+    private static EngineEvent.PendingPolled samplePolled(AttemptKey key = sampleKey()) {
+        new EngineEvent.PendingPolled(key, new PendingSubject.Check(sampleCheckRef()), 'scm-status', UntrustedText.subprocess('k-1'),
                 PendingTurn.Origin.ISSUED, Duration.ofSeconds(30), Duration.ofMinutes(9))
     }
 
-    private static EngineEvent.CheckTimedOut sampleTimedOut(AttemptKey key = sampleKey()) {
-        new EngineEvent.CheckTimedOut(key, sampleCheckRef(), 'scm-status', UntrustedText.subprocess('k-1'),
+    private static EngineEvent.PendingTimedOut sampleTimedOut(AttemptKey key = sampleKey()) {
+        new EngineEvent.PendingTimedOut(key, new PendingSubject.Check(sampleCheckRef()), 'scm-status', UntrustedText.subprocess('k-1'),
                 Duration.ofMinutes(10), new ExecutionResult.Failed(ExecutionResult.FailureClass.QUALITY,
                 UntrustedText.factory('timed out'), [], null))
     }
@@ -58,10 +58,10 @@ class EngineEventTaskIdSpec extends Specification {
         description | event
         'RunStarted' | new EngineEvent.RunStarted('t1', new Position.AtStage('build'), 0)
         'AttemptStarted' | new EngineEvent.AttemptStarted(sampleKey())
-        'ExecutionFinished' | new EngineEvent.ExecutionFinished(sampleKey(), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed())
+        'ExecutionFinished' | new EngineEvent.ExecutionFinished(sampleKey(), Participants.transform('ghost', ExecutorUsage.none()), new RoundExecutor('ghost', null), new ExecutionResult.Completed())
         'CheckStarted' | new EngineEvent.CheckStarted(sampleKey(), sampleCheckRef())
-        'CheckPolled' | samplePolled()
-        'CheckTimedOut' | sampleTimedOut()
+        'PendingPolled' | samplePolled()
+        'PendingTimedOut' | sampleTimedOut()
         'CheckFinished' | new EngineEvent.CheckFinished(sampleKey(), sampleCheckResult(), null)
         'AttemptFinished' | new EngineEvent.AttemptFinished(sampleKey(), sampleState(), sampleTrace())
         'TaskFinished' | new EngineEvent.TaskFinished('t1', sampleOutcome())
@@ -78,10 +78,10 @@ class EngineEventTaskIdSpec extends Specification {
         where:
         description | event
         'AttemptStarted' | new EngineEvent.AttemptStarted(new AttemptKey('t1', 'build', 0))
-        'ExecutionFinished' | new EngineEvent.ExecutionFinished(new AttemptKey('t1', 'build', 0), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed())
+        'ExecutionFinished' | new EngineEvent.ExecutionFinished(new AttemptKey('t1', 'build', 0), Participants.transform('ghost', ExecutorUsage.none()), new RoundExecutor('ghost', null), new ExecutionResult.Completed())
         'CheckStarted' | new EngineEvent.CheckStarted(new AttemptKey('t1', 'build', 0), sampleCheckRef())
-        'CheckPolled' | samplePolled(new AttemptKey('t1', 'build', 0))
-        'CheckTimedOut' | sampleTimedOut(new AttemptKey('t1', 'build', 0))
+        'PendingPolled' | samplePolled(new AttemptKey('t1', 'build', 0))
+        'PendingTimedOut' | sampleTimedOut(new AttemptKey('t1', 'build', 0))
         'CheckFinished' | new EngineEvent.CheckFinished(new AttemptKey('t1', 'build', 0), sampleCheckResult(), null)
         'AttemptFinished' | new EngineEvent.AttemptFinished(new AttemptKey('t1', 'build', 0), sampleState(), sampleTrace())
     }
@@ -95,10 +95,10 @@ class EngineEventTaskIdSpec extends Specification {
         description | event
         'RunStarted' | new EngineEvent.RunStarted('t1', new Position.AtStage('build'), 0)
         'AttemptStarted' | new EngineEvent.AttemptStarted(sampleKey())
-        'ExecutionFinished' | new EngineEvent.ExecutionFinished(sampleKey(), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed())
+        'ExecutionFinished' | new EngineEvent.ExecutionFinished(sampleKey(), Participants.transform('ghost', ExecutorUsage.none()), new RoundExecutor('ghost', null), new ExecutionResult.Completed())
         'CheckStarted' | new EngineEvent.CheckStarted(sampleKey(), sampleCheckRef())
-        'CheckPolled' | samplePolled()
-        'CheckTimedOut' | sampleTimedOut()
+        'PendingPolled' | samplePolled()
+        'PendingTimedOut' | sampleTimedOut()
         'CheckFinished' | new EngineEvent.CheckFinished(sampleKey(), sampleCheckResult(), null)
         'AttemptFinished' | new EngineEvent.AttemptFinished(sampleKey(), sampleState(), sampleTrace())
         'TaskFinished' | new EngineEvent.TaskFinished('t1', sampleOutcome())
@@ -110,8 +110,8 @@ class EngineEventTaskIdSpec extends Specification {
             case EngineEvent.AttemptStarted: return 'AttemptStarted'
             case EngineEvent.ExecutionFinished: return 'ExecutionFinished'
             case EngineEvent.CheckStarted: return 'CheckStarted'
-            case EngineEvent.CheckPolled: return 'CheckPolled'
-            case EngineEvent.CheckTimedOut: return 'CheckTimedOut'
+            case EngineEvent.PendingPolled: return 'PendingPolled'
+            case EngineEvent.PendingTimedOut: return 'PendingTimedOut'
             case EngineEvent.CheckFinished: return 'CheckFinished'
             case EngineEvent.AttemptFinished: return 'AttemptFinished'
             case EngineEvent.TaskFinished: return 'TaskFinished'

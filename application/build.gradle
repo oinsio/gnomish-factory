@@ -56,10 +56,10 @@ dependencies {
     // `api`: the resolver's own input and decision values appear on the use cases'
     // signatures, so the composition root compiles against them too.
     api project(':baseref')
-    // The executor contract (FR6, design D10 of define-executor-contract): the agent's decision
-    // file is a result file, read through the contract's one result reader by the decision-request
-    // read both round sources share (`DecisionRequestRead`), whose `ResultSource` parameter sits on
-    // this module's own surface — so the edge is `api`.
+    // The executor contract (FR6, design D10 of define-executor-contract): an answer file is a
+    // result file, read through the contract's one result reader by the one answer read
+    // (`AnswerFileRead`, FR21 of extract-agent-round-runner), whose `ResultSource` parameter and
+    // `Answer` result sit on this module's own surface — so the edge is `api`.
     api project(':executor-contract')
     api project(':pendingkey') // `PendingAdoption.adopt` takes the leaf's `PendingKey` (D14, D20)
 

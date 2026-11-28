@@ -91,7 +91,11 @@ abstract class CredentialDeliverySpecBase extends Specification implements BareG
     }
 
     protected ContainerRunSupport startTask(PipelineDefinition law, ChildEnvAllowlist installation) {
-        def image = FakeAgentSandboxImage.ensureBuilt('plain-round')
+        startTask(law, installation, FakeAgentSandboxImage.ensureBuilt('plain-round'))
+    }
+
+    /** {@link #startTask(PipelineDefinition, ChildEnvAllowlist)} on the box image {@code image}. */
+    protected ContainerRunSupport startTask(PipelineDefinition law, ChildEnvAllowlist installation, String image) {
         def sandbox = new SandboxProperties(image, null, null, null, [], false, null, null, null, null)
         project = initWorkingRepo(tempDir, 'program-credential-project')
         Files.createDirectories(project.resolve('.gnomish'))

@@ -1,11 +1,13 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.adapter.agent.CliJudgeVoter
 import com.github.oinsio.gnomish.adapter.agent.ResumeVerificationStageExecutor
 import com.github.oinsio.gnomish.adapter.check.PinCheck
 import com.github.oinsio.gnomish.adapter.check.http.HttpRunContext
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
+import com.github.oinsio.gnomish.app.port.agent.AnswerFileReading
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
+import com.github.oinsio.gnomish.app.port.git.ClosedRound
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.git.HostGitRounds
 import com.github.oinsio.gnomish.app.port.git.PendingVerification
@@ -56,15 +58,15 @@ class ExecutorAdapterSelectorSpec extends Specification implements AppAssemblyFi
     /** The pin-check of a run whose law is a working tree with no repository: no check here declares a pin. */
     static final PinCheck PINS = RunLaw.open(LawBinding.workingTree(Path.of('/tmp/law'))).pinCheck()
 
-    private static SandboxRunPieces pieces() {
+    private static SandboxRunPieces pieces(CurrentRound cell = new CurrentRound(), PendingVerification pending = null) {
         new SandboxRunPieces(
                 [openRound: { req ->
                         null
                     }, identity: {
                         RoundIdentity.inPlace()
                     }] as RoundEnvironmentSource,
-                null, null, null, null, null,
-                new CurrentRound(), null)
+                null, null, null, null,
+                cell, pending)
     }
 
     // FR7, D6, D10; FR2 of remove-interactive-console: the manifest-driven host CLI executor when
@@ -124,7 +126,7 @@ class ExecutorAdapterSelectorSpec extends Specification implements AppAssemblyFi
     // no-salvage owner found, so the interrupted round re-verifies without its stage executor.
     def "stageExecutor resumes a host interrupted verification over the run's cell without the stage chain"() {
         given:
-        def run = RunRound.of(new PendingVerification('snap', 'build', 0, RoundToken.of('0a1b2c'), Optional.empty(), 'snap', ['snap']))
+        def run = RunRound.of(new PendingVerification('snap', 'build', 0, RoundToken.of('0a1b2c'), RoundClose.VERIFIABLE, new AnswerFileReading.Absent(), 'snap', ['snap']))
         def chain = Mock(StageExecutor)
         def decoration = Stub(HostGitRounds) {
             decorate(_, _) >> { RoundEnvironmentSource rounds, CurrentRound cell ->
@@ -135,6 +137,9 @@ class ExecutorAdapterSelectorSpec extends Specification implements AppAssemblyFi
         def executor = ExecutorAdapterSelector.stageRounds(newAssembly().withHostGitPush(decoration, run), childEnv, law,
                 described, definition, HttpRunContext.none(), PINS).executor()
 
+        expect: 'FR11 of extract-agent-round-runner (D11, "Resume"): the run\'s assembly restored the cell before any request'
+        run.rounds().closed() == new ClosedRound(RoundToken.of('0a1b2c'), 'snap', 'snap', RoundClose.VERIFIABLE)
+
         when:
         def result = executor.execute(request('build', 0))
 
@@ -142,6 +147,26 @@ class ExecutorAdapterSelectorSpec extends Specification implements AppAssemblyFi
         0 * chain.execute(_)
         result.status() instanceof ExecutionResult.Completed
         run.rounds().closed().attemptCommit() == 'snap'
+    }
+
+    // FR11, NFR-R3 of extract-agent-round-runner (D11, "Resume"): the cell has one recovery producer,
+    //     the run's assembly — a pending round is restored there, pending, with its registered chain,
+    //     so the engine reads the round's entry against its token before any request
+    def "a container run's assembly restores a pending round into the run's cell before any request"() {
+        given:
+        def cell = new CurrentRound()
+        def token = RoundToken.of('0a1b2c')
+        def pending = new PendingVerification('psnap', 'build', 0, token, RoundClose.PENDING, new AnswerFileReading.Absent(),
+                'pend', ['pend', 'psnap'])
+
+        when:
+        ExecutorAdapterSelector.stageRounds(newAssembly().withSandbox(pieces(cell, pending)), childEnv, law, described,
+                definition, HttpRunContext.none(), PINS)
+
+        then:
+        cell.pendingToken() == Optional.of(token)
+        cell.snapshot().get() == new ClosedRound(token, 'psnap', 'pend', RoundClose.PENDING)
+        cell.registeredChain() == ['pend', 'psnap']
     }
 
     private static StageExecutor.Request request(String stage, int attempt) {
@@ -200,7 +225,7 @@ class ExecutorAdapterSelectorSpec extends Specification implements AppAssemblyFi
         def rounds = ExecutorAdapterSelector.stageRounds(newAssembly().withSandbox(pieces()), childEnv, this.law, described,
                 law, HttpRunContext.none(), PINS)
         def request = new StageExecutor.Request(new TaskContext('TASK-1', UntrustedText.tracker('t'),
-                UntrustedText.tracker('b'), []), law.stages()[0], new DirectoryWorkspace(workingCopy), 0, [], check, CheckRef.of(0, check), null)
+                UntrustedText.tracker('b'), []), law.stages()[0], new DirectoryWorkspace(workingCopy), 0, [], check, CheckRef.of(0, check))
 
         when:
         def result = rounds.port().execute(request)
@@ -209,16 +234,5 @@ class ExecutorAdapterSelectorSpec extends Specification implements AppAssemblyFi
         rounds.executor() instanceof ResumeVerificationStageExecutor
         def answer = (result.answer() as ExecutionResult.VerdictReply).answer() as VerdictAnswer.Sarif
         answer.results()*.finding()*.location() == ['absent.txt']
-    }
-
-    // FR2 of remove-interactive-console: the judge-voter twin of the same binding, host-mode.
-    def "judgeVoter binds the manifest-driven CLI judge in host mode"() {
-        when:
-        def voter = ExecutorAdapterSelector.judgeVoter(
-                testProperties(), new VirtualClock(), childEnv, law, null)
-
-        then:
-        voter != null
-        voter instanceof CliJudgeVoter
     }
 }

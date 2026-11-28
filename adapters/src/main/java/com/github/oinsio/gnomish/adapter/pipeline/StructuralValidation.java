@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.pipeline;
 
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
+import com.github.oinsio.gnomish.domain.pipeline.MechanismFieldErrors;
 import java.util.ArrayList;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -38,7 +39,7 @@ import org.jspecify.annotations.Nullable;
  * are optional at this layer: an absent section is not a structural problem.
  *
  * <p><b>Tighten-only sandbox policy (FR14 of add-sandbox-core).</b> This tier
- * also enforces that a stage's Mechanism {@code sandbox} block never names a
+ * also enforces, through {@link ExecutorBlockShape} (the shape of every executor block), that a stage's Mechanism {@code sandbox} block never names a
  * {@code binding} — adapter binding and any weakening are operator-only,
  * living solely in factory installation config; a repo may only tighten
  * (declare needs, {@code requiresFresh}). It is caught here, at the wire, so
@@ -50,14 +51,12 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Implements FR5 of load-pipeline-config; FR14 of add-sandbox-core (the
  * tighten-only sandbox check); FR1, FR2 of add-command-executor (the {@code command} token and
- * the blank Mechanism fields).
+ * the blank Mechanism fields); FR13, UX1 of extract-agent-round-runner (the same block checks for a
+ * {@code judge} check's executor block).
  */
 public final class StructuralValidation {
 
     private static final String PIPELINE = "pipeline.yaml";
-
-    /** The known executor wire values (the domain {@code ExecutorType} enum); {@link BlankMechanismFields} reads them. */
-    static final List<String> EXECUTOR_TYPES = List.of("api", "agent-cli", "program", "command");
 
     /** The known advancement wire values (the domain {@code AdvancementMode} enum). */
     private static final List<String> ADVANCEMENT_MODES = List.of("auto", "manual");
@@ -83,8 +82,9 @@ public final class StructuralValidation {
     /**
      * Checks one {@code stage.yaml} manifest's shape: the required
      * scalar sections ({@code purpose}, {@code executor} with its {@code type},
-     * {@code instructions}, {@code advancement}), the two raw-string enums, and
-     * the per-element required ids of any declared outputs/internal inputs.
+     * {@code instructions}, {@code advancement}), the two raw-string enums, the
+     * per-element required ids of any declared outputs/internal inputs, and the
+     * shape of each {@code judge} check's executor block.
      *
      * <p>Implements FR5 of load-pipeline-config.
      *
@@ -97,11 +97,14 @@ public final class StructuralValidation {
         requirePresent(errors, file, "purpose", stage.purpose());
         checkInputs(errors, file, stage.inputs());
         checkOutputs(errors, file, stage.outputs());
-        checkExecutor(errors, file, stage.executor());
-        BlankMechanismFields.check(errors, file, stage.executor());
-        checkSandbox(errors, file, stage.executor());
+        if (stage.executor() == null) {
+            errors.add(new ConfigError(file, MechanismFieldErrors.STAGE_BLOCK, "missing required field 'executor'"));
+        } else {
+            ExecutorBlockShape.check(errors, file, MechanismFieldErrors.STAGE_BLOCK, stage.executor());
+        }
         requirePresent(errors, file, "instructions", stage.instructions());
         checkAdvancement(errors, file, stage.advancement());
+        ExecutorBlockShape.checkJudges(errors, file, stage.verify());
         return List.copyOf(errors);
     }
 
@@ -126,50 +129,6 @@ public final class StructuralValidation {
             if (outputs.get(i).id() == null) {
                 errors.add(new ConfigError(file, "outputs[%d].id".formatted(i), "missing required field 'id'"));
             }
-        }
-    }
-
-    private static void checkExecutor(List<ConfigError> errors, String file, @Nullable ExecutorDto executor) {
-        if (executor == null) {
-            errors.add(new ConfigError(file, "executor", "missing required field 'executor'"));
-            return;
-        }
-        String type = executor.type();
-        if (type == null) {
-            errors.add(new ConfigError(file, "executor.type", "missing required field 'executor.type'"));
-            return;
-        }
-        if (!EXECUTOR_TYPES.contains(type)) {
-            errors.add(new ConfigError(
-                    file,
-                    "executor.type",
-                    "unknown executor '%s'; known executors are %s".formatted(type, join(EXECUTOR_TYPES))));
-        }
-    }
-
-    /**
-     * Tighten-only enforcement of the Mechanism's {@code sandbox} block (FR14 of
-     * add-sandbox-core): a repo may declare needs and {@code requiresFresh}
-     * (both tighten), but never a {@code binding} — naming a concrete adapter
-     * ({@code container}, …) or requesting host execution ({@code host}) is an
-     * operator-only decision that lives solely in factory installation config.
-     * A declared {@code binding} is therefore a located error, so the manifest
-     * cannot weaken its own isolation. Any other weakening spelling is already
-     * closed by Jackson's unknown-field capture ({@link StructuralParse}). An
-     * absent {@code sandbox} or {@code binding} is the correct, tightening-only
-     * form and yields nothing.
-     */
-    private static void checkSandbox(List<ConfigError> errors, String file, @Nullable ExecutorDto executor) {
-        if (executor == null || executor.sandbox() == null) {
-            return;
-        }
-        String binding = executor.sandbox().binding();
-        if (binding != null) {
-            errors.add(new ConfigError(
-                    file,
-                    "executor.sandbox.binding",
-                    "repo may not declare a sandbox binding '%s'; adapter binding and any weakening live only in factory installation config (a stage manifest may only tighten)"
-                            .formatted(binding)));
         }
     }
 

@@ -2,7 +2,9 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.workspace.fake.AttemptCommitWorkspaces
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
-import com.github.oinsio.gnomish.domain.engine.JudgeVoting
+import com.github.oinsio.gnomish.domain.engine.CheckRounds
+import com.github.oinsio.gnomish.domain.engine.DescribedExecutors
+import com.github.oinsio.gnomish.domain.engine.EnginePorts
 import com.github.oinsio.gnomish.domain.engine.PendingPoll
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -11,11 +13,10 @@ import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.VerifyOrchestrator
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
-import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.Threshold
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyingStages
@@ -38,7 +39,7 @@ import spock.lang.TempDir
  * FR2, FR20 of migrate-verify-to-executor-contract (design D20): a pending key over {@link
  * PendingKey#MAX_LENGTH} is refused where the contract result is read ({@code ResultReading}), so the
  * check round's wrapper maps a {@code failed/infrastructure} naming the cap, and the verify chain —
- * {@link VerifyOrchestrator} over {@link PendingPoll}, the production path every check takes since
+ * {@link VerifyOrchestrator} over {@link CheckRounds} and {@link PendingPoll}, the production path every check takes since
  * task 4.2f — resolves the check as cannot-verify with no pending write and no poll.
  */
 class OversizedPendingKeySpec extends Specification {
@@ -78,9 +79,11 @@ class OversizedPendingKeySpec extends Specification {
         Duration.ofMinutes(2), VerifyCheck.TimeoutClass.QUALITY, [], VerifyCheck.VerifyIn.FRESH_BOX, Threshold.ERROR, [])
         def persistence = new InMemoryAttemptPersistence()
         def listener = new RecordingEventListener()
-        def chain = new VerifyOrchestrator(new PendingPoll(new CheckRound(bound, null, ci), persistence,
-                AttemptDelivery.assumedDelivered(), VirtualTimeEquipment.on(clock, sleeper), listener),
-                new JudgeVoting(new ScriptedJudgeVoter()), clock, listener)
+        def rounds = new CheckRound(bound, null, ci)
+        def time = VirtualTimeEquipment.on(clock, sleeper)
+        def checkRounds = new CheckRounds(new EnginePorts(rounds, listener, persistence, time, RoundIdentity.inPlace()),
+                new PendingPoll(rounds, persistence, time, listener))
+        def chain = new VerifyOrchestrator(checkRounds, DescribedExecutors.none(), clock, listener)
 
         when:
         def result = chain.verify(VerifyingStages.of([ci]), new TaskContext('TASK-1', UntrustedText.tracker('t'),

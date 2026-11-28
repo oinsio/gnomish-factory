@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.app
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.adapter.agent.CliJudgeVoter
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.agent.LoggingAgentProgressListener
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
@@ -12,6 +11,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.pipeline.*
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
@@ -62,7 +62,7 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
                 // The judge check makes criteria.md part of the pipeline law frozen at assemble
                 // time, so the wired CLI judge voter grades against it (D14 of add-sandbox-core).
                 [
-                    new VerifyCheck.Judge('criteria.md', 'claude-fake-judge-1', [:], 1)
+                    JudgeChecks.agent('criteria.md', 'claude-fake-judge-1')
                 ],
                 new AutonomyLimits(3),
                 AdvancementMode.AUTO)
@@ -94,10 +94,9 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         // Assertion by effect: CheckRoundRouteSpec and ExecutorAdapterSelectorSpec route the requests.
         then:
         run.ports().executor().class == CheckRoundRoute
-        run.ports().judgeVoter().class == CliJudgeVoter
     }
 
-    // FR7, NFR-O1, UX1, D10, task 9.4: the wired CliStageExecutor's rounds reach the shared
+    // FR7, NFR-O1, UX1, D10, task 9.4: the wired claude entry's rounds reach the shared
     // SLF4J renderer — proven end to end against the fake agent binary's plain-round scenario.
     def "the wired CLI stage executor's round reaches the renderer"() {
         given:
@@ -127,31 +126,6 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         loggedEvents.any {
             it.formattedMessage.contains('tool started') && it.formattedMessage.contains('Write')
         }
-        loggedEvents.any { it.formattedMessage.contains('round finished') }
-    }
-
-    // FR7, D10, task 9.4: the wired CliJudgeVoter's round reaches the shared renderer too
-    // (judge rounds feed the same log renderer as executor rounds, per design D10).
-    // Scenario: executor/agent-executor / Judge rounds feed the same listeners
-    def "the wired CLI judge voter's round reaches the renderer"() {
-        given:
-        Files.createDirectories(workspaceDir.resolve('.gnomish'))
-        Files.writeString(workspaceDir.resolve('.gnomish/criteria.md'), 'The output must be correct.')
-        def assembly = newAssembly(fakeAgentProperties('judge-verdict-pass'))
-        def run = assembly.assemble(new RunOrder(workspaceDir, null, definition(), false),
-                context('task-1'), initialState(),
-                new InMemoryAttemptPersistence(), [], new DescribedLaw(LawBinding.workingTree(workspaceDir), [:]))
-
-        def check = new VerifyCheck.Judge(
-                'criteria.md', 'claude-fake-judge-1', [:], 1)
-
-        when:
-        def loggedEvents = capture {
-            run.ports().judgeVoter().vote(check, context('task-1'), new DirectoryWorkspace(workspaceDir))
-        }
-
-        then:
-        loggedEvents.any { it.formattedMessage.contains('round started') }
         loggedEvents.any { it.formattedMessage.contains('round finished') }
     }
 }

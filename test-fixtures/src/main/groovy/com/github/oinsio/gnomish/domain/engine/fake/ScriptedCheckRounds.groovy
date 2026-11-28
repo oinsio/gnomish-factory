@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.PendingState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.VerdictAnswer
+import com.github.oinsio.gnomish.domain.engine.port.PendingTurn
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.pendingkey.PendingKey
@@ -37,6 +38,9 @@ class ScriptedCheckRounds implements StageExecutor {
     /** Every check round's request, in call order. */
     final List<StageExecutor.Request> requests = []
 
+    /** Every check round's turn, in call order: {@code null} for a {@code start}, the poll's turn for a {@code poll}. */
+    final List<PendingTurn> turns = []
+
     /** When non-null, a check round throws this instead of answering. */
     RuntimeException toThrow = null
 
@@ -54,10 +58,21 @@ class ScriptedCheckRounds implements StageExecutor {
 
     @Override
     ExecutionResult execute(StageExecutor.Request request) {
+        answer(request, null)
+    }
+
+    /** A check's poll is a check round of its own: it consumes the script, its turn recorded in {@link #turns}. */
+    @Override
+    ExecutionResult poll(StageExecutor.Request request, PendingTurn turn) {
+        answer(request, turn)
+    }
+
+    private ExecutionResult answer(StageExecutor.Request request, PendingTurn turn) {
         if (request.check() == null) {
             throw new IllegalStateException('ScriptedCheckRounds was asked for a stage round of ' + request.stage()?.name())
         }
         requests << request
+        turns << turn
         calls << request.check()
         if (toThrow != null) {
             throw toThrow

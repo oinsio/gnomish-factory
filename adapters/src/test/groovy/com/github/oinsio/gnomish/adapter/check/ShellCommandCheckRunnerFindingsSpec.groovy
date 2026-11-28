@@ -57,6 +57,7 @@ exit 1''')
 
     // Scenario: verification/verdict-executors / A broken reporter cannot mask a red command
     // Scenario: verification/verdict-executors / A malformed findings file is logged
+    // Scenario: executor/result-channel / A garbage findings file keeps its synthetic finding
     def "a malformed findings file on a red command is warned about and the synthetic result stands"() {
         given: 'a command that exits 1 and writes unparseable JSON to the findings file'
         def check = command('echo boom-output; echo "not valid json {{{" > "$GNOMISH_FINDINGS_FILE"; exit 1')

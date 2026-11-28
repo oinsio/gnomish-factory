@@ -126,7 +126,7 @@ final class StatusReportReferenceFixture {
      * the spec's canonical example shows (FR15 of define-executor-contract).
      */
     private static ParticipantUsage executed() {
-        new ParticipantUsage(ExecutorRole.TRANSFORM, 'agent-cli', null, UsageProvenance.REPORTED, Duration.ofMillis(183000),
+        new ParticipantUsage(ExecutorRole.TRANSFORM, 'claude', null, UsageProvenance.REPORTED, Duration.ofMillis(183000),
                 [
                     new ToolUsage('Edit', 4, Duration.ofMillis(2100))
                 ],

@@ -10,8 +10,10 @@ import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Participants
+import com.github.oinsio.gnomish.domain.engine.PendingState
 import com.github.oinsio.gnomish.domain.engine.RoundExecutor
 import com.github.oinsio.gnomish.domain.engine.TaskContext
+import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.Verdict
@@ -20,7 +22,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
@@ -34,6 +35,7 @@ import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
+import com.github.oinsio.gnomish.pendingkey.PendingKey
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
 import com.github.oinsio.gnomish.serveobservability.json.LedgerJson
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -82,8 +84,9 @@ class RoundOutcomeLedgerWriterSpec extends Specification implements RotatingLedg
         }
     }
 
-    /** Runs the lint stage, naming {@code executorName} when given (a program stage), else agent-cli. */
-    private void runLintStage(DescribedExecutors described, String executorName = null) {
+    /** Runs the lint stage, naming {@code executorName} when given (a program stage), else the agent entry claude. */
+    private TaskOutcome runLintStage(DescribedExecutors described, String executorName = null,
+            InMemoryAttemptPersistence persistence = new InMemoryAttemptPersistence()) {
         def mechanism = executorName == null
                 ? new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'm', [:])
                 : new StageDefinition.Executor(ExecutorType.PROGRAM, '', [:], Sandbox.none(), executorName)
@@ -92,7 +95,7 @@ class RoundOutcomeLedgerWriterSpec extends Specification implements RotatingLedg
             VerifyChecks.builtin('files_exist', [:])
         ], new AutonomyLimits(3), AdvancementMode.AUTO)
         def clock = new VirtualClock(NOW)
-        def ports = new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), writer(), new InMemoryAttemptPersistence(), VirtualTimeEquipment.on(clock),
+        def ports = new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), writer(), persistence, VirtualTimeEquipment.on(clock),
                 AttemptDelivery.assumedDelivered(), described, RoundIdentity.inPlace())
         new Engine().run(new PipelineDefinition('1', new AutonomyLimits(5), [stage]), CONTEXT,
         TaskState.atStageStart('lint'), new FakeWorkspace(), ports)
@@ -107,7 +110,7 @@ class RoundOutcomeLedgerWriterSpec extends Specification implements RotatingLedg
     def "a completed program stage round writes one roundOutcome line naming executor, version, role and status"() {
         given: 'the lint stage names lint-bot, which the run describes at version 2.3.1'
         def described = new DescribedExecutors(
-                new ExecutorVersions(['lint-bot': UntrustedText.subprocess('2.3.1')]), com.github.oinsio.gnomish.domain.engine.ExecutorCredentialNames.none())
+                new ExecutorVersions(['lint-bot': UntrustedText.subprocess('2.3.1')]), com.github.oinsio.gnomish.domain.engine.ExecutorCredentialNames.none(), [] as Set)
         executor.scripted << result(new ExecutionResult.Completed(), 0)
         builtinRunner.scripted << new Verdict.Pass(null, [])
 
@@ -129,9 +132,42 @@ class RoundOutcomeLedgerWriterSpec extends Specification implements RotatingLedg
             role : 'transform',
             status : 'completed',
             check : null,
-            resumedKey : null
+            resumedKey : null,
+            pendingKey : null
         ]
-        lines[1] == lines[0] + [executor: VerifyCheck.Executor.FILES_EXIST, role: 'verdict', check: 0]
+        lines[1] == lines[0] + [executor: VerifyCheck.Executor.FILES_EXIST + '@built-in', role: 'verdict', check: 0]
+    }
+
+    // Scenario: pipeline/stage-engine / Completed poll closes the round
+    // FR10, UX3 of extract-agent-round-runner: a program transform round declaring poll goes pending,
+    //     is polled to completed, closes with no pending record, runs its verify chain, and its line
+    //     shows the key it went pending with
+    def "a pending program round polled to completed closes with its verify chain and a pending key on its line"() {
+        given: 'remote-agent declares poll; its start answers pending, its poll completed'
+        def described = new DescribedExecutors(
+                new ExecutorVersions(['remote-agent': UntrustedText.subprocess('1')]),
+                com.github.oinsio.gnomish.domain.engine.ExecutorCredentialNames.none(), ['remote-agent'] as Set)
+        executor.scripted << result(new ExecutionResult.Pending(new PendingKey('job-42'), null, PendingState.RUNNING, null, null), 0)
+        executor.scripted << result(new ExecutionResult.Completed(), 0)
+        builtinRunner.scripted << new Verdict.Pass(null, [])
+        def persistence = new InMemoryAttemptPersistence()
+
+        when:
+        def outcome = runLintStage(described, 'remote-agent', persistence)
+
+        then: 'the round closed: the verify chain ran and the closing state carries no pending record'
+        outcome instanceof TaskOutcome.Completed
+        builtinRunner.calls.size() == 1
+        persistence.pending.size() == 1
+        persistence.entries.size() == 1
+        persistence.entries[0].state.pendingPolls().isEmpty()
+
+        and: 'the round\'s line shows the key it went pending with, and the status the poll ended on'
+        def round = ledgerLines()[0]
+        round.role == 'transform'
+        round.status == 'completed'
+        round.pendingKey == 'job-42'
+        round.resumedKey == null
     }
 
     // NFR-O2, UX3: every round has its line — a quality retry, then an unrecorded infrastructure failure
@@ -154,12 +190,12 @@ class RoundOutcomeLedgerWriterSpec extends Specification implements RotatingLedg
         } == [
             [
                 0,
-                'agent-cli',
+                'claude@built-in',
                 'failed/quality'
             ],
             [
                 1,
-                'agent-cli',
+                'claude@built-in',
                 'failed/infrastructure'
             ]
         ]
@@ -176,8 +212,8 @@ class RoundOutcomeLedgerWriterSpec extends Specification implements RotatingLedg
         given: 'a regular file where the ledger directory belongs, so every append fails'
         Files.writeString(serveDir(), 'not a directory')
         def logs = LogCaptureSupport.attach(RoundOutcomeLedgerWriter)
-        def finished = new EngineEvent.ExecutionFinished(new AttemptKey('TASK-9', 'lint', 0), Participants.transform('agent-cli', ExecutorUsage.none()),
-                new RoundExecutor('agent-cli', null), new ExecutionResult.Completed())
+        def finished = new EngineEvent.ExecutionFinished(new AttemptKey('TASK-9', 'lint', 0), Participants.transform('ghost', ExecutorUsage.none()),
+                new RoundExecutor('ghost', null), new ExecutionResult.Completed())
 
         when:
         writer().onEvent(finished)

@@ -46,8 +46,8 @@ class UsageReportJsonMapperSpec extends Specification {
                 ],
                 Unpriced.of(['claude-x': new TokenUsage(100, 10, 1, 2), 'claude-y': new TokenUsage(50, 5, 0, 0)]))
         def usage = [
-            Participants.transform('agent-cli', executorUsage),
-            Participants.verdict('agent-cli', 0, Unpriced.of(['claude-z': new TokenUsage(20, 2, 0, 0)]))
+            Participants.transform('claude', executorUsage),
+            Participants.verdict('claude', 0, Unpriced.of(['claude-z': new TokenUsage(20, 2, 0, 0)]))
         ]
         def attempt = AttemptRecords.of(0, AttemptRecord.Result.QUALITY_FAILURE,
                 Instant.parse('2026-07-18T09:00:00Z'), checks, usage, [], Stop.none())

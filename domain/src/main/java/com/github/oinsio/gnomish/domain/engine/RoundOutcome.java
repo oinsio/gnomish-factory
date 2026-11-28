@@ -7,10 +7,13 @@ package com.github.oinsio.gnomish.domain.engine;
  * from the executor's own {@code failed/quality} report with no chain run; {@link Stopped} — the
  * round was recorded unburned with a stop that ends the stage (a decision request, FR6; a reached
  * bound); or {@link Unrecorded} — the executor threw, reported {@code failed/infrastructure} or a
- * {@code pending} the stage cannot poll, and no round was recorded (FR10). A sealed carrier so the
+ * {@code pending} while its describe declares no {@code poll}, and no round was recorded (FR10). A
+ * {@code pending} from an executor declaring {@code poll} is no outcome of its own: the round is
+ * polled to its terminal result first (design D11 of extract-agent-round-runner). A sealed carrier so the
  * loop records, persists, events and routes each round without re-deriving any of it.
  *
- * <p>Implements FR4, FR6, FR10, FR13 of add-stage-engine; FR7 of define-executor-contract.
+ * <p>Implements FR4, FR6, FR10, FR13 of add-stage-engine; FR7 of define-executor-contract; FR10 of
+ * extract-agent-round-runner.
  */
 sealed interface RoundOutcome permits RoundOutcome.Judged, RoundOutcome.Stopped, RoundOutcome.Unrecorded {
 

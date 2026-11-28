@@ -39,9 +39,8 @@ import java.time.InstantSource;
  * state.json} is written through {@link AtomicFileWriter} (design D10 of harden-task-branch-contract), and every round
  * commit carries the tenure's claim epoch ({@link ClaimEpochTrailer}, FR13).
  *
- * <p>{@link #persistPending} lands an open round's pending commit (design D21) from objects, no worktree and no index
- * ({@link HostPendingCommit}), on the round's last registered commit, and moves that commit in the cell ({@link
- * CurrentRound#pendingRegistered}); a round with no snapshot refuses before any write.
+ * <p>{@link #persistPending} lands an open round's pending commit (design D21) from objects ({@link HostPendingCommit})
+ * on the round's last registered commit, moved in the cell; a round with no snapshot refuses before any write.
  *
  * <p>Kept in sync with {@link EnvironmentAttemptPersistence}: both must close a round with the same durable sequence —
  * {@code state.json} and the round's trace written first, then one commit stamped with the claim epoch carrying both —
@@ -51,7 +50,12 @@ import java.time.InstantSource;
  * transaction carried to origin by one atomic push (design D13, D18 of tighten-spec-contract); and write the pending
  * commit alike: exactly {@code state.json}, its tree the registered commit's with that one blob replaced, its only
  * parent the registered commit (here from objects; there through a private index in the box), its register in the
- * same transaction, its subject from {@link PendingWrite} (design D21 of migrate-verify-to-executor-contract).
+ * same transaction, its subject rule held by {@link PendingWrite} (design D21 of migrate-verify-to-executor-contract;
+ * D7, D11 of extract-agent-round-runner): {@code gnomish: pending <stage>#<round> <token>} for either entry subject, a
+ * check's entry above the round's {@code gnomish: snapshot}, the round's own (a pending round commit) above its {@code
+ * gnomish: pending-snapshot} (here closed by {@link SnapshottingStageExecutor}, there by the box's round close); and
+ * settle the working copy's {@code state.json} lag right after a pending round commit lands, never after a check's,
+ * through the one {@link PendingStateLag#afterLanding} (here the worktree, there the box's working copy).
  *
  * <p>Kill windows: the durability point of each write is its ref transaction. Before it, the branch and the register
  * name the previous closing commit; between it and the push, "closed locally, not pushed", which the next push of the
@@ -59,7 +63,7 @@ import java.time.InstantSource;
  *
  * <p>Implements FR2, FR11, FR12, NFR-R1, NFR-S1 of add-git-workflow; FR5, FR13 of harden-task-branch-contract; FR13 of
  * harden-logging-observability; FR13, NFR-S2 of tighten-spec-contract; FR2, FR20 of
- * migrate-verify-to-executor-contract.
+ * migrate-verify-to-executor-contract; FR10 of extract-agent-round-runner.
  */
 public final class GitAttemptPersistence implements AttemptPersistence {
 
@@ -98,7 +102,7 @@ public final class GitAttemptPersistence implements AttemptPersistence {
         this.bestEffortPush = BestEffortPush.closing(runner);
         this.rounds = rounds;
         this.pendingCommit = new HostPendingCommit(runner, worktreeRoot, epochs, clock);
-        this.lag = new PendingStateLag(runner, worktreeRoot, taskId);
+        this.lag = new PendingStateLag(WorkingCopyGit.host(runner, worktreeRoot));
     }
 
     /**
@@ -114,9 +118,7 @@ public final class GitAttemptPersistence implements AttemptPersistence {
         AttemptKey key = trace.key();
         Path gnomishTaskRoot = worktreeRoot.resolve(EnvelopePaths.DIR_NAME);
         // The round's base (design D22): its last registered commit, or the tip it opened on.
-        String base = rounds.snapshot()
-                .map(ClosedRound::registered)
-                .orElseGet(() -> rounds.opened().commit());
+        String base = SnapshotOrder.base(rounds.registeredChain(), rounds.opened());
 
         verifyBoundary(taskId, key, base);
 
@@ -146,11 +148,12 @@ public final class GitAttemptPersistence implements AttemptPersistence {
     @Override
     public void persistPending(String taskId, TaskState state) {
         PendingWrite write = PendingWrite.of(taskId, state);
-        ClosedRound round = rounds.snapshot().orElseThrow(write::noSnapshot);
+        ClosedRound round = write.landsOn(rounds.snapshot());
         rounds.pendingRegistered(pendingCommit.land(write, state, round.registered()));
         AttemptKey key = write.key();
         bestEffortPush.pushBestEffort(
                 taskId, key.stage(), key.attempt(), worktreeRoot, branch, boundary.probe(), round.registered());
+        lag.afterLanding(write, rounds.registeredChain());
     }
 
     /** The boundary: committed half, the pending lag, uncommitted half, then the owned paths' restore. */
@@ -158,9 +161,7 @@ public final class GitAttemptPersistence implements AttemptPersistence {
         verdict(taskId, key, boundary.committed(base));
         // The factory's own pending commits are no envelope edit (design D21), judged over the round's
         // registered chain as the cell holds it — never walked again (D14; crash-consistency item 14).
-        lag.settle(rounds.registeredChain()).ifPresent(failure -> {
-            throw new GitPersistFailedException(taskId, key.stage(), key.attempt(), "pending-commit lag", failure);
-        });
+        lag.settled(key, rounds.registeredChain());
         RangeVerdict uncommitted = boundary.uncommitted();
         boundary.restore().ifPresent(failure -> {
             throw new GitPersistFailedException(

@@ -1,0 +1,449 @@
+# Proposal: extract-agent-round-runner
+
+## Why
+
+`adapters/agent` was 4,330 lines when this change was written (7,748 since the `program` and
+`command` executors landed beside it), in which Claude Code's `stream-json` dialect (about 1,900
+lines) is interleaved with the generic mechanics of running one agent round (about 1,300
+lines), duplicated per role (`ExecutorRoundExecution` ↔ `JudgeRoundExecution`), and leaking
+outward: judge read-only policy is spelled as Claude tool names, settings validation accepts
+Claude keys for every stage, progress events carry Claude `subtype` and session ids, the
+agent's exit code is never read, and the stdout drain has no size cap. After
+`define-executor-contract` and `migrate-verify-to-executor-contract` the agent CLI is the
+last mechanism outside the contract, and `judge` the last check outside it. This change
+turns the agent CLI into one named executor with three roles, behind one generic round
+runner, with the Claude dialect as its first replaceable implementation. It also takes the
+last unowned outcome of the contract: today a `transform` executor that returns `pending + key`
+fails as infrastructure, so a long round (a remote agent service, a run that outlives a
+restart) cannot be expressed; the engine learns to persist, poll and resume such a round through
+the one pending-poll owner `migrate-verify-to-executor-contract` builds for `verdict`.
+
+## What Changes
+
+- **ADDED**: `agent-cli` becomes a named executor implementing the contract's `Executor`
+  interface in roles `transform`, `verdict` and `decision`; its describe declares its
+  credentials, egress hosts, config-directory variable, repo-policy-disabling flags, settings
+  schema and enforcement level `TOOL_GATE`.
+- **ADDED**: a generic **agent round runner** (launch through the environment seam, a capped
+  stdout drain through the one drain owner, stderr to the round scratch file, three bounds, result and answer through the shared result-file channel,
+  denials, post-hoc working-copy check for `verdict`/`decision`) parameterized by an
+  **agent dialect**: argv rendering, policy compilation, event parsing, usage and trace
+  extraction. Claude is the first dialect.
+- **ADDED**: a `judge` check is one `verdict` request to the executor its own `executor:` block
+  declares, on the check path every executor check already takes; `JudgeVoter` leaves
+  `EnginePorts`; the verdict arrives as a SARIF answer produced through the CLI's
+  schema-enforced output (amended 2026-11-22, design D2).
+- **ADDED**: one executor block for every role: a stage, a `judge` check and (in
+  `add-decision-arbiter`) the arbiter declare who does the work with the same `executor:` block,
+  parsed and validated by one owner; nothing defaults — a `judge` check with no block, or an
+  agent block with no model, stops the factory at load (design D12).
+- **ADDED**: the silence bound of an agent round follows the dialect's own declaration
+  (`streams_progress`), by the rule the `program` executor already obeys, and a declared
+  liveness is checked per dialect by a paid smoke spec on macOS and Linux, so the next dialect
+  needs no remembered measurement (design D6, amended 2026-11-22).
+- **ADDED**: the egress guard's liveness probe has one owner around every request that runs in a
+  box, stage round and check round alike; a `program` verdict check in a fresh box, judged
+  without a probe on `main`, is covered by it (design D13).
+- **ADDED**: an agent's answer is obtained the way its dialect declares and is validated by the
+  runner (design D15, added 2026-11-23 after the decision review of task 5.1). The Claude dialect
+  answers every role, `transform` included, through the CLI's schema-enforced final output, which
+  the CLI repairs inside its live session; the runner puts the validated answer at the round's
+  answer file path. A `transform` answer that is still not a valid answer is a quality failure of
+  the round: one attempt, the validation error as its finding.
+- **MODIFIED**: the round source stays the one owner of a round's open and close for every
+  registry entry — a `program`, a `command` and the agent alike; its host and sandbox
+  implementations are kept and held to one port contract spec (design D14, added 2026-11-23).
+- **REMOVED**: the raw-text fallback of the decision file — unparseable content becoming a
+  question with no options — and its tolerant reader. The answer file has one strict read, on
+  the live path and at recovery (design D15).
+- **REMOVED**: judge votes. The `votes` key, the majority reducer (`JudgeVoting`) and the
+  odd-count rule are deleted; a manifest that still carries `votes` is refused at load. Several
+  opinions are several `judge` checks in the stage's `verify` list (human decision 2026-11-22).
+- **ADDED**: decision continuation from the record (design D4 as amended 2026-11-21): the
+  decision that answers a decision request is recorded on the task branch with the question and
+  options it answers, and the next round is a fresh `start` whose briefing renders them with the
+  reply. No agent executor resumes a vendor session: the CLI's session lives on the worker.
+- **ADDED**: engine handling of `pending + key` for the `transform` role (human decision
+  2026-11-02): a `transform` executor whose describe declares `poll` may return `pending`; the
+  round's working copy and the key land in one pending round commit before the first poll, any
+  instance resumes the poll from that record, and the round closes with the terminal result.
+  The owner is `migrate-verify-to-executor-contract`'s pending-poll mechanism, not a second one.
+- **MODIFIED**: the contract's status taxonomy: `pending` from a `transform` executor is an
+  infrastructure failure only when its describe declares no `poll`.
+- **MODIFIED**: policy is the contract's abstract policy compiled by the dialect; progress
+  events lose vendor fields; settings are validated by the executor's schema; the agent's
+  exit code and stderr are read and capped.
+- **REMOVED**: `CliStageExecutor`, `CliJudgeVoter`, `ExecutorRoundExecution`,
+  `JudgeRoundExecution`, `AgentAiSeam`, `AgentSettingsValidator`'s Claude key list,
+  `AgentRole`, `DecisionFileTransport` as a separate channel (the decision request is the
+  answer file), `DecisionRequestRead`.
+- **BREAKING** (manifest): `settings.allowedTools`/`disallowedTools` move under the executor's
+  own settings schema; existing keys remain accepted by the Claude dialect's schema.
+- **BREAKING** (manifest): a `judge` check declares `executor:` (the stage's block: `type`,
+  `model`, `settings`, or `type: program` with `name`) in place of its own `model` and
+  `settings` keys, and no `votes`; the old form is a located load error.
+
+## Goals
+
+- G1: a second agent dialect (Codex) is one dialect class or one external program, with zero
+  changes in `domain`, `application` or the runner.
+- G2: `adapters/agent` holds no role-specific round class; one runner serves three roles.
+- G3: every manual-sync pair inside `adapters/agent` and across to `adapters/git` is dissolved,
+  but one: the host and sandbox round sources stay a declared pair across the
+  `adapters/agent` – `adapters/git` classpath barrier, held in step by one port contract spec
+  (design D14).
+- G4: the arbiter (`add-decision-arbiter`) is a `decision` request to a named executor with no
+  port of its own.
+- G5: a `transform` round that returns `pending` survives a factory kill at any step and is
+  finished by any instance, with no `start` repeated once the pending commit is pushed and no
+  pending mechanism besides the one the verdict path uses.
+
+## Non-Goals
+
+- NG1: moving the Claude dialect out of process as the reference external executor — follow-up
+  `externalize-claude-executor` (also adds the Codex dialect). The CLI's own version in a round
+  line goes with it: until the entry is a described program its version is the built-ins'
+  constant (design D12).
+- NG2: an ACP dialect — follow-up `add-acp-executor`.
+- NG3: mid-round permission prompts as decision requests (ADR 0012 D7 stands).
+- NG4: isolating repo-local agent policy files (`.claude/settings.json`) — the describe fields
+  land here; their enforcement is `harden-verification-integrity`.
+- NG5: the Claude dialect returning `pending` — its round stays a child of the factory's process
+  tree, so its describe declares no `poll` and it never yields a pending key; the engine path of
+  FR10–FR12 is exercised by `program` executors and fixtures. Pickup condition: the first agent
+  dialect or executor whose round runs outside the factory's process tree (a remote agent
+  service), which then declares `poll` and implements it.
+- NG6: cancelling the abandoned run that a re-driven `start` leaves behind (kill window before
+  the pending commit) — `cancel` is not an operation of the contract (NG16 of
+  `define-executor-contract`); its pickup condition stands, and this change's re-drive is a
+  second engine path that would prefer a cooperative stop.
+- NG7: a factory-owned ceiling over the law's `roundTimeout`, and settings keys for the
+  startup-read and silence bounds (design D6, alternatives rejected). Pickup condition: a factory
+  whose operator is not the author of the law it runs (one daemon serving the laws of several
+  projects), or an agent CLI whose liveness cadence differs per stage; the ceiling then refuses an
+  over-ceiling value at law load.
+- NG8: an engine path for the contract's continuation key (the key on the engine's decision
+  request, in the attempt record, in the next `start` and in the ledger). The key stays reserved
+  vocabulary, read and dropped as on `main`; the Claude session it would have named is
+  worker-local (design D4). Pickup condition: the first executor whose describe declares
+  `resumable` over state any factory instance reaches (a remote agent service's thread), which
+  then builds that path with its consumer list.
+- NG9: a hand-off note as a field of the `decision-request` answer. The stage's own report and
+  the working copy ride the snapshot commit already. Pickup condition: a recorded round that,
+  started fresh with the question, the options and the reply, redid or contradicted work the
+  asking round had finished.
+- NG10: several votes of one `judge` check reduced by a majority (removed by this change, human
+  decision 2026-11-22: the votes cost tokens and decided nothing a single verdict did not).
+  Pickup condition: a recorded case of one `judge` check returning opposite verdicts on the same
+  attempt commit; the reducer then returns as a check-level mechanism with a vote ordinal in the
+  check's identity, which a pending key needs.
+- NG11: rewriting this repository's own `.gnomish/stages/*/stage.yaml` (`archive`,
+  `fix-artifacts`, `review-code`, `fix-code`) to the new `judge` form. The factory that runs
+  this repository is the release named in `.gnomish/factory/gnomish.env`, which reads the old
+  form, and no stage may edit `.gnomish/`. Pickup condition: the commit that moves
+  `GNOMISH_VERSION` to a release containing this change rewrites the four manifests with it.
+
+- NG12: a repair round run by the factory, or a repair budget of the factory's own, for an
+  invalid answer (design D15, alternatives rejected). The CLI repairs inside its live session;
+  what it could not repair costs one stage attempt. Pickup condition: recorded runs in which a
+  dialect with no schema-enforced answer exhausts a stage's attempts on invalid answers alone.
+- NG13: a decision request with fewer than two options (relaxing the wire contract). Pickup
+  condition: the first executor that must ask a question whose options it cannot enumerate; the
+  contract and the arbiter's consult gate (`add-decision-arbiter`, design D6) are then decided
+  together.
+- NG14: a client token on `start` that lets an executor answer a re-driven `start` with the run it
+  already began (the kill window before the pending commit, NFR-C2). The request carries no round
+  token today, so this is a clause of the wire contract and a conformance case. Pickup condition:
+  the first `transform` executor declaring `poll` whose `start` is not safe to repeat — it charges
+  per run or changes a target outside the working copy.
+- NG15: a stated retention window for an ended run's terminal result. The wire contract keeps a
+  key pollable until its run ends and returns the terminal result again; how long after the end
+  is the executor's. Pickup condition: the first executor whose documented retention is shorter
+  than a claim's lease plus the pickup delay, or a recorded round that failed on an ended key.
+
+## Users & Scenarios
+
+- U1 — Pipeline author: writes the same `executor:` block (`type: agent-cli`, `model`,
+  `settings`) on a stage and on a `judge` check; the judge's `allowedTools` typo, a missing
+  block or a missing model is a located load error; a second opinion is a second `judge` check.
+- U2 — Operator: a gnome asks a question, the arbiter or a human answers, and the next round —
+  on any instance, in a fresh box — starts with the question, its options and the reply in its
+  briefing.
+- U3 — Executor author: adds a dialect by implementing argv rendering, event parsing and
+  policy compilation; the runner, bounds, channels and specs are inherited.
+- U4 — Engine maintainer: `EnginePorts` holds one `StageExecutor` and nothing else.
+- U5 — Executor author with a remote agent service: a `program` transform executor declaring
+  `poll` submits the job in `start` and returns `pending` with the job id; the factory is
+  restarted mid-run, another instance polls the same key, and the round closes with the
+  service's changes — the ledger shows `pending key=<prefix>` then `resumed key=<prefix>`.
+
+## Requirements
+
+### Functional
+
+- FR1: One `AgentRoundRunner` SHALL execute any role: build the request, render argv through
+  the dialect, launch through the environment seam, drain stdout through the one drain owner
+  with byte and line caps, direct stderr to the round scratch file and read it capped after the
+  exit (`agent-executor`, "The round's stderr is kept"), apply the three bounds, read the result and answer through the shared
+  result-file reader, attach denials, run the post-hoc working-copy check for `verdict` and
+  `decision`, and return `ExecutorResult`.
+- FR2: An `AgentDialect` SHALL provide: describe fields, argv for a request (including the
+  compiled policy, model, bounds, output schema for `verdict`/`decision`),
+  event parsing into progress and usage, final-answer extraction, and exit-code mapping to status
+  (`limit` for turn/budget stops).
+- FR3: The Claude dialect SHALL reproduce today's observable behavior: prompt on stdin,
+  stream-json parsing, per-model usage, top-level trace, `--strict-mcp-config`, permission
+  mode per policy (`acceptEdits` for `workspaceWrite`, `dontAsk` for `readOnly`), decision
+  request via the answer file; and SHALL pass `--json-schema` for the answer of every role
+  (FR19). No argv SHALL carry a session flag (`--resume`, `--continue`, `--session-id`).
+- FR4: A `judge` check SHALL be one `verdict` request to the executor its `executor:` block
+  declares, run as a check round on the path every executor check takes and judged by the one
+  verdict derivation; a malformed answer is cannot-verify; `JudgeVoter` is removed from
+  `EnginePorts`. A manifest carrying `votes` SHALL be refused at load, as an unknown field. Checks of one stage,
+  several `judge` checks included, run in declaration order and stop at the first non-pass
+  (amended 2026-11-22, design D2).
+- FR5: Policy SHALL be the contract's abstract policy; no engine or application type SHALL
+  name a vendor tool; `writeExactly` is granted only to a dialect whose agent writes the answer
+  file itself (FR19).
+- FR6: Progress events SHALL carry only vendor-neutral fields (model, tool name, final summary,
+  usage); the session id SHALL NOT leave the dialect package, in an event or in a result.
+- FR7: Settings of an agent executor SHALL be validated at law load against the dialect's
+  describe schema; the Claude schema accepts exactly `allowedTools`, `disallowedTools`,
+  `maxTurns` and `roundTimeout`. `roundTimeout` SHALL be the overall bound of every round and
+  judge request the runner starts for the stage or check that declares it, the factory's overall bound
+  when it declares none; the startup-read and silence bounds are the factory's and have no
+  settings key (amended 2026-11-21, design D6).
+- FR8: The agent's exit code and stderr SHALL be read: non-zero exit with no result event is
+  `failed/infrastructure`; a turn or budget stop is `failed/limit`; stderr is read from the scratch file after the exit,
+  capped.
+- FR9: Decision continuation from the record: the gnome's decision request SHALL be the answer
+  file; the decision that answers it SHALL be recorded on the task branch, in the decision commit,
+  with the question and options it answers; the next round SHALL be a fresh `start` whose briefing
+  renders them with the reply. No agent executor SHALL resume a vendor session, declare
+  `resumable` or return a continuation key (design D4).
+- FR10: A `transform` executor whose describe declares `poll` MAY return `pending + key`. The
+  engine SHALL then, through the pending-poll owner of `migrate-verify-to-executor-contract`,
+  land the round's working copy and a pending record (the round's token, stage, attempt, key,
+  start time) in one pending round commit with its register before the first `poll`; poll at the
+  factory's pending interval, in the round its `start` opened, until a terminal status or the
+  factory's pending ceiling counted from the recorded start time; and close the round with the
+  terminal result as any round. A `poll` SHALL NOT open a round, mint a round token or close the
+  round, and one that answers `pending` with the recorded key SHALL write nothing on the task
+  branch (design D11 as amended 2026-11-25). A `pending` from a `transform` executor declaring no `poll`
+  stays `failed/infrastructure`.
+- FR11: A pickup that finds a pending record at the registered commit SHALL continue that round
+  with `poll(key)` in an environment materialized at that commit, on any instance, under the
+  round identity restored from that record, and SHALL NOT call `start`; neither the verify chain nor advancement SHALL run on a pending round commit.
+- FR12: A pending `transform` round SHALL reuse the key-rotation rule of
+  `migrate-verify-to-executor-contract` (its FR10, human decision 2026-11-02): a `poll` that
+  returns `pending` with a key different from the recorded one has the new key persisted, in a
+  pending round commit, before the next `poll`; this change adds no rotation mechanism of its own.
+- FR13: Who does the work SHALL be declared by one `executor:` block — the stage's — wherever
+  the law names an executor: on a stage and on a `judge` check (and, in `add-decision-arbiter`,
+  on the arbiter). One owner SHALL parse it and one rule SHALL validate it; no declaration
+  defaults: a `judge` check with no `executor:` block, an agent block with no `model`, or an
+  executor that does not support the role the declaration uses it in SHALL be a located load
+  error, and the factory SHALL NOT start (design D12).
+- FR14: An `agent-cli` declaration SHALL resolve through the executor registry, like every other
+  executor, to one entry under the reserved built-in name `claude`, which serves stage rounds and
+  check rounds; a law that declares an executor under that name SHALL be refused (design D12).
+- FR15: The egress guard's liveness SHALL be probed before and after every executor request that
+  runs in a box with a guard — a stage round and a check round alike — by one owner; a guard
+  found dead SHALL make the request an infrastructure failure (a cannot-verify for a check), no
+  attempt burned (design D13).
+- FR16: The startup-read and silence bounds of an agent round SHALL apply only when the
+  dialect's describe declares `streams_progress`, decided by the one owner the `program`
+  executor's wait also reads; a round of a dialect that does not declare it SHALL be held to the
+  overall bound alone (design D6).
+- FR17: A dialect's declared `streams_progress` SHALL be verified by one spec of the paid smoke
+  layer, with one row per declaring dialect, on macOS and on Linux: during one quiet tool call
+  longer than the silence bound, in the main agent and inside a subagent where the dialect has
+  them, the largest gap between two stdout lines SHALL be at most a fifth of the factory's
+  silence bound (design D6).
+
+- FR18: The round of every registry entry — a `program`, a `command` and the agent alike — SHALL
+  be opened and closed by the run's one round source: the round's identity, its answer path, its
+  mid-round listener, its close on the task branch and its discard. The environment acquisition
+  of a check SHALL stay provisioning only. Every implementation of the round source SHALL pass
+  one contract spec (design D14).
+- FR19: A dialect SHALL declare how a round's answer is obtained: as the CLI's schema-enforced
+  final output, or as a file the agent writes. The runner SHALL validate the answer against the
+  contract in both forms and, for a schema-enforced answer, SHALL put the validated answer at
+  the round's answer file path before the round closes; the agent of such a dialect is granted
+  no write under `.gnomish-task/`. The Claude dialect SHALL declare the schema-enforced form for
+  all three roles (design D15).
+- FR20: An answer of an agent round that is not a valid answer of its role — unparseable, over the cap, refused by
+  the schema, or reported by the CLI as its structured-output retries exhausted — SHALL be, for
+  a `transform` round, `failed/quality` with one finding naming the validation error and a
+  bounded, neutralized excerpt of what was written; for a `verdict` or `decision` request it
+  stays the malformed answer of FR4. A round with no result event, a dead process or an
+  unreachable provider stays `failed/infrastructure`, and so does an invalid answer file of a
+  `program` executor, which reports its own quality failures in its result. The factory SHALL
+  run no repair round of its own and SHALL keep no repair counter (design D15).
+- FR21: The answer file of a round SHALL be read by one function, on the live path and at
+  recovery alike, and no reader SHALL turn unparseable content into a decision request
+  (design D15).
+- FR22: A dialect's declared schema-enforced answer SHALL be verified by one spec of the paid
+  smoke layer, one row per declaring dialect, on macOS and on Linux: a `transform` round of many
+  tool calls that ends by asking a decision, and a `verdict` on acceptance criteria that invite
+  a long prose reply, SHALL each end with a schema-valid answer (design D15).
+
+### Non-Functional Reliability
+
+- NFR-R1: The runner's bounds (startup read, silence, overall) are driven on virtual time in
+  specs; expiry kills the process tree and reports the bound. The overall bound a round is
+  killed at is the `roundTimeout` its stage or check declares (FR7), asserted end to end by one
+  identity spec; the silence bound applies to a dialect that declares liveness (FR16) and rests
+  on that dialect's measured cadence, kept as a paid smoke spec (FR17, design D6).
+- NFR-R2: The round after an answer SHALL depend on nothing outside the tracker and the task
+  branch: an instance on another machine, or a fresh box, SHALL start it with the same briefing
+  as the instance that parked the task.
+- NFR-R3: Every kill window of a pending `transform` round classifies to a named shape with one
+  recovery owner: a kill before the pending commit is pushed re-drives `start` (one duplicate
+  remote run per kill, logged); a kill after it — including after a key-rotating poll and after a
+  terminal poll whose snapshot is not yet registered — resumes the poll with no `start`, on the wire obligation of FR11
+  of `migrate-verify-to-executor-contract`; a kill after the terminal poll's snapshot is registered re-verifies that
+  snapshot with no `poll` and no `start`; recovery of a closed round is a no-op. Kill-point specs cover each window, each resumed by a second instance.
+- NFR-R4: The live path and the resume path continue a pending round through the pending-poll
+  owner's one wait path over one record — the live path from the entry it persisted, the resume
+  from that entry parsed back at the register — so the round token, usage and ledger lines of a resumed round are those of the round
+  that went pending (identity spec on a real bare origin).
+
+- NFR-R5: The answer file a snapshot carries, read at recovery, SHALL give the round the outcome
+  the live round would have had from the same bytes (identity spec on a real bare origin).
+
+### Non-Functional Observability
+
+- NFR-O1: Usage carries provenance; the Claude dialect reports `REPORTED`; every record of a
+  round or a check names the executor by the registry entry its block resolved to, so the
+  ledger shows `executor=claude@<version> role=<role>` for an agent stage's round and for a
+  judge check alike, `<version>` being a built-in's constant `built-in` (design D12 as amended
+  2026-11-27).
+- NFR-O2: Each poll of a pending `transform` round logs executor, key prefix, elapsed and
+  remaining time under the task's MDC, as a verdict poll does; usage reported by `start` and by
+  each `poll` is recorded under the one round identity.
+
+### Non-Functional Security
+
+- NFR-S1: Agent credentials come from the describe declaration resolved through the secrets
+  port — `AgentAiSeam` is deleted; no production source names `ANTHROPIC_*`.
+- NFR-S2: `verdict` and `decision` runs are refused if the working copy changed (post-hoc
+  check), in addition to the compiled read-only policy.
+
+### Non-Functional Cost
+
+- NFR-C1: Turn and budget hints are passed to the dialect (`--max-turns`, budget flag); the
+  ledger enforces after the round regardless.
+- NFR-C2: The duplicate remote run a re-driven `start` may cause is bounded to one per kill
+  before the pending commit and named in the ledger; it is not cancelled (NG6).
+
+## Operator Experience Criteria
+
+- UX1: A judge configuration error is reported at load with the stage, check and key.
+- UX2: The escalation report of a `limit` stop reads "budget exhausted: <bound>".
+- UX3: The ledger shows a pending `transform` round as `pending key=<prefix>` and its
+  continuation on another instance as `resumed key=<prefix>` (the verdict path's token).
+
+## Success Metrics
+
+- M1: `grep -rn "Kept in sync with" adapters/agent` → one file, `HostRoundEnvironmentSource`
+  (the pair D14 keeps); the three other registry rows involving `adapters/agent` are removed.
+- M2: `grep -rn "ANTHROPIC_\|stream-json\|acceptEdits" --include=*.java` → hits only in the
+  Claude dialect package.
+- M3: `EnginePorts` holds exactly one executor-facing port.
+- M4: A fake second dialect (in `test-fixtures`) runs all three roles through the runner with
+  no production change outside its own class.
+- M5: A `program` transform executor declaring `poll`, run from the packaged jar against a
+  fixture service, killed after the pending commit and resumed by a second instance: the service
+  counts exactly one `start`, the round closes with the service's changes, and a second recovery
+  pass changes nothing; killed before the pending commit: exactly two `start`s, both in the ledger.
+- M6: `grep -rn "probeGuard(" --include=*.java` over main sources, the environment types' own
+  declarations aside → one calling file.
+- M7: no main source declares `JudgeVoting` or `JudgeVoter`, and none reads a manifest key
+  `votes`.
+
+- M8: `grep -rn "DecisionRequestRead" --include='*.java'` over main sources → zero, and no main
+  source builds a decision request from unparsed text.
+- M9: every implementation of `RoundEnvironmentSource` in main sources is a subject of the one
+  port contract spec, the list asserted reached.
+
+## Open Questions
+
+- Q1: Whether the Claude dialect's schema should keep accepting `allowedTools` after policy
+  compilation covers the common cases.
+- Q2 — closed (human decision 2026-11-02): yes. The wire contract requires that every key an
+  executor issued stays pollable until its run ends and that a poll of an ended run's key returns
+  its terminal result again, with a conformance-kit re-poll case; the requirement, the kit case
+  and the stand-in update are FR11, FR12 of `migrate-verify-to-executor-contract` (the first
+  change that persists a key across a kill), and design D11 relies on them for K3 and K4.
+- Q3 — closed (human decision 2026-11-02): yes. Re-persisting a changed key is FR10 of
+  `migrate-verify-to-executor-contract`, which ADDs the `verification/pending-poll` requirement;
+  this change reuses it for the `transform` round (FR12) and adds no delta to that capability.
+- Scope — decided (human decision 2026-11-02): the change keeps its grown scope (the agent round
+  runner and transform `pending` together); no split.
+
+## Capabilities
+
+### New Capabilities
+- `executor/agent-round-runner`: the generic runner and the dialect contract.
+- `executor/claude-dialect`: the Claude Code dialect's observable behavior.
+
+### Modified Capabilities
+- `agent-executor`: round mechanics, policy, settings, progress, judge move onto the contract;
+  the briefing renders a decision with the question it answers; the prompt's answer instruction
+  is the dialect's.
+- `executor/result-channel`: the answer file and the findings file keep one reader each; the
+  raw-text fallback of the decision file is removed.
+- `git/git-task-persistence`: the decision commit records the question and options a decision
+  answers; the pending-round snapshot and the closing snapshot of a pending round; a check's
+  pending commit is told from a round's by the snapshot its chain ends on.
+- `lifecycle/task-branch-contract`: the interrupted-verification resume recognises a pending
+  round and continues it by a poll; a closing snapshot above pending round commits is re-verified.
+- `stage-engine`: a judge check is one verdict request; majority voting and `JudgeVoter`
+  removed; pending `transform` rounds persisted, polled and resumed; a poll continues the open
+  round.
+- `pipeline/pipeline-config`: a `judge` check declares the stage's `executor:` block; `votes` is
+  refused.
+- `verification/verification-hardening`: a judge request runs in a fresh box of its own.
+- `sandbox/sandbox-egress`: the guard is probed around every request in a box, check rounds
+  included.
+- `executor/wire-contract` (added by `define-executor-contract`): `pending` from `transform` is
+  refused only without `poll`; a continuation key names state any instance reaches.
+
+## Impact
+
+- `adapters/agent` restructured into `runner` and `claude` packages; `application/port/agent`
+  progress types trimmed; `domain/engine` `JudgeVoting` deleted, `EnginePorts` narrowed;
+  `domain/pipeline` `VerifyCheck.Judge` carries the stage's executor block in place of `model`,
+  `settings` and `votes`.
+- `add-decision-arbiter` (unarchived, sequenced after this change) is amended with this change:
+  its `decisions:` section declares the arbiter with the same `executor:` block (FR13). Its
+  design D6 and its `agent-executor` delta still describe the tolerant parse ("garbage becomes a
+  raw question for the human path") and MODIFY a requirement this change REMOVES; its rebase
+  onto role `decision` rewrites both against FR20: an invalid answer never reaches a consult or
+  a human as a question, and the feedback naming the missing fields is the quality finding.
+- `domain/engine` `Decision` gains the optional question it answers; `task.json` carries it
+  (`TaskJsonMapper`, read without it as before); the two decision builders (`ResumeDecisionCommit`,
+  `EscalationResume`) and the briefing renderer (`BriefingSections`) follow.
+- `domain/engine` `PendingPoll`/`PendingPollRecord` (from `migrate-verify-to-executor-contract`)
+  gain the round subject; the persistence pair (`GitAttemptPersistence`,
+  `EnvironmentAttemptPersistence`) writes the pending round commit through its landed
+  `persistPending`, above a pending-round snapshot; `ResumeVerificationStageExecutor` stays the one
+  recovery owner and gains the pending-round subject.
+- Stderr: sequenced after `fix-terminal-receipt-convergence`, whose NG13 rejects a concurrent
+  stderr drain as the second drain its NG12 rejects; the runner inherits `StderrPolicy.ToFile`
+  and the round scratch directory, and adds no stderr pump.
+- Sequenced after `add-command-executor`, which shares the `roundTimeout` shape judge and keeps
+  the dispatch's `COMMAND` arm; both stay (design D6).
+- Sequencing: after `migrate-verify-to-executor-contract` and `remove-interactive-console`;
+  FR10–FR12 depend on its `PendingPoll`, `PendingPollRecord`, its key rotation (FR10), its wire
+  obligation and re-poll kit case (FR11, FR12) and its task 4.3a (a `program` executor's poll
+  resumable by another instance); the `executor/wire-contract` MODIFIED block is
+  layered on `define-executor-contract`'s ADDED text, so that change archives first
+  (`migrate-verify-to-executor-contract` only ADDs to that capability, so the layering is
+  unchanged);
+  before `harden-verification-integrity`; `add-decision-arbiter` rebases onto role `decision`.
+- Sequenced after `tighten-spec-contract`: its deltas carry the `**Implements**:` lines and the
+  500-character requirement bodies that change introduces; it has no MODIFIED block to layer, and
+  the markers and exemption lines of the scenarios its REMOVED requirements take with them are
+  removed in this change (tasks.md, section 5).

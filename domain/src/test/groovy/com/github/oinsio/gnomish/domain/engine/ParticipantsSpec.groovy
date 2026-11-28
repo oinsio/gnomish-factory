@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
-import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import java.time.Duration
 import spock.lang.Specification
 
@@ -45,7 +44,7 @@ class ParticipantsSpec extends Specification {
 
     def "FR15: a judge vote is a verdict entry with its index, #provenance for #tokens"() {
         when:
-        def entry = Participants.verdict('agent-cli', 2, Unpriced.of(tokens))
+        def entry = Participants.verdict('claude', 2, Unpriced.of(tokens))
 
         then:
         entry.role() == ExecutorRole.VERDICT
@@ -69,17 +68,6 @@ class ParticipantsSpec extends Specification {
 
         expect:
         Participants.transform('acme', new ExecutorUsage(null, [], byModel)).byModel() == byModel
-        Participants.verdict('agent-cli', 0, byModel).byModel() == byModel
-    }
-
-    def "the type word of #type is '#word', and judge votes run on the agent CLI's"() {
-        expect:
-        Participants.typeWord(type) == word
-        Participants.JUDGE_EXECUTOR == 'agent-cli'
-
-        where:
-        type || word
-        ExecutorType.AGENT_CLI || 'agent-cli'
-        ExecutorType.API || 'api'
+        Participants.verdict('claude', 0, byModel).byModel() == byModel
     }
 }

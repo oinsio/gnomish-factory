@@ -31,7 +31,7 @@ import spock.lang.TempDir
  * TrackerAdapterFactory#credentialEnvVars}, and the real {@code take} explicit-mode flow is
  * driven all the way through {@link TakeCommand} -> {@link TakeDisposition} -> {@link
  * TakeFreshClaim} -> {@link TakeEngineExecution} -> {@link ManualRunAssembly#assemble} -> the
- * wired {@link com.github.oinsio.gnomish.adapter.agent.CliStageExecutor}, which runs the round
+ * wired {@code claude} entry's stage half, which runs the round
  * through its {@code HostTaskExecutionEnvironment} — the task environment port that actually spawns
  * the fake agent-cli subprocess and scrubs the credential from its environment.
  *

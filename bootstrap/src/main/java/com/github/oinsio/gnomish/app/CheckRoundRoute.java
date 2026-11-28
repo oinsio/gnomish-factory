@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult;
+import com.github.oinsio.gnomish.domain.engine.port.PendingTurn;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import java.util.Objects;
@@ -35,9 +36,22 @@ final class CheckRoundRoute implements StageExecutor {
     @Override
     public ExecutionResult execute(Request request) {
         VerifyCheck.Executor check = request.check();
+        return check == null ? stages.execute(request) : bound(request, check).execute(request);
+    }
+
+    /**
+     * A poll takes the route its {@code start} took: a stage round's to the stage chain, a check
+     * round's to a fresh binding of the check (design D11 of extract-agent-round-runner).
+     */
+    @Override
+    public ExecutionResult poll(Request request, PendingTurn turn) {
+        VerifyCheck.Executor check = request.check();
         return check == null
-                ? stages.execute(request)
-                : checks.bind(check, Objects.requireNonNull(request.checkRef(), "checkRef"), request.workspace())
-                        .execute(request);
+                ? stages.poll(request, turn)
+                : bound(request, check).poll(request, turn);
+    }
+
+    private StageExecutor bound(Request request, VerifyCheck.Executor check) {
+        return checks.bind(check, Objects.requireNonNull(request.checkRef(), "checkRef"), request.workspace());
     }
 }

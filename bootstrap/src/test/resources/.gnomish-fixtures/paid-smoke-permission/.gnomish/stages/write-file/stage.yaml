@@ -17,9 +17,10 @@ instructions: stages/write-file/instructions.md
 verify:
   - type: judge
     criteriaFile: stages/write-file/acceptance.md
-    model: haiku
-    settings:
-      maxTurns: 6
-      roundTimeout: 50s
-    votes: 1
+    executor:
+      type: agent-cli
+      model: haiku
+      settings:
+        maxTurns: 6
+        roundTimeout: 50s
 advancement: auto

@@ -101,6 +101,19 @@ terms) live in `.claude/rules/process-invariants.md`.
 - **Escalation** — handing a task to a human via tracker status, with the
   findings history attached; in `run`, via exit code 10 and the report on
   stdout, answered by `--resume --decision`.
+- **Decision** — a human's reply recorded for a task on its task branch:
+  a free-text body, carried verbatim and never parsed for directives, with
+  the stage it pertains to, its author and its time. A decision that answers
+  a `decision-request` answer also records the question it answers and that
+  question's options, in the decision commit that carries the reply, so every
+  later round's briefing renders the question, the options and the reply
+  through the one briefing renderer, from the branch record alone, on any
+  instance. A decision that answers no request (a reply to another
+  escalation, or one recorded before decisions kept their question) renders
+  as author and body. Type: `Decision` (its question: `answers`). The
+  question introduced by `extract-agent-round-runner` (design D4 as amended
+  2026-11-21). *Not:* an **approval**, which consumes a gate; nor a command
+  to the gnome — decisions are context.
 - **Abort fuse** — the bound on infrastructure aborts a task may accumulate
   before it is quarantined: the abort protocol (the handler that releases or
   parks an aborted task) together with its threshold *K*, carried as one
@@ -202,14 +215,6 @@ terms) live in `.claude/rules/process-invariants.md`.
   branch after every attempt.
 - **Round** — one iteration of the factory's execution loop for a task; round
   boundaries are where claim-loss and staleness decisions take effect.
-- **Agent round equipment** — what every agent round is launched with: the
-  installation's agent settings (the CLI binary), the instant
-  source that stamps the round, the live-progress subscriber and the extractor that
-  shapes the round's essential result. Built once per owner (the stage
-  executor, the judge voter) and taken whole by that owner's round
-  execution, so the group is assembled in one place rather than re-listed at
-  every launch. Type: `AgentRoundEquipment`. *Not:* the round's job (the
-  prompt, the working copy, the round listener), which is passed per call.
 - **GitHub marker fields** — the wire form of a GitHub structural marker: the
   hidden JSON a marker comment carries, as data alone (kind, instance,
   timestamp, format version, and the optional park reason, content identity
@@ -335,22 +340,63 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   task branch's tip, never on the worktree's `HEAD`. *Not:* a gnome commit,
   which never moves the register.
 - **Pending commit** — the closing commit that records an open round's
-  pending checks before the factory polls any of them: exactly `state.json`,
+  pending checks, or its own pending `transform` round (a **pending round
+  commit**), before the factory polls any of them: exactly `state.json`,
   whose list of the round's entries (one per check that answered `pending`,
-  each with its key, attempt, round token and `since`) is the only change; its
-  tree is the round's last registered commit's with that one file replaced, its
-  only parent that commit (the snapshot for the round's first, the previous
-  pending commit after), subject `gnomish: pending <stage>#<round> <token>`.
+  or the round's one entry, each with its key, attempt, round token and
+  `since`) is the only change; its tree is the round's last registered
+  commit's with that one file replaced, its only parent that commit (the
+  snapshot, or the **pending-round snapshot**, for the round's first, the
+  previous pending commit after), subject `gnomish: pending <stage>#<round> <token>`.
   It lands with its register in one ref transaction and is pushed. On the host
   it is built from objects in the clone's `.git` (no worktree, no index); in
   the box through a private index, then harvested and admitted. It moves the
   working copy's `HEAD` and leaves the index's and the working tree's
   `state.json` behind it — the lag the working-copy check and the host round
   close recognise by identity (the round's last registered commit), never by
-  content. Writers: `AttemptPersistence.persistPending`, through
+  content; after a pending round commit the working copy's `state.json` is
+  settled to it at once (`PendingStateLag.afterLanding`), since nothing of
+  the round runs there until its terminal poll. Writers: `AttemptPersistence.persistPending`, through
   `HostPendingCommit` and `InBoxPendingCommit` (introduced by
   `migrate-verify-to-executor-contract`, design D21). *Not:* a round commit —
   it records no outcome, and a pickup of it may poll and nothing more.
+- **Pending round commit** — the **pending commit** of a `transform` round
+  whose `start` answered `pending`: its `state.json` list holds one entry for
+  the round itself (subject `Round`, with its key, attempt, round token and
+  `since`), and its only parent is the round's **pending-round snapshot** for
+  the first, the previous pending round commit after a key was replaced. Its
+  subject, register, push and tree are the pending commit's.
+  `PendingWrite.landsOn` refuses, before any write, a `Round` entry above
+  anything but a pending-round snapshot and a `Check` entry above anything but
+  a verifiable snapshot, so no pickup verifies a pending round or polls a finished one. It is written once
+  when the `start` goes pending and again only when a poll returns another key;
+  a poll otherwise writes nothing. It closes no attempt: the position is
+  unchanged, no verify check runs and no stage advances on it. A pickup whose
+  register names it resumes the round through `PendingPoll` by polling the
+  recorded key, never by `start`. The terminal poll's snapshot sits on the last
+  pending round commit; a register naming that snapshot is an interrupted
+  verification, re-verified with no poll, and the round's close drops the
+  entry. Writer: `AttemptPersistence.persistPending`, as for every pending
+  commit (introduced by `extract-agent-round-runner`, design D7, D11).
+  *Not:* a **round commit** — it records no outcome.
+- **Pending-round snapshot** — the snapshot commit that registers a
+  `transform` round's working copy when its `start` answers `pending`, subject
+  `gnomish: pending-snapshot <stage>#<round> <token>`, on both media (close
+  `RoundClose.PENDING`; host: `SnapshottingStageExecutor` over the worktree;
+  box: the round source's going-pending step, with its harvest). It is
+  registered once per round, on the `start`'s result only: a poll that answers
+  `pending` takes no snapshot, and going pending closes nothing — the round's
+  environment, scratch area and listeners are kept. It is the bottom of a
+  pending round's registered chain, the commit the first **pending round
+  commit** lands on. A pickup recognises it by its subject (`SnapshotTipCheck`,
+  `PendingChain`) and never verifies it: a pending commit whose first parents
+  reach it with the same stage, round and token is a pending round, resumed by
+  poll; alone at the register (killed before the pending round commit was
+  pushed, window K1 of design D11) it is a round whose `start` is re-driven,
+  with a line saying so (introduced by `extract-agent-round-runner`, design
+  D11, D14). *Not:* an **unverified snapshot**, which closes a round that did
+  not complete; nor the snapshot the terminal poll takes above the round's
+  pending round commits, which carries the ordinary snapshot subject.
 - **Harvest quarantine** — the ref `refs/gnomish-quarantine/<task>`, in the
   factory clone only, that every harvest of a box's task branch fetches into;
   what the gnome committed exists factory-side as objects and this one scratch
@@ -441,12 +487,13 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   (`roundToken`, beside `taskId` and `stage`); the **usage snapshot** names the
   last round it folded by it (`through`). A fresh round mints it from the tip it
   opens on; a resumed round never mints — it reuses the token its record
-  carries. Three producers, every one through the one parse `RoundToken.of`:
-  `SandboxRoundEnvironmentSource` mints it in container mode,
-  `MidRoundPushRounds` — the git-mode decoration of the host round source, the
-  one piece of the host wiring that holds git — mints it in host git mode over
-  the task worktree's tip, and `SnapshotTipCheck` reuses the recorded one on the
-  resume path; the engine takes it through the domain port `RoundIdentity` and
+  carries. Two producers, both through the one parse `RoundToken.of`: the one
+  minting step `RoundTokenMint` (`adapters/git`), called by
+  `SandboxRoundEnvironmentSource` in container mode over the task branch's tip
+  and by `MidRoundPushRounds` — the git-mode decoration of the host round
+  source, the one piece of the host wiring that holds git — in host git mode
+  over the task worktree's tip, and `SnapshotTipCheck`, which reuses the
+  recorded one on the resume path; the engine takes it through the domain port `RoundIdentity` and
   stamps it on the round's record. `RoundToken` lives in `domain/engine`.
   Type: `RoundToken` (introduced by `make-checkpoint-gate-durable`, D10; host
   mode by `define-executor-contract`, design D14; ADR 0020, decision 8).
@@ -473,10 +520,11 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   by `define-executor-contract`, design D13). *Not:* a parsing contract —
   readers take a round's identity from its record, never from the subject.
 - **Unverified snapshot** — the snapshot commit of a round whose executor did
-  not complete (a program that answered `failed` or `pending`), subject
+  not complete (a program that answered `failed`), subject
   `gnomish: unverified-snapshot <stage>#<round> <token>`. The round's close names
-  its outcome (`RoundClose`: `VERIFIABLE` or `UNVERIFIABLE`) and the one round
-  snapshot step chooses the subject by it. A registered unverified snapshot is
+  its outcome (`RoundClose`: `VERIFIABLE`, `UNVERIFIABLE`, or `PENDING` for a
+  **pending-round snapshot**) and the one round snapshot step chooses the
+  subject by it. A registered unverified snapshot is
   not an interrupted verification: `SnapshotTipCheck` does not read it, and a
   pickup re-runs the round's stage executor with no attempt burned. It is still
   in the `gnomish: ` namespace, so a gnome commit carrying it is a boundary
@@ -496,15 +544,20 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   **executor role**, and speaks the **executor contract**: the agent CLI that
   changes the working copy, or a **verdict executor** that a **verify check**
   names (a file-existence check, a shell command, a CI or SCM status read, an
-  HTTP probe, an external verifier program). The LLM judge is the one
-  verifier not yet an executor: it keeps the `JudgeVoter` port until
-  `extract-agent-round-runner`. A stage names its executor by type — `api` (direct model calls), `agent-cli`
-  (an agent CLI as a subprocess), `program` (an **external executor** named by
+  HTTP probe, an external verifier program, an LLM **judge**). A stage names
+  its executor by type — `api` (direct model calls), `agent-cli` (an agent CLI
+  run by the **agent round runner**, resolved to the built-in registry entry
+  `claude`), `program` (an **external executor** named by
   an **executor declaration**), `command` (a shell command the stage declares
   as `executor.command`, run as `sh -c` in the task execution environment by the
   `command` built-in; no model, no agent, no decision protocol) — or by a
   **built-in executor**'s id. Every executor implements one Java interface,
-  `Executor` (`describe`, `start`, `poll`). ADR 0020. *Not:* a tracker — trackers keep their in-process plugin
+  `Executor` (`describe`, `start`, `poll`). A stage and a `judge` check
+  declare their executor with one and the same executor block (`type`,
+  `model`, `settings`, and `name` for a `program`), mapped and validated by
+  one rule; nothing defaults — a `judge` check with no block, an agent block
+  with no model, or a block whose executor's describe lacks the role it is
+  used in is a located load error. ADR 0020. *Not:* a tracker — trackers keep their in-process plugin
   interface and are not executors. *Not:* the `command` **verify check** — a
   `command` stage is the stage's Mechanism and produces the work, while a
   `command` check is Quality Control and only judges it, run by the `shell`
@@ -512,7 +565,9 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   `adapter.command`) and differ in what an exit code means — a `command`
   stage's exit code is its status, a `shell` check's exit code carries no
   verdict. Type `command` introduced by `add-command-executor`; checks as
-  executors by `migrate-verify-to-executor-contract` (design D1).
+  executors by `migrate-verify-to-executor-contract` (design D1); the agent
+  CLI and the judge as executors, and the one executor block, by
+  `extract-agent-round-runner` (design D1, D2, D12).
 - **Attempt** — one counted try of a stage; only quality failures burn
   attempts, and every attempt is committed to the task branch. Its number
   counts within one visit of a stage and restarts at zero on every reset (an
@@ -522,22 +577,36 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   for this counted unit (a retry is the uncounted repeat of an infrastructure-
   failed check).
 - **Verify check** — one entry of a stage's ordered verification list. Every
-  check but `judge` names a **verdict executor** and is run through the
-  executor contract: the manifest tokens map to built-in executor names —
+  check names a **verdict executor** and is run through the executor contract
+  as a check round; the checks run in declaration order and stop at the first
+  that does not pass. The manifest tokens map to built-in executor names —
   `builtin` to `files-exist`, `command` to `shell`, `external` to the executor
   its `provider` names (default `github-actions`) — and `executor: <name>`
   names one directly, a built-in or a law-declared program. Beside the
   executor's settings a check carries its `interval`, `timeout` and timeout
   class, its pin paths, `verify-in`, its **verdict threshold** and, for
-  `scm-status`, its **expected contexts**. `judge` stays its own kind, through
-  the `JudgeVoter` port, until `extract-agent-round-runner`. Type:
-  `VerifyCheck` (`Executor` and `Judge`). Checks as executors introduced by
-  `migrate-verify-to-executor-contract` (design D1). *Not:* a stage of
-  executor type `command` — see **Executor**.
-- **Judge** — LLM-as-judge verification via the `JudgeVoter` port: acceptance
-  criteria in, structured verdict (`passed`, `findings[]`) out. In a usage
-  record each judge vote is a `verdict` **participant usage** entry with its
-  vote index; "judge" is the render label for that role, not record vocabulary.
+  `scm-status`, its **expected contexts**. A `judge` check names its executor
+  by the executor block a stage declares, beside its criteria file (see
+  **Judge**). Type: `VerifyCheck` (`Executor` and `Judge`). Checks as
+  executors introduced by `migrate-verify-to-executor-contract` (design D1);
+  the `judge` check on the same path by `extract-agent-round-runner` (design
+  D2). *Not:* a stage of executor type `command` — see **Executor**.
+- **Judge** — LLM-as-judge verification: a `judge` **verify check** is one
+  `verdict` request to the executor its executor block declares (no default),
+  run as a check round like every other check. The criteria file, read from
+  the law, and the task's briefing are rendered into the request's `verdict`
+  role input; the answer is a SARIF verdict judged by the engine's one verdict
+  derivation, and an answer that is no verdict makes the check cannot-verify,
+  burning no attempt. In a run with fresh boxes the request runs in a box of
+  its own. There are no votes: a second opinion is a second `judge` check,
+  requested only after the first passes; a manifest that still carries
+  `votes`, or a `model` or `settings` key beside the check, is refused at
+  load. In a usage record a judge is a `verdict` **participant usage** entry
+  whose vote index is the request's ordinal among the round's judge checks;
+  "judge" is the render label for that role, not record vocabulary. Type:
+  `VerifyCheck.Judge`. One verdict request per check introduced by
+  `extract-agent-round-runner` (design D2, D12). *Not:* a gnome grading its own work — the judge's executor is
+  declared by its own block, never inherited from the stage.
 - **Findings** — structured, machine-readable observations reported to the
   tracker: message, optional location, optional details. Most come from a
   failed or noteworthy check and are fed back to the gnome on retry; a
@@ -578,14 +647,19 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   token, a record field or a usage key — those are render labels a report may
   print for `transform`, `verdict` and `decision`, not record vocabulary.
 - **Participant usage** — the usage of one executor invocation within a round:
-  its **executor role**, the executor's name, the vote index for a `verdict`,
+  its **executor role**, the executor's name, the judge check's index for a `verdict`,
   its **usage provenance**, optional wall time and per-tool aggregates, and per
   resolved model id the four token counts (input, output, cache creation,
   cache read) with an optional cost in USD — absent when the executor reported
   none, never zero. A round's record holds one `usage` list of them; each judge
-  vote is its own entry. One usage wire vocabulary spells them in the state
+  check is its own entry. One usage wire vocabulary spells them in the state
   file, the status report and the usage report. Type: `ParticipantUsage`.
   Introduced by `define-executor-contract` (design D14); ADR 0020, decision 9.
+  The executor's name is the registry entry its executor block resolved to,
+  the name dispatch ran (`claude` for an `agent-cli` block, the declaration's
+  name for a `program`), never the block's type word; entries recorded before
+  `extract-agent-round-runner` (design D12) keep `agent-cli` and are neither
+  rewritten nor aliased.
   *Never:* executor usage, judge usage — the role-named slots the list replaced.
 - **Usage provenance** — whether an executor reported its usage: `REPORTED` or
   `ABSENT`. An absent entry carries an empty model map and never renders as
@@ -733,14 +807,26 @@ external; the decisions are ADR 0020.
   instance polls the recorded key and never calls `start` again; a `program`
   executor adopts a recorded key it never issued, and only over a working copy
   unchanged against its `HEAD`. The key is capped in size; an oversized key is
-  cannot-verify. A `pending` from a role whose caller cannot poll (`transform`,
-  until `extract-agent-round-runner`) is an infrastructure failure naming the
-  limitation. Type: `PendingKey`, in the JDK-only `:pendingkey` leaf both the
-  engine and the executor contract carry (one type on every layer, design D20
+  cannot-verify. For a `transform` round whose executor declares `poll` the
+  engine owns the wait the same way, through the same `PendingPoll`: the
+  entry's subject is the round itself (`PendingSubject`: `Check` for a verify
+  check, `Round` for the round), it lands in the **pending round commit** above
+  the round's **pending-round snapshot**, and the polls continue the round the
+  `start` opened — one round token, one close, no new round per poll. A poll
+  writes nothing on the task branch except the pending round commit of a key it
+  replaced; the wait runs at the factory's pending interval and ceiling
+  (default 30 s and 24 h, counted from `since`), set by neither the law nor
+  describe. A resumed round polls its recorded key and never calls `start`. A
+  `pending` from a `transform` executor whose describe declares no `poll` is an
+  infrastructure failure naming the limitation. Type: `PendingKey`, in the
+  JDK-only `:pendingkey` leaf both the engine and the executor contract carry
+  (one type on every layer, design D20
   of `migrate-verify-to-executor-contract`); the keys a run issued or adopted are held by
   `PendingRuns`. Introduced by `define-executor-contract` (design D2, D3, D4,
   D6); ADR 0020, decisions 2 and 4; persisted, rotated, retained and adopted
-  by `migrate-verify-to-executor-contract` (design D2, D7, D11, D12, D14).
+  by `migrate-verify-to-executor-contract` (design D2, D7, D11, D12, D14);
+  extended to the `transform` round by `extract-agent-round-runner` (design
+  D11, D14).
   *Not:* a **continuation key**, which resumes after an answer rather than
   waiting on an unfinished run.
 - **Wait hint** — the optional `pollAfterMillis` of a `pending` result: the
@@ -772,12 +858,72 @@ external; the decisions are ADR 0020.
   only). A request with no turn is a `start`; with one, the check round polls
   the key. Type: `PendingTurn` (`domain.engine.port`). Introduced by
   `migrate-verify-to-executor-contract` (design D14).
-- **Continuation key** — the optional key a `decision-request` answer carries,
-  returned to the executor in the next request's `continuation` once the
-  decision is answered, so the executor can pick up where it asked. Opaque to
-  the factory. Introduced by `define-executor-contract` (design D4); ADR 0020,
-  decision 4. *Not:* a **pending key**; nor the **round token**, which the
+- **Continuation key** — the optional key a `decision-request` answer may
+  carry; reserved vocabulary of the wire contract. A key names only state
+  that every factory instance reaches: an executor whose conversation lives
+  on the worker (a process, a machine's files, a box) declares no `resumable`
+  and returns no key. The engine sends no `continuation` in this version — a
+  returned key is read and dropped, and the round after an answer is a fresh
+  `start` that carries the **decision** in its briefing. No agent executor
+  returns one: an agent dialect declares no `resumable` and renders no session
+  flag, and the **agent round runner** removes a key the agent wrote. Opaque
+  to the factory. Introduced by `define-executor-contract` (design D4); ADR
+  0020, decision 4; restricted to reachable state by
+  `extract-agent-round-runner` (design D4 as amended 2026-11-21). *Not:* a
+  vendor session id — a CLI session is a file on the machine that ran it, no
+  record; nor a **pending key**; nor the **round token**, which the
   orchestrator mints and the executor never sees as a key.
+- **Agent round runner** — the one executor implementation for every agent
+  CLI: it runs one round of an **agent dialect** in every **executor role**,
+  owning everything that is the same for every vendor — the launch, the
+  output drains, the round's bounds (silence, startup, overall), the answer
+  in its **answer form** and its validation against the contract, denials and
+  the working-copy check after a read-only role. An answer that fails
+  validation is the round's quality failure for `transform` and cannot-verify
+  for `verdict` and `decision`. Its describe is the dialect's; it declares no
+  `resumable`. Type: `AgentRoundRunner`. Introduced by
+  `extract-agent-round-runner` (design D1, D15). *Not:* the dialect, which
+  holds every vendor fact.
+- **Agent dialect** — what one agent CLI vendor contributes to a round, and
+  nothing else: the describe fields, the argv a request renders to (the
+  **abstract policy** compiled into the vendor's flags), the parse of one
+  output line into the dialect's own events and the vendor-neutral progress
+  they imply, the round's usage, the **answer form** per role, the final
+  answer, and the mapping of the exit to a status. A vendor's event model never
+  leaves its dialect package, and a dialect continues no vendor session. The
+  Claude dialect is the one built. Type: `AgentDialect`. Introduced by
+  `extract-agent-round-runner` (design D1, D4, D15). *Not:* an executor — a
+  dialect becomes one only inside the **agent round runner**.
+- **Answer form** — how an agent dialect's agent hands over its answer in one
+  role, declared by the dialect: *schema-enforced* (the CLI is handed the
+  answer's schema, returns a validated object as its final reply and repairs a
+  mismatch itself, under its own retry cap) or *agent file* (the agent writes
+  the **answer file** itself). Whatever the form, the **agent round runner**
+  validates the answer against the contract; the factory adds no repair round
+  of its own. The Claude dialect declares schema-enforced for `transform`,
+  `verdict` and `decision`. The form also decides the round prompt's
+  instruction for asking a decision and whether the agent gets a write
+  allowance on the answer path. Type: `AnswerForm` (`SchemaEnforced`,
+  `AgentFile`). Introduced by `extract-agent-round-runner` (design D15).
+  *Not:* the **answer slot**, which is what the answer is, not how it arrives.
+- **Answer file** — the one file a round's structured answer (a verdict, a
+  selection or a `decision-request`) lands in, at the path
+  `GNOMISH_ANSWER_FILE` names. In a branch mode an agent round's answer file
+  lives under the task's envelope, named by the round's stage, attempt and
+  **round token** (`EnvelopePaths.answerFile`,
+  `.gnomish-task/decisions/<stage>-a<attempt>-<token>.json`), so the branch
+  keeps it and a stale file of another round is never read; in the git-less
+  in-place mode it is a per-round file outside the workspace, removed with the
+  round. Who writes it follows the **answer form**:
+  under schema-enforced the **agent round runner** writes the validated answer
+  there before the round closes, and the agent is granted no write under the
+  envelope; under agent file the agent writes it, through a `writeExactly`
+  allowance on that one path; a `program` executor writes its own. It has one
+  read, `AnswerFileRead`, for the live round, a `program` and the recovery of
+  a snapshot alike: absent, a contract answer, or refused with its cause —
+  never turned into a question. Introduced by `define-executor-contract`; the
+  agent's file and its one read by `extract-agent-round-runner` (design D3,
+  D15). It replaced the agent's former decision file.
 - **Abstract policy** — what a request allows the executor to change, stated
   without any vendor's vocabulary: `readOnly`, `writeExactly(path)` or
   `workspaceWrite`. The executor compiles it into its own mechanism; after a
@@ -793,8 +939,8 @@ external; the decisions are ADR 0020.
   Introduced by `define-executor-contract` (design D6, D7); ADR 0020,
   decisions 6 and 7.
 - **Result reader** — the one reader of every factory-named result path: the
-  result and answer files (`GNOMISH_RESULT_FILE`, `GNOMISH_ANSWER_FILE`), the
-  agent's decision file, a command check's findings file and a program's
+  result and **answer files** (`GNOMISH_RESULT_FILE`, `GNOMISH_ANSWER_FILE`),
+  a command check's findings file and a program's
   describe output. It caps the size with a truncation marker, treats the bytes
   as inert data, wraps every text field as **untrusted text** and reports a
   parse failure as a typed outcome; no other component reads such a path, and
@@ -849,8 +995,9 @@ external; the decisions are ADR 0020.
   operator's `factory.egress.in-process` scope and its describe's `egress`, and
   its token enters no box. A built-in that mediates no model reports usage `REPORTED` with an
   empty model map. Introduced by `migrate-verify-to-executor-contract` (design
-  D1, D5, D6, D13). *Not:* the **judge**, which keeps the `JudgeVoter` port
-  until `extract-agent-round-runner`.
+  D1, D5, D6, D13). The agent entry `claude` is a verdict executor too, but a
+  check reaches it only through a **judge** check's executor block, never by
+  `executor: claude` (`extract-agent-round-runner`, design D12).
 - **Verdict threshold** — the lowest SARIF result level that fails a **verify
   check** under the engine's verdict derivation: `error` (the default),
   `warning` or `note`. A result at or above it fails the check; one below it is
@@ -1292,8 +1439,8 @@ trusted/task tier split, and the law-root rule.
   on one that did — and which the round removes however it ended. Owned by
   `RoundScratchDirectory` in `adapters/agent` on both media. *Not:* the
   scratch area of an execution environment (`/gnomish/scratch` in a box), nor
-  the decision file's place — in container mode that file lives in the task
-  branch.
+  the **answer file**'s place — in a branch mode that file lives in the task
+  branch's envelope.
 - **Post-exit bound** — the one wait every reader of a child's output allows
   after the child's exit for its drains to end: the kill grace
   plus a fixed margin (`ProcessSupervisor.postExitBound()`, 7 s by default),

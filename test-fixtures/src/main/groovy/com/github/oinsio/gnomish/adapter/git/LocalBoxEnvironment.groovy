@@ -79,7 +79,7 @@ class LocalBoxEnvironment implements TaskExecutionEnvironment, SeedTransferFixtu
         command.stderr().applyTo(builder)
         // The production host adapter's composition, not a copy of it (design D14 of
         // make-checkpoint-gate-durable): nothing of the test JVM's environment is inherited — a
-        // GNOMISH_DECISION_FILE the test run was handed never reaches the fake agent.
+        // GNOMISH_ANSWER_FILE the test run was handed never reaches the fake agent.
         builder.environment().clear()
         builder.environment().putAll(TestChildEnvironment.hostAllowlist().compose(HostTaskExecutionEnvironment.BASE_ENV_NAMES, command.env()))
         def process = builder.start()

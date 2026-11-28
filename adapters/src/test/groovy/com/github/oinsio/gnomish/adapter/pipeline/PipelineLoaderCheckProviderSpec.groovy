@@ -46,7 +46,7 @@ class PipelineLoaderCheckProviderSpec extends Specification implements PipelineL
         given: 'a valid tree whose build stage selects sonar, and whose plan stage pins no judge model'
         writeValidTree()
         write('stages/build/stage.yaml', buildManifest().replace('checkId: ci\n', 'checkId: ci\n    provider: sonar\n'))
-        write('stages/plan/stage.yaml', planManifest().replace('    model: judge-model\n', ''))
+        write('stages/plan/stage.yaml', planManifest().replace('      model: judge-model\n', ''))
 
         when:
         def outcome = loadTree()
@@ -55,7 +55,7 @@ class PipelineLoaderCheckProviderSpec extends Specification implements PipelineL
         outcome instanceof LoadOutcome.Invalid
         def errors = (outcome as LoadOutcome.Invalid).errors()
         errors.any {
-            it.file() == 'stages/plan/stage.yaml' && it.where() == 'verify[1].model'
+            it.file() == 'stages/plan/stage.yaml' && it.where() == 'verify[1].executor.model'
         }
         errors.any {
             it.file() == 'stages/build/stage.yaml' && it.where() == 'verify[1].provider' &&

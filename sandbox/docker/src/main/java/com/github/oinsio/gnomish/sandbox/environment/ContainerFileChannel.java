@@ -79,9 +79,10 @@ record ContainerFileChannel(DockerCli docker, ContainerExecLaunches launches, Pa
 
     // Absent file exits 42 (distinct from any cat error) so readFile tells "no such file" (empty)
     // apart from a present file; head -c bounds output at the source, avoiding a host-side
-    // read-then-kill truncation race on the exec pipe.
-    private static final String READ_SCRIPT = "if [ -f \"$1\" ]; then head -c \"$2\" \"$1\"; else exit 42; fi";
-    private static final int ABSENT_EXIT = 42;
+    // read-then-kill truncation race on the exec pipe. Package-private, as is the exit, so the scripted
+    // docker of the daemon-free specs answers a read by the production command, never a copy of it.
+    static final String READ_SCRIPT = "if [ -f \"$1\" ]; then head -c \"$2\" \"$1\"; else exit 42; fi";
+    static final int ABSENT_EXIT = 42;
 
     ContainerFileChannel(DockerCli docker, ContainerExecLaunches launches, String workingCopy, String scratch) {
         this(docker, launches, Path.of(workingCopy), Path.of(scratch));

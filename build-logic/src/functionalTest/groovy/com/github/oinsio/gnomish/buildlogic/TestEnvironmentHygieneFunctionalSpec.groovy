@@ -10,7 +10,7 @@ import spock.lang.TempDir
 
 /**
  * Behavioral verification of {@code TestEnvironmentHygiene} (FR22, M10, design D14 of
- * make-checkpoint-gate-durable): a build launched with {@code GNOMISH_DECISION_FILE} in its
+ * make-checkpoint-gate-durable): a build launched with {@code GNOMISH_ANSWER_FILE} in its
  * environment — as a build run from inside a gnome's round is — forks test JVMs and PIT minions
  * that do not see it, while a {@code GNOMISH_*} variable the build sets itself still arrives, and
  * so do the machine's tooling variables of the launching process (scenario "The machine's tooling
@@ -25,7 +25,7 @@ import spock.lang.TempDir
  */
 class TestEnvironmentHygieneFunctionalSpec extends Specification {
 
-    static final String DECISION_FILE = 'GNOMISH_DECISION_FILE'
+    static final String ANSWER_FILE = 'GNOMISH_ANSWER_FILE'
     static final String BUILD_OWNED = 'GNOMISH_BUILD_OWNED'
     static final String RYUK_DISABLED = 'TESTCONTAINERS_RYUK_DISABLED'
     static final String DOCKER_HOST = 'DOCKER_HOST'
@@ -80,7 +80,7 @@ import spock.lang.Specification
 class FooSpec extends Specification {
     def "runs in a JVM that inherited no GNOMISH_ variable and kept the machine's tooling variables"() {
         expect:
-        System.getenv('${DECISION_FILE}') == null
+        System.getenv('${ANSWER_FILE}') == null
         System.getenv('${BUILD_OWNED}') == 'kept'
         System.getenv('${RYUK_DISABLED}') == 'true'
         System.getenv('${DOCKER_HOST}') == '${OPERATOR_ENDPOINT}'
@@ -96,11 +96,11 @@ class FooSpec extends Specification {
     // Scenario: build-system/quality-gates / Only the factory's own namespace is removed
     // Scenario: build-system/quality-gates / A variable the build sets itself survives
     // Scenario: build-system/quality-gates / Every module gets the strip from its test conventions
-    def "FR22, M10: a build run with GNOMISH_DECISION_FILE in its environment forks a test JVM that does not see it"() {
+    def "FR22, M10: a build run with GNOMISH_ANSWER_FILE in its environment forks a test JVM that does not see it"() {
         when:
         BuildResult result = withOperatorVariables(repo.runner(':mod-a:test')).build()
 
-        then: 'FooSpec passed in the forked JVM: no decision file, the build-owned variable kept'
+        then: 'FooSpec passed in the forked JVM: no answer file, the build-owned variable kept'
         result.task(':mod-a:test').outcome == SUCCESS
     }
 
@@ -140,9 +140,9 @@ class FooSpec extends Specification {
 
     /** The environment of a build launched from inside a gnome's round, plus an inherited copy of the build-owned key. */
     private GradleRunner withOperatorVariables(GradleRunner runner) {
-        File decisionFile = home.resolve('decision.json').toFile()
+        File answerFile = home.resolve('answer.json').toFile()
         runner.withEnvironment(runner.environment + toolingVariables()
-                + [(DECISION_FILE): decisionFile.absolutePath, (BUILD_OWNED): 'inherited'])
+                + [(ANSWER_FILE): answerFile.absolutePath, (BUILD_OWNED): 'inherited'])
     }
 
     /**

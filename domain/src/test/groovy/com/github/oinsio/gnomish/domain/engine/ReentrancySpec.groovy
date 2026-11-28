@@ -6,7 +6,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
@@ -95,7 +94,7 @@ class ReentrancySpec extends Specification {
 
     EnginePorts portsOf(Run run) {
         def clock = new VirtualClock()
-        new EnginePorts(CheckRouting.of(run.executor, run.builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), run.listener,
+        new EnginePorts(CheckRouting.of(run.executor, run.builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), run.listener,
                 run.persistence, VirtualTimeEquipment.on(clock), RoundIdentity.inPlace())
     }
 

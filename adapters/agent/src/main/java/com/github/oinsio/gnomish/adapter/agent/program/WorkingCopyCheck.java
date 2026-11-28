@@ -4,7 +4,6 @@ import com.github.oinsio.gnomish.app.port.git.LastRegisteredCommit;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest;
 import com.github.oinsio.gnomish.executorcontract.ExecutorResult;
-import com.github.oinsio.gnomish.executorcontract.Policy;
 import com.github.oinsio.gnomish.executorcontract.Role;
 import com.github.oinsio.gnomish.gittransfer.GitInvocation;
 import com.github.oinsio.gnomish.sandbox.BoundedCapture;
@@ -16,7 +15,6 @@ import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Duration;
 import java.time.InstantSource;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -42,15 +40,17 @@ import java.util.Optional;
  * is the same), and an index flag ({@code assume-unchanged}, {@code skip-worktree}) that hides a
  * file's change from git. A run outside a git working copy cannot be checked at all, and is refused.
  *
- * <p>Implements FR11, NFR-S4 of define-executor-contract; FR20 of migrate-verify-to-executor-contract.
+ * <p>A {@code program} run and an agent round are checked alike, by this one check: the agent round
+ * runner's {@code verdict} and {@code decision} rounds take it too (NFR-S2 of
+ * extract-agent-round-runner), and a refusal names the executor by its {@link ProgramFailures.Subject}.
+ *
+ * <p>Implements FR11, NFR-S4 of define-executor-contract; FR20 of migrate-verify-to-executor-contract;
+ * FR1, NFR-S2 of extract-agent-round-runner.
  */
-final class WorkingCopyCheck {
+public final class WorkingCopyCheck {
 
     /** The most bytes of one view the check reads; a view over it cannot be judged. */
     static final int VIEW_CAP_BYTES = 4 * 1024 * 1024;
-
-    /** The most paths a refusal names. */
-    static final int NAMED_PATHS = 5;
 
     private static final List<String> STATUS = GitInvocation.commandLine(
             "git",
@@ -78,7 +78,7 @@ final class WorkingCopyCheck {
      * @param registered the run's round cell: a move of {@code HEAD} onto its last registered commit is
      *     the factory's pending commit ({@link FactoryMove}, D21 of migrate-verify-to-executor-contract)
      */
-    WorkingCopyCheck(
+    public WorkingCopyCheck(
             TaskExecutionEnvironment environment,
             Duration bound,
             InstantSource clock,
@@ -95,7 +95,7 @@ final class WorkingCopyCheck {
      * @param role the request's role; never null
      * @return {@code true} for {@code verdict} and {@code decision}
      */
-    static boolean applies(Role role) {
+    public static boolean applies(Role role) {
         return role == Role.VERDICT || role == Role.DECISION;
     }
 
@@ -104,7 +104,7 @@ final class WorkingCopyCheck {
      *
      * @return the view, or why none could be taken; never null
      */
-    WorkingCopyView view() {
+    public WorkingCopyView view() {
         ExecHandle handle;
         try {
             handle = environment.exec(new ExecCommand(STATUS, Map.of(), null, StderrPolicy.MERGED));
@@ -152,49 +152,30 @@ final class WorkingCopyCheck {
 
     /**
      * The run's result as the check lets it through: unchanged when the view after the run equals
-     * {@code before}, otherwise the refusal, its answer discarded and its usage and denials kept.
+     * {@code before}, otherwise the refusal ({@link WorkingCopyRefusal}), its answer discarded and its
+     * usage and denials kept.
      *
+     * @param subject what kind of executor ran; never null
      * @param executor the executor's name; never blank
      * @param request the run's request; never null
      * @param before the view taken before the run; never null
      * @param result the run's result; never null
      * @return the result, or its refusal; never null
      */
-    ExecutorResult judge(
-            String executor, ExecutorRequest request, WorkingCopyView.Taken before, ExecutorResult result) {
-        String obligation = "a " + request.role().wire() + " run must leave the working copy unchanged (policy "
-                + policy(request.policy()) + ")";
+    public ExecutorResult judge(
+            ProgramFailures.Subject subject,
+            String executor,
+            ExecutorRequest request,
+            WorkingCopyView.Taken before,
+            ExecutorResult result) {
+        var refusal = new WorkingCopyRefusal(subject, executor, request);
         return switch (view()) {
-            case WorkingCopyView.Unreadable unreadable ->
-                ProgramFailures.discarded(
-                        executor,
-                        obligation + ", and it could not be verified after the run: " + unreadable.why(),
-                        result);
+            case WorkingCopyView.Unreadable unreadable -> refusal.unverified(unreadable, result);
             case WorkingCopyView.Taken after -> {
                 List<String> changed = FactoryMove.changed(
                         before.entries(), after.entries(), registered.lastRegistered(), this::stateBlobAt);
-                yield changed.isEmpty()
-                        ? result
-                        : ProgramFailures.discarded(
-                                executor, obligation + "; the run changed " + named(changed), result);
+                yield changed.isEmpty() ? result : refusal.changed(changed, result);
             }
-        };
-    }
-
-    static String named(List<String> paths) {
-        List<String> shown = new ArrayList<>();
-        for (String path : paths.subList(0, Math.min(NAMED_PATHS, paths.size()))) {
-            shown.add(UntrustedText.subprocess(path).excerpt(256));
-        }
-        String named = String.join(", ", shown);
-        return paths.size() > NAMED_PATHS ? named + " and " + (paths.size() - NAMED_PATHS) + " more" : named;
-    }
-
-    static String policy(Policy policy) {
-        return switch (policy) {
-            case Policy.ReadOnly ignored -> "readOnly";
-            case Policy.WriteExactly exactly -> "writeExactly(" + exactly.path() + ")";
-            case Policy.WorkspaceWrite ignored -> "workspaceWrite";
         };
     }
 }

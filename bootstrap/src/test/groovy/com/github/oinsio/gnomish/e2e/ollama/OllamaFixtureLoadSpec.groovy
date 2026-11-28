@@ -49,7 +49,7 @@ class OllamaFixtureLoadSpec extends Specification {
         expect:
         verify.size() == 1
         verify[0] instanceof VerifyCheck.Judge
-        (verify[0] as VerifyCheck.Judge).votes() == 1
+        (verify[0] as VerifyCheck.Judge).executor().type() == ExecutorType.AGENT_CLI
     }
 
     def "M1: the acceptance criteria file states a single, file-existence-only criterion"() {

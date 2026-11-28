@@ -48,7 +48,7 @@ class CheckEquipmentCommandRunnerSpec extends Specification {
     def "container mode: the runner runs checks in the sandbox pieces' check environments"() {
         given:
         def checkEnvironments = Mock(CheckEnvironmentSource)
-        def pieces = new SandboxRunPieces(null, null, checkEnvironments, null, null, null, new CurrentRound(), null)
+        def pieces = new SandboxRunPieces(null, checkEnvironments, null, null, null, new CurrentRound(), null)
 
         when:
         def runner = equipment.commandRunner(childEnv, pieces)

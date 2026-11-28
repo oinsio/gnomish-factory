@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.port.agent.AnswerFileReading
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.git.PendingVerification
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
 import com.github.oinsio.gnomish.domain.engine.Position
@@ -17,7 +19,7 @@ class ContainerResumePreparationSpec extends Specification {
     SandboxRunSupport support = Mock(SandboxRunSupport)
 
     static PendingVerification snapshot() {
-        new PendingVerification('sha-1', 'build', 0, RoundToken.of('0a1b2c'), Optional.empty(), 'sha-1', ['sha-1'])
+        new PendingVerification('sha-1', 'build', 0, RoundToken.of('0a1b2c'), RoundClose.VERIFIABLE, new AnswerFileReading.Absent(), 'sha-1', ['sha-1'])
     }
 
     // FR18, FR6: the ordinary interrupted visit — the snapshot check first, then the box is made

@@ -111,8 +111,12 @@ class ProgramCheckBindingSpec extends ProgramPollSpecBase {
         given: 'a new run, its table empty'
         def bound = binding(new PendingRuns()).bind(REF, attempt())
 
+        expect: 'the role is handed beside the guard decorator, which does not take it'
+        bound.adoption() != null
+        !(bound.executor() instanceof PendingAdoption)
+
         when:
-        (bound.executor() as PendingAdoption).adopt(deferred(Role.VERDICT), KEY)
+        bound.adoption().adopt(deferred(Role.VERDICT), KEY)
         def polled = bound.executor().poll(deferred(Role.VERDICT), KEY)
         bound.release().run()
 
@@ -160,6 +164,7 @@ class ProgramCheckBindingSpec extends ProgramPollSpecBase {
             it.reason().contains("its fresh box at ${commit} could not be materialized: docker died")
         }
         !(bound.executor() instanceof PendingAdoption)
+        bound.adoption() == null
         bound.executor().describe().capabilities() == [Capability.POLL]
         launches.get() == before
     }

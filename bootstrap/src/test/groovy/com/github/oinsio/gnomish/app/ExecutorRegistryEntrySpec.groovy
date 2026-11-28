@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.adapter.check.http.HttpExecutor
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.adapter.scm.ScmConnectionReader
 import com.github.oinsio.gnomish.adapter.scm.status.ScmStatusExecutor
+import com.github.oinsio.gnomish.app.describe.ExecutorRoles
 import com.github.oinsio.gnomish.app.describe.ProgramBounds
 import com.github.oinsio.gnomish.app.port.git.LastRegisteredCommit
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
@@ -17,6 +18,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
+import com.github.oinsio.gnomish.domain.pipeline.BuiltInExecutors
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
@@ -66,7 +68,7 @@ class ExecutorRegistryEntrySpec extends Specification {
         def equipment = new ProgramRoundEquipment(ProgramBounds.DEFAULTS, VirtualTimeEquipment.on(clock),
                 TestChildEnvironment.hostAllowlist().programGrant(), Path.of('/tmp'), LastRegisteredCommit.NONE)
         ExecutorRegistry.of(described, law(checks), PipelineLaw.ofContent([:]), equipment,
-        BuiltInEntriesFixture.of(clock, [GNOMISH_SCM_STATUS_TOKEN: 't']), null)
+        BuiltInEntriesFixture.of(clock, [GNOMISH_SCM_STATUS_TOKEN: 't']), null, AgentEntryFixture.idle(equipment))
     }
 
     private static String registered(ExecutorRegistry registry) {
@@ -78,9 +80,10 @@ class ExecutorRegistryEntrySpec extends Specification {
         }
     }
 
-    def "FR13: a law whose checks name no built-in registers the command built-in only"() {
+    // FR14 of extract-agent-round-runner (D12): the claude entry is registered in every run
+    def "FR13: a law whose checks name no built-in registers the command built-in and the claude entry only"() {
         expect:
-        registered(registry([])).endsWith('registered: [command]')
+        registered(registry([])).endsWith('registered: [claude, command]')
     }
 
     def "FR1, FR13: the #name entry carries its built-in's describe and binds a new #type to each resolution"() {
@@ -137,7 +140,7 @@ class ExecutorRegistryEntrySpec extends Specification {
         entry.executor(STATUS, CheckRef.of(0, STATUS), AttemptCommitWorkspaces.at('abc')) instanceof ScmStatusExecutor
 
         and: 'a run that admitted no connection — one that runs no stage — registers none'
-        registered(registry([STATUS])).endsWith('registered: [command]')
+        registered(registry([STATUS])).endsWith('registered: [claude, command]')
     }
 
     def "FR13: a check entry binds no stage round, and a stage entry no check round"() {
@@ -160,5 +163,15 @@ class ExecutorRegistryEntrySpec extends Specification {
 
         and: 'the stage entry binds its round executor to an open round\'s environment'
         registry.resolve(new ExecutorName('command')).rounds().executor(Stub(TaskExecutionEnvironment)) != null
+    }
+
+    // FR13 of extract-agent-round-runner (D12): the identity of the single-owner row — the roles the
+    //     real command entry describes are the ones the judge role rule reads
+    def "FR13: the command entry's describe lists exactly the command built-in's owned roles"() {
+        expect:
+        registry([]).resolve(new ExecutorName(BuiltInExecutors.COMMAND)).describe().roles() ==
+        BuiltInExecutors.COMMAND_ROLES.collect {
+            ExecutorRoles.contract(it)
+        }
     }
 }

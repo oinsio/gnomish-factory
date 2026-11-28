@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -28,13 +29,13 @@ class PendingChainSpec extends Specification {
 
     def git = new ScriptedGit()
 
-    private Optional<List<String>> walk() {
+    private Optional<PendingChain.Walk> walk() {
         new PendingChain(git, Path.of('clone')).snapshotBelow('gnomish/TIP-1', new RegisteredCommit(PENDING), KEY, TOKEN)
     }
 
     def "FR20: a parent git cannot read is no snapshot, and the failed read is traced"() {
         given:
-        git.answer(LOG + PENDING, 0, PARENT + '\n' + ServiceCommitMessages.pending('implement', 3, TOKEN) + '\n')
+        git.answer(LOG + PENDING, 0, PARENT + '\n' + RoundSubject.pending('implement', 3, TOKEN) + '\n')
         git.answer(LOG + PARENT, 128, '', 'fatal: bad object ' + PARENT + '\n')
         def logs = LogCaptureSupport.attach(PendingChain, Level.DEBUG)
 
@@ -55,7 +56,7 @@ class PendingChainSpec extends Specification {
 
     def "FR20: an answer that is not one parents line and one subject line is refused (#shape)"() {
         given:
-        git.answer(LOG + PENDING, 0, PARENT + '\n' + ServiceCommitMessages.pending('implement', 3, TOKEN) + '\n')
+        git.answer(LOG + PENDING, 0, PARENT + '\n' + RoundSubject.pending('implement', 3, TOKEN) + '\n')
         git.answer(LOG + PARENT, 0, answer)
         def logs = LogCaptureSupport.attach(PendingChain, Level.DEBUG)
 
@@ -76,11 +77,11 @@ class PendingChainSpec extends Specification {
 
     def "FR20: the snapshot found below one pending commit is that commit's only parent"() {
         given:
-        git.answer(LOG + PENDING, 0, PARENT + '\n' + ServiceCommitMessages.pending('implement', 3, TOKEN) + '\n')
-        git.answer(LOG + PARENT, 0, 'd' * 40 + '\n' + ServiceCommitMessages.snapshot('implement', 3, TOKEN) + '\n')
+        git.answer(LOG + PENDING, 0, PARENT + '\n' + RoundSubject.pending('implement', 3, TOKEN) + '\n')
+        git.answer(LOG + PARENT, 0, 'd' * 40 + '\n' + RoundSubject.snapshot('implement', 3, TOKEN) + '\n')
 
         expect:
-        walk() == Optional.of([PENDING, PARENT])
+        walk() == Optional.of(new PendingChain.Walk([PENDING, PARENT], RoundClose.VERIFIABLE))
         git.calls()*.command() == [LOG + PENDING, LOG + PARENT]
     }
 
@@ -88,15 +89,30 @@ class PendingChainSpec extends Specification {
     def "FR3: the chain read is the commits the walk read, in order, the snapshot last"() {
         given: 'a rotated pending commit above an earlier one, above the snapshot'
         def middle = 'e' * 40
-        git.answer(LOG + PENDING, 0, middle + '\n' + ServiceCommitMessages.pending('implement', 3, TOKEN) + '\n')
-        git.answer(LOG + middle, 0, PARENT + '\n' + ServiceCommitMessages.pending('implement', 3, TOKEN) + '\n')
-        git.answer(LOG + PARENT, 0, 'd' * 40 + '\n' + ServiceCommitMessages.snapshot('implement', 3, TOKEN) + '\n')
+        git.answer(LOG + PENDING, 0, middle + '\n' + RoundSubject.pending('implement', 3, TOKEN) + '\n')
+        git.answer(LOG + middle, 0, PARENT + '\n' + RoundSubject.pending('implement', 3, TOKEN) + '\n')
+        git.answer(LOG + PARENT, 0, 'd' * 40 + '\n' + RoundSubject.snapshot('implement', 3, TOKEN) + '\n')
 
         when:
-        def chain = walk().get()
+        def chain = walk().get().chain()
 
         then:
         chain == [PENDING, middle, PARENT]
         git.calls()*.command() == chain.collect { LOG + it }
+    }
+
+    // FR11 of extract-agent-round-runner (design D11, "Resume"): the bottom of the chain names its kind
+    def "FR11: a walk ending on the round's #bottom answers #close"() {
+        given:
+        git.answer(LOG + PENDING, 0, PARENT + '\n' + RoundSubject.pending('implement', 3, TOKEN) + '\n')
+        git.answer(LOG + PARENT, 0, 'd' * 40 + '\n' + subject + '\n')
+
+        expect:
+        walk() == Optional.of(new PendingChain.Walk([PENDING, PARENT], close))
+
+        where:
+        bottom | subject || close
+        'snapshot' | RoundSubject.snapshot('implement', 3, TOKEN) || RoundClose.VERIFIABLE
+        'pending-round snapshot' | RoundSubject.pendingSnapshot('implement', 3, TOKEN) || RoundClose.PENDING
     }
 }

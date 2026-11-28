@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition.Executor
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 
 /**
  * Shared fixture for the {@code ReferencedFiles} spec family: the existence check
@@ -43,7 +44,7 @@ final class ReferencedFilesFixtures {
 
     /** A judge check whose acceptance criteria live in {@code criteriaFile}. */
     static VerifyCheck.Judge judge(String criteriaFile) {
-        new VerifyCheck.Judge(criteriaFile, 'model', [:], 1)
+        JudgeChecks.agent(criteriaFile, 'model')
     }
 
     /** A non-judge check, used to prove that verify indices count every check, not just judges. */

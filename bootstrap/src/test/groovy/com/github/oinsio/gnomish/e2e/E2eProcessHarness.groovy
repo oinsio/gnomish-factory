@@ -84,7 +84,7 @@ final class E2eProcessHarness {
      *     forward {@code ANTHROPIC_BASE_URL}/auth-token/model env vars down to the real {@code
      *     claude} CLI the process itself spawns: the factory's agent adapters re-set exactly these
      *     seam names from their own (the spawned JVM's) environment as factory-set protocol
-     *     variables ({@code AgentAiSeam}, D6/FR9 of add-sandbox-core), so setting them on the
+     *     variables ({@code ClaudeEnvironment}, D6/FR9 of add-sandbox-core), so setting them on the
      *     factory process is all a spec needs
      * @return the captured exit code, stdout, and stderr
      */

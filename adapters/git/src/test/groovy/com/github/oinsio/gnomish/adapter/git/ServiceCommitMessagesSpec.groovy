@@ -1,15 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git
 
-import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
-import com.github.oinsio.gnomish.domain.engine.CheckRef
-import com.github.oinsio.gnomish.domain.engine.PendingPollRecord
-import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
-import com.github.oinsio.gnomish.pendingkey.PendingKey
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-import java.time.Instant
 import spock.lang.Specification
 import spock.lang.Unroll
 
@@ -55,57 +48,6 @@ class ServiceCommitMessagesSpec extends Specification {
             def message = ServiceCommitMessages.taskEvent(event)
             message.startsWith('gnomish: task ') && message.length() > 'gnomish: task '.length()
         }
-    }
-
-    // FR15 of make-checkpoint-gate-durable (design D10): the one parsed subject names the round's
-    // token after its stage and round, separated by one space — SnapshotTipCheck reads it back.
-    def "FR15: snapshot(stage, round, token) names the round token after stage#round"() {
-        expect:
-        ServiceCommitMessages.snapshot('work', 0, RoundToken.of('0a1b2c')) == 'gnomish: snapshot work#0 0a1b2c'
-    }
-
-    // FR19 of migrate-verify-to-executor-contract (design D22): the unverified subject stays in the
-    // service namespace and outside the snapshot prefix, so the recogniser never reads it
-    def "FR19: unverifiedSnapshot(stage, round, token) is a service subject outside the snapshot prefix"() {
-        when:
-        def subject = ServiceCommitMessages.unverifiedSnapshot('work', 0, RoundToken.of('0a1b2c'))
-
-        then:
-        subject == 'gnomish: unverified-snapshot work#0 0a1b2c'
-        subject.startsWith(GnomeRangeInspection.SERVICE_SUBJECT)
-        !subject.startsWith(ServiceCommitMessages.SNAPSHOT_PREFIX)
-    }
-
-    // FR19 (design D22): the step's one choice of the subject by the round's close
-    def "FR19: the snapshot step names a #close close #expected"() {
-        expect:
-        RoundSnapshot.subject(new AttemptKey('T-1', 'work', 2), RoundToken.of('0a1b2c'), close) == expected
-
-        where:
-        close || expected
-        RoundClose.VERIFIABLE || 'gnomish: snapshot work#2 0a1b2c'
-        RoundClose.UNVERIFIABLE || 'gnomish: unverified-snapshot work#2 0a1b2c'
-    }
-
-    // FR20 of migrate-verify-to-executor-contract (design D21): the stage from the position, round and
-    // token from the list's last entry
-    def "FR20: a pending commit's subject names the stage, the last entry's round and its token"() {
-        given:
-        def last = new PendingPollRecord(new CheckRef(1, UntrustedText.factory('ci')), 3, RoundToken.of('0a1b2c'),
-                new PendingKey('run-1'), Instant.EPOCH)
-
-        expect:
-        ServiceCommitMessages.pending('work', last) == 'gnomish: pending work#3 0a1b2c'
-    }
-
-    def "FR20: an entry with no round token has no pending subject"() {
-        when:
-        ServiceCommitMessages.pending('work', new PendingPollRecord(new CheckRef(4, UntrustedText.factory('ci')), 3,
-                null, new PendingKey('run-1'), Instant.EPOCH))
-
-        then:
-        def refused = thrown(IllegalArgumentException)
-        refused.message.contains('the entry of check 4 carries none')
     }
 
     def "FR2: salvage() is the fixed constant string"() {

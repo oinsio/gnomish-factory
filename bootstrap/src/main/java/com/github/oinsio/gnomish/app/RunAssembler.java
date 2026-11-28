@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.app.console.DialogConsole;
 import com.github.oinsio.gnomish.domain.engine.Engine;
 import com.github.oinsio.gnomish.domain.engine.EnginePorts;
+import com.github.oinsio.gnomish.domain.engine.PendingBounds;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery;
@@ -48,7 +49,7 @@ final class RunAssembler {
      *     names (D17, NFR-S1 of add-tracker-port), combined here with the operator's {@code
      *     factory.sandbox.env-passthrough} into the run's {@link ChildEnvAllowlist} (D6, FR9 of
      *     add-sandbox-core) — a credential name in passthrough is refused at this seam, and the
-     *     CLI executor/judge adapters and the command-check runner all compose their child
+     *     CLI executor, the agent judge and the command-check runner all compose their child
      *     environments from the resulting positive allowlist, so a credential reaches neither the
      *     gnome nor a command check by construction; empty for plain {@code gnomish run}
      * @param law the described law: its binding, and the describe versions the engine pins and
@@ -100,8 +101,6 @@ final class RunAssembler {
                 // FR1, FR2 of migrate-verify-to-executor-contract: one port for stage and check
                 // rounds, a check round routed to the check dispatch behind the pin decorator.
                 stageRounds.port(),
-                ExecutorAdapterSelector.judgeVoter(
-                        assembly.factoryProperties, assembly.time.clock(), childEnv, frozen, sandbox),
                 listener,
                 attemptPersistence,
                 assembly.time,
@@ -110,7 +109,10 @@ final class RunAssembler {
                 law.executors(),
                 // FR14, FR21 of define-executor-contract: the identity of the rounds that executor's
                 // source opens — its cell in a branch mode, the in-place identity otherwise.
-                stageRounds.identity());
+                stageRounds.identity(),
+                // FR10 of extract-agent-round-runner (D11): the factory's own pending interval and
+                // ceiling of a pending transform round; no law key sets them.
+                PendingBounds.DEFAULTS);
 
         var loop = new RunnerOutcomeLoop(new Engine(), console, assembly.errorConsole);
         return new Run(loop, ports);

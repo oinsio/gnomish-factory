@@ -21,6 +21,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.PendingPollRecord
+import com.github.oinsio.gnomish.domain.engine.PendingSubject
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -115,7 +116,7 @@ class PendingCommitResumeSpec extends Specification implements BareGitRepoFixtur
         live.open(RoundToken.of(registered()))
         new File(box.workingCopy.toFile(), 'work.txt').text = 'gnome work'
         new EnvironmentRoundSnapshot(box, runner, cloneDir, live).snapshot(TASK, 'build', ROUND, RoundClose.VERIFIABLE)
-        def entry = new PendingPollRecord(new CheckRef(0, UntrustedText.factory('executor:ci')), ROUND, live.opened(),
+        def entry = new PendingPollRecord(new PendingSubject.Check(new CheckRef(0, UntrustedText.factory('executor:ci'))), ROUND, live.opened(),
                 new PendingKey('run-1'), Instant.parse('2026-11-12T09:00:00Z'))
         persistence(live).persistPending(TASK, stateAt(registered()).withPendingPolls([entry]))
         entry
@@ -133,11 +134,13 @@ class PendingCommitResumeSpec extends Specification implements BareGitRepoFixtur
         when: 'a pickup reads the register and runs the round through the resume decorator'
         def found = new SnapshotTipCheck(runner, cloneDir).inspect(TASK)
         def resumed = new CurrentRound()
+        // As the run's assembly does, before the engine's first request (D11, "Resume").
+        found.ifPresent(resumed.&restore)
         def runs = 0
         def stageExecutor = { StageExecutor.Request r ->
             runs++; throw new AssertionError('the stage executor ran')
         } as StageExecutor
-        def result = new ResumeVerificationStageExecutor(stageExecutor, resumed, found.orElse(null)).execute(request())
+        def result = new ResumeVerificationStageExecutor(stageExecutor, found.orElse(null)).execute(request())
 
         then: 'no stage executor ran; the round goes on to verification of exactly the snapshot'
         runs == 0
@@ -164,10 +167,11 @@ class PendingCommitResumeSpec extends Specification implements BareGitRepoFixtur
         liveRoundDiesAfterPendingCommit()
         def pendingCommit = registered()
         def resumed = new CurrentRound()
+        def found = new SnapshotTipCheck(runner, cloneDir).inspect(TASK).get()
+        resumed.restore(found)
         new ResumeVerificationStageExecutor({
             throw new AssertionError('ran')
-        } as StageExecutor, resumed,
-        new SnapshotTipCheck(runner, cloneDir).inspect(TASK).get()).execute(request())
+        } as StageExecutor, found).execute(request())
         def key = new AttemptKey(TASK, 'build', ROUND)
         def closing = stateAt(pendingCommit).withPendingPolls([])
         .recordQualityFailure(AttemptRecords.of(ROUND, AttemptRecord.Result.QUALITY_FAILURE, Instant.EPOCH, [],

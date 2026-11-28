@@ -12,8 +12,9 @@ import spock.lang.TempDir
  * {@link ConfigError} set (M2, UX1/UX2). These are the pure {@code StageSanityRule}
  * checks: a blank executor {@code model}; a non-positive resolved attempt limit; an
  * {@code external} check with a blank id, a non-positive {@code interval}/
- * {@code timeout}, or {@code interval > timeout}; and a {@code judge} check with a
- * blank {@code model} or a {@code votes} that is even or zero.
+ * {@code timeout}, or {@code interval > timeout}; and a {@code judge} check whose
+ * executor block resolves to no executor serving role {@code verdict} (design D12 of
+ * extract-agent-round-runner).
  *
  * <p>Each fixture is structurally clean so the model maps and the pure rule runs;
  * {@code judge} rows leave {@code criteriaFile} blank so {@code ReferencedFiles}
@@ -84,21 +85,24 @@ instructions: stages/plan/instructions.md
         'interval over timeout' | external('ci', '2m', '30s') || new ConfigError('stages/plan/stage.yaml', 'verify[0].interval', 'external poll interval PT2M exceeds timeout PT30S; the interval must not exceed the timeout')
     }
 
-    def "M2/FR11: judge-check faults each yield exactly their located error"() {
+    // FR13, UX1 of extract-agent-round-runner: a command or api judge block serves no verdict
+    def "M2/FR13: a judge block of type #type is a located role error"() {
         given:
-        writeStage(verifyBlock)
+        writeStage(judge(block))
 
         when:
         def errors = loadInvalid()
 
         then:
-        errors == [expected]
+        errors == [
+            new ConfigError('stages/plan/stage.yaml', 'verify[0].executor.type', reason
+            + "; a judge check needs an executor that serves role 'verdict' (type agent-cli, or a program whose describe lists 'verdict')")
+        ]
 
         where:
-        rule | verifyBlock || expected
-        'blank judge model'| judge('""', '3') || new ConfigError('stages/plan/stage.yaml', 'verify[0].model', 'missing required judge model; the model must be pinned in the manifest for reproducibility')
-        'even votes' | judge('judge-m', '2')|| new ConfigError('stages/plan/stage.yaml', 'verify[0].votes', 'invalid judge vote count 2; votes must be at least 1 and odd')
-        'zero votes' | judge('judge-m', '0')|| new ConfigError('stages/plan/stage.yaml', 'verify[0].votes', 'invalid judge vote count 0; votes must be at least 1 and odd')
+        type | block || reason
+        'command' | '      type: command\n      command: make check\n' || "executor type 'command' resolves to the built-in executor 'command', which serves only role 'transform'"
+        'api' | '      type: api\n      model: m\n' || "executor type 'api' resolves to no executor"
     }
 
     /** A valid single plan-stage tree whose manifest body is the given block (with executor/verify). */
@@ -127,8 +131,8 @@ verify:
 """
     }
 
-    /** A judge verify block (no criteriaFile) plus a valid agent-cli executor, for the vote/model rows. */
-    private static String judge(String model, String votes) {
+    /** A judge verify block (no criteriaFile) with the given executor block lines, plus a valid agent-cli executor. */
+    private static String judge(String block) {
         """\
 executor:
   type: agent-cli
@@ -136,8 +140,7 @@ executor:
 instructions: stages/plan/instructions.md
 verify:
   - type: judge
-    model: ${model}
-    votes: ${votes}
-"""
+    executor:
+${block}"""
     }
 }

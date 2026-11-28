@@ -129,8 +129,9 @@ instructions: stages/plan/instructions.md
 verify:
   - type: judge
     criteriaFile: ${criteria}
-    model: judge-model
-    votes: 1
+    executor:
+      type: agent-cli
+      model: judge-model
 advancement: auto
 """)
         write('stages/plan/instructions.md', 'plan it\n')
@@ -149,8 +150,9 @@ instructions: ${instructionsRef}
 verify:
   - type: judge
     criteriaFile: ${criteriaRef}
-    model: judge-model
-    votes: 1
+    executor:
+      type: agent-cli
+      model: judge-model
 advancement: auto
 """)
         write('stages/plan/instructions.md', 'plan it\n')

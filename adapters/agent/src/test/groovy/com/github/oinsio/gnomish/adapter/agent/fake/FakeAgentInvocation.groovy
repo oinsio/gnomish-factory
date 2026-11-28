@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit
  * code, and any workspace files the scenario wrote.
  *
  * <p>This class only drives the fake; it is not itself a production
- * {@code StageExecutor}/{@code JudgeVoter} adapter. It exists so this task's
+ * {@code StageExecutor} adapter. It exists so this task's
  * own specs — and later groups' specs — exercise the same real
  * ProcessBuilder/pipes/exit-code path the CLI adapters will use (D11's "one
  * suite, real machinery" scenario).
@@ -37,10 +37,10 @@ class FakeAgentInvocation {
     Path workingDirectory = Files.createTempDirectory('fake-agent-cwd')
 
     /**
-     * When set, wired as {@code $GNOMISH_DECISION_FILE} — the scenario's
-     * {@code decision.json} (if any) is copied there (D1's decision-file protocol).
+     * When set, wired as {@code $GNOMISH_ANSWER_FILE} — the scenario's
+     * {@code decision.json} (if any) is copied there (the answer file of FR9 of extract-agent-round-runner).
      */
-    Path decisionFilePath
+    Path answerFilePath
 
     /**
      * Extra CLI args appended after the script path, for ProcessBuilder-log realism; the fake
@@ -70,7 +70,7 @@ class FakeAgentInvocation {
         ProcessBuilder builder = new ProcessBuilder(command)
         builder.directory(workingDirectory.toFile())
         // Nothing inherited (design D14 of make-checkpoint-gate-durable): only the variables this
-        // invocation sets itself reach the fake, never a GNOMISH_DECISION_FILE of the test run.
+        // invocation sets itself reach the fake, never a GNOMISH_ANSWER_FILE of the test run.
         Map<String, String> environment = TestChildEnvironment.cleared(builder)
         environment.put('GNOMISH_FAKE_SCENARIO', scenario ?: '')
         if (judgeScenario != null) {
@@ -79,8 +79,8 @@ class FakeAgentInvocation {
         if (judgeModel != null) {
             environment.put('GNOMISH_FAKE_JUDGE_MODEL', judgeModel)
         }
-        if (decisionFilePath != null) {
-            environment.put('GNOMISH_DECISION_FILE', decisionFilePath.toAbsolutePath().toString())
+        if (answerFilePath != null) {
+            environment.put('GNOMISH_ANSWER_FILE', answerFilePath.toAbsolutePath().toString())
         }
 
         Process process = builder.start()

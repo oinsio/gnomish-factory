@@ -52,7 +52,7 @@ class PipelineMapperNullContractSpec extends Specification implements PipelineMa
         def stage = new StageDto('p', null, null,
                 new ExecutorDto('api', null, null), 'i.md',
                 [
-                    new VerifyCheckDto.Judge('c.md', null, null, 1)
+                    new VerifyCheckDto.Judge('c.md', new ExecutorDto('agent-cli', null, null))
                 ], null, 'auto')
 
         when:
@@ -60,7 +60,7 @@ class PipelineMapperNullContractSpec extends Specification implements PipelineMa
 
         then:
         s.executor().model() == ''
-        (s.verify()[0] as VerifyCheck.Judge).model() == ''
+        (s.verify()[0] as VerifyCheck.Judge).executor().model() == ''
     }
 
     // Null producerOutputId / output id / builtin name → blank strings so the graph rule (4.3) reports them
@@ -92,7 +92,7 @@ class PipelineMapperNullContractSpec extends Specification implements PipelineMa
         def stage = ioLessStage([
             new VerifyCheckDto.Command(null),
             new VerifyCheckDto.External(null, '1s', '1m', null),
-            new VerifyCheckDto.Judge(null, 'jm', null, 1),
+            new VerifyCheckDto.Judge(null, new ExecutorDto('agent-cli', 'jm', null)),
         ] as List<VerifyCheckDto>)
 
         when:
@@ -104,17 +104,19 @@ class PipelineMapperNullContractSpec extends Specification implements PipelineMa
         (checks[2] as VerifyCheck.Judge).criteriaFile() == ''
     }
 
-    // Null votes → 0 so StageSanityRule (4.4) flags it (votes >= 1 and odd)
-    def "maps null judge votes to zero for the domain rule to flag"() {
+    // FR13 of extract-agent-round-runner: no judge is defaulted — an absent block discards the
+    //     definition with one located mapping error
+    def "maps a null judge executor block to a located error, discarding the definition"() {
         given:
         def stage = ioLessStage([
-            new VerifyCheckDto.Judge('c.md', 'jm', null, null)
+            new VerifyCheckDto.Judge('c.md', null)
         ])
 
         when:
-        def judge = mappedStage(stage).verify()[0] as VerifyCheck.Judge
+        def result = mapOne(stage)
 
         then:
-        judge.votes() == 0
+        result.definition() == null
+        result.errors()*.where() == ['verify[0].executor']
     }
 }

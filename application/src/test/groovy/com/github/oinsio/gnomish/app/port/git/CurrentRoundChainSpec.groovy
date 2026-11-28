@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.git
 
+import com.github.oinsio.gnomish.app.port.agent.AnswerFileReading
 import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import spock.lang.Specification
@@ -46,7 +47,7 @@ class CurrentRoundChainSpec extends Specification {
         def live = new CurrentRound()
 
         when:
-        restored.restore(new PendingVerification('snap-9', 'build', 2, TOKEN, Optional.empty(), 'pend-b',
+        restored.restore(new PendingVerification('snap-9', 'build', 2, TOKEN, RoundClose.VERIFIABLE, new AnswerFileReading.Absent(), 'pend-b',
                 ['pend-b', 'pend-a', 'snap-9']))
         live.open(TOKEN)
         live.snapshotted('snap-9', RoundClose.VERIFIABLE)
@@ -85,7 +86,7 @@ class CurrentRoundChainSpec extends Specification {
     // FR3, D14: the record's chain runs from its registered commit down to its snapshot
     def "FR3: a pending verification whose chain #why is refused"() {
         when:
-        new PendingVerification('snap', 'build', 0, TOKEN, Optional.empty(), 'pend', chain)
+        new PendingVerification('snap', 'build', 0, TOKEN, RoundClose.VERIFIABLE, new AnswerFileReading.Absent(), 'pend', chain)
 
         then:
         def failure = thrown(IllegalArgumentException)
@@ -103,10 +104,99 @@ class CurrentRoundChainSpec extends Specification {
         def chain = ['pend', 'snap']
 
         when:
-        def verification = new PendingVerification('snap', 'build', 0, TOKEN, Optional.empty(), 'pend', chain)
+        def verification = new PendingVerification('snap', 'build', 0, TOKEN, RoundClose.VERIFIABLE, new AnswerFileReading.Absent(), 'pend', chain)
         chain.add('late')
 
         then:
         verification.chain() == ['pend', 'snap']
+    }
+
+    // FR11, NFR-R3 of extract-agent-round-runner (D11, "Resume"): the bottom names the kind, and a
+    //     pending round stands on at least one pending round commit
+    def "FR11: a pending verification of kind #close over #chain is refused: #why"() {
+        when:
+        new PendingVerification('snap', 'build', 0, TOKEN, close, new AnswerFileReading.Absent(), chain.first(), chain)
+
+        then:
+        def failure = thrown(IllegalArgumentException)
+        failure.message.contains(why)
+
+        where:
+        close | chain || why
+        RoundClose.UNVERIFIABLE | ['snap'] || 'resumed by no one'
+        RoundClose.UNVERIFIABLE | ['pend', 'snap'] || 'resumed by no one'
+        RoundClose.PENDING | ['snap'] || 'a pending-round snapshot alone is re-driven'
+    }
+
+    def "FR11: a pending round above its pending-round snapshot, and an interrupted verification at its snapshot, are values"() {
+        expect:
+        new PendingVerification('snap', 'build', 0, TOKEN, RoundClose.PENDING, new AnswerFileReading.Absent(), 'pend',
+                ['pend', 'snap']).close() == RoundClose.PENDING
+        new PendingVerification('snap', 'build', 0, TOKEN, RoundClose.VERIFIABLE, new AnswerFileReading.Absent(), 'snap',
+                ['snap']).close() == RoundClose.VERIFIABLE
+    }
+
+    // FR11, NFR-R3 (D11, "Resume"; crash-consistency item 14): a pending round is restored through the
+    //     live round's transitions as the live round left it once its start went pending
+    def "FR11: a restored pending round equals the live round after its pending round commits, and its token is the pending one"() {
+        given:
+        def restored = new CurrentRound()
+        def live = new CurrentRound()
+
+        when:
+        restored.restore(new PendingVerification('psnap', 'build', 2, TOKEN, RoundClose.PENDING, new AnswerFileReading.Absent(),
+                'pend-b', ['pend-b', 'pend-a', 'psnap']))
+        live.open(TOKEN)
+        live.snapshotted('psnap', RoundClose.PENDING)
+        live.pendingRegistered('pend-a')
+        live.pendingRegistered('pend-b')
+
+        then:
+        restored.snapshot() == live.snapshot()
+        restored.snapshot().get().close() == RoundClose.PENDING
+        restored.registeredChain() == live.registeredChain()
+
+        and: 'the restored round is a pending one to continue until its token is taken'
+        restored.pendingToken() == Optional.of(TOKEN)
+        restored.takeToken() == Optional.of(TOKEN)
+        restored.pendingToken() == Optional.empty()
+    }
+
+    def "FR11: no pending token while #state"() {
+        given:
+        def rounds = new CurrentRound()
+        prepare(rounds)
+
+        expect:
+        rounds.pendingToken() == Optional.empty()
+
+        where:
+        state | prepare
+        'no round was opened' | { CurrentRound r -> }
+        'the open round has no snapshot' | { CurrentRound r ->
+            r.open(TOKEN)
+        }
+        'the open round closed verifiable' | { CurrentRound r ->
+            r.open(TOKEN); r.snapshotted('s', RoundClose.VERIFIABLE)
+        }
+        'the open round closed unverifiable' | { CurrentRound r ->
+            r.open(TOKEN); r.snapshotted('s', RoundClose.UNVERIFIABLE)
+        }
+        'a live pending round\'s token was taken' | { CurrentRound r ->
+            r.open(TOKEN); r.snapshotted('s', RoundClose.PENDING); r.takeToken()
+        }
+    }
+
+    def "FR11: an interrupted verification is restored verifiable, never a pending round"() {
+        given:
+        def rounds = new CurrentRound()
+
+        when:
+        rounds.restore(new PendingVerification('snap', 'build', 0, TOKEN, RoundClose.VERIFIABLE, new AnswerFileReading.Absent(),
+                'pend', ['pend', 'snap']))
+
+        then:
+        rounds.snapshot().get().close() == RoundClose.VERIFIABLE
+        rounds.pendingToken() == Optional.empty()
     }
 }

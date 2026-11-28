@@ -8,7 +8,7 @@ import java.util.Set;
  *
  * <p>Implements FR11, NFR-S4 of define-executor-contract.
  */
-sealed interface WorkingCopyView {
+public sealed interface WorkingCopyView {
 
     /**
      * A view taken.

@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app.port.run;
 
-import com.github.oinsio.gnomish.app.port.agent.JudgeEnvironmentSource;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource;
 import com.github.oinsio.gnomish.app.port.check.FreshBoxSource;
@@ -14,8 +13,10 @@ import org.jspecify.annotations.Nullable;
  * The sandboxed-run adapter bundle the run assembly swaps in
  * for the host defaults when a run executes in container mode (the integration
  * pass of add-sandbox-core): the executor's round source (leased box, in-branch
- * decision file, snapshot-closed rounds — FR21, FR23), the fresh judge-box
- * source (D9), the check environment source (same-box / fresh-box, FR13), the
+ * decision file, snapshot-closed rounds — FR21, FR23), the check environment
+ * source (same-box / fresh-box, FR13), the fresh box of each verdict request —
+ * a {@code program} check's and a {@code judge} check's alike (design D2 of
+ * extract-agent-round-runner) — the
  * factory clone's bare-object reader for builtin checks (FR21, D15), the
  * external-check delivery precondition (FR21), and the run's round cell
  * with an optionally pending interrupted verification found on resume
@@ -25,13 +26,14 @@ import org.jspecify.annotations.Nullable;
  * never which backend supplies it (task 4.4, D12 of split-into-modules).
  *
  * <p>Implements FR4, FR13, FR15, FR21, FR23 of add-sandbox-core; FR13, FR15 of
- * make-checkpoint-gate-durable; FR3, NFR-S1 of migrate-verify-to-executor-contract.
+ * make-checkpoint-gate-durable; FR3, NFR-S1 of migrate-verify-to-executor-contract; FR4 of
+ * extract-agent-round-runner.
  *
  * @param executorRounds the executor's round environment source; never null
- * @param judgeEnvironments the judge's fresh-box source; never null
  * @param checkEnvironments the command-check environment source; never null
- * @param freshBoxes the box of each request of a {@code program} verdict check, by the executor's
- *     grant (design D6, D11 of migrate-verify-to-executor-contract); never null
+ * @param freshBoxes the box of each request of a {@code program} or {@code judge} verdict check, by
+ *     the executor's grant (design D6, D11 of migrate-verify-to-executor-contract; D2 of
+ *     extract-agent-round-runner); never null
  * @param attemptReader the factory clone's bare-object reader builtin checks evaluate the
  *     attempt commit through; never null
  * @param attemptDelivery the external-check push-precondition seam; never null
@@ -42,7 +44,6 @@ import org.jspecify.annotations.Nullable;
  */
 public record SandboxRunPieces(
         RoundEnvironmentSource executorRounds,
-        JudgeEnvironmentSource judgeEnvironments,
         CheckEnvironmentSource checkEnvironments,
         FreshBoxSource freshBoxes,
         GitObjects attemptReader,

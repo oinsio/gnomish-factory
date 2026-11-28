@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
+import com.github.oinsio.gnomish.adapter.agent.claude.ClaudeSettings;
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner;
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence;
@@ -192,6 +193,11 @@ public class ManualRunConfiguration {
      * scope are the fourth (FR17, design D16 of migrate-verify-to-executor-contract): with the
      * profiles they admit the tracker's URL at load by the medium it was written in, so a host the
      * law requests and no operator grants is a located load error before any call.
+     *
+     * <p>The agent executor's settings judge is the Claude dialect's ({@code ClaudeSettings}), bound by
+     * a method reference since the loader's module cannot reach the dialect's: every agent-cli stage's
+     * and judge check's settings are held to the schema the dialect's describe declares (FR7, design
+     * D6 of extract-agent-round-runner).
      */
     @Bean
     public PipelineSource pipelineSource(
@@ -203,6 +209,7 @@ public class ManualRunConfiguration {
         return new GnomishDirPipelineSource(
                 trackerSubsectionValidatorRegistry,
                 checkParamsValidatorRegistry,
+                ClaudeSettings::validate,
                 new ConnectionAdmission(
                         profiles,
                         trackerEndpointRegistry,

@@ -67,7 +67,7 @@ class ProgramDispatchFlowSpec extends TakeResumeSpecBase {
 
         and: "the agent stage's round is the agent's: the fake agent's model and its Write call"
         with(roundOf('review')) {
-            get('executor').asText() == 'agent-cli'
+            get('executor').asText() == 'claude'
             get('byModel').fieldNames().toList() == ['claude-fake-main-1']
             get('byTool')*.get('name')*.asText() == ['Write']
         }

@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.Sandbox
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 import spock.lang.Specification
 
 /**
@@ -24,7 +25,7 @@ class CommandSettingsValidatorSpec extends Specification {
 
     private static final AutonomyLimits LIMITS = new AutonomyLimits(2)
     private static final String MALFORMED =
-    "malformed 'roundTimeout': expected a number of seconds or an ISO-8601 duration string"
+    "malformed 'roundTimeout': expected a positive number of seconds or a positive ISO-8601 duration string"
 
     def "FR3: a command stage's well-formed roundTimeout (#value) yields no errors"() {
         expect:
@@ -71,7 +72,10 @@ class CommandSettingsValidatorSpec extends Specification {
             'not-a-duration',
             '',
             '   ',
-            ['PT1M']
+            ['PT1M'],
+            0,
+            -5,
+            'PT0S'
         ]
     }
 
@@ -105,7 +109,7 @@ class CommandSettingsValidatorSpec extends Specification {
 
     def "FR3: a judge check on a command stage is not this validator's to judge"() {
         given:
-        def judge = new VerifyCheck.Judge('accept.md', 'judge-model', [allowedTools: ['Read']], 1)
+        def judge = JudgeChecks.agent('accept.md', 'judge-model', [allowedTools: ['Read']])
         def stage = stage('gen', commandExecutor([:]), [judge])
 
         expect:

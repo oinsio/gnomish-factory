@@ -33,9 +33,9 @@ class UsageFoldSpec extends Specification {
     def "FR17: a round's judge votes are folded under the verdict role beside the executor"() {
         given:
         def recorded = round(0, [
-            Participants.transform('agent-cli', new ExecutorUsage(null, [], ['m': priced(A, '0.5')])),
-            Participants.verdict('agent-cli', 0, ['j': priced(A, '0.25')]),
-            Participants.verdict('agent-cli', 1, ['j': priced(B, '0.25')])
+            Participants.transform('claude', new ExecutorUsage(null, [], ['m': priced(A, '0.5')])),
+            Participants.verdict('claude', 0, ['j': priced(A, '0.25')]),
+            Participants.verdict('claude', 1, ['j': priced(B, '0.25')])
         ])
 
         when:
@@ -52,7 +52,7 @@ class UsageFoldSpec extends Specification {
     def "FR17: folding the round the snapshot already names by through changes nothing"() {
         given:
         def recorded = round(0, [
-            Participants.transform('agent-cli', new ExecutorUsage(null, [], ['m': priced(A, '0.5')]))
+            Participants.transform('claude', new ExecutorUsage(null, [], ['m': priced(A, '0.5')]))
         ])
         def once = UsageFold.fold(UsageSnapshot.EMPTY, recorded)
 
@@ -65,8 +65,8 @@ class UsageFoldSpec extends Specification {
     def "NFR-O3: an entry reporting tokens without cost makes the cost an incomplete lower bound"() {
         given:
         def recorded = round(0, [
-            Participants.transform('agent-cli', new ExecutorUsage(null, [], ['m': priced(A, '0.5')])),
-            Participants.verdict('agent-cli', 0, Unpriced.of(['j': B]))
+            Participants.transform('claude', new ExecutorUsage(null, [], ['m': priced(A, '0.5')])),
+            Participants.verdict('claude', 0, Unpriced.of(['j': B]))
         ])
 
         when:
@@ -143,7 +143,7 @@ class UsageFoldSpec extends Specification {
         given:
         def snapshot = UsageFold.fold(UsageSnapshot.EMPTY, round(0, [
             Participants.transform('x', new ExecutorUsage(null, [], Unpriced.of(['a': A]))),
-            Participants.verdict('agent-cli', 0, Unpriced.of(['a': B, 'b': A]))
+            Participants.verdict('claude', 0, Unpriced.of(['a': B, 'b': A]))
         ]))
 
         expect:
@@ -163,7 +163,7 @@ class UsageFoldSpec extends Specification {
         def snapshot = UsageFold.foldAll([
             round(0, [
                 Participants.transform('x', new ExecutorUsage(null, [], ['a': priced(A, '0.5'), 'b': new ModelUsage(B, null)])),
-                Participants.verdict('agent-cli', 0, Unpriced.of(['a': A]))
+                Participants.verdict('claude', 0, Unpriced.of(['a': A]))
             ])
         ])
 

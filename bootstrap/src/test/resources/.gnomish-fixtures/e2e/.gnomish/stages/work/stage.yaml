@@ -19,8 +19,9 @@ verify:
     command: test -f attempt-marker.txt && exit 0 || { touch attempt-marker.txt; exit 1; }
   - type: judge
     criteriaFile: stages/work/acceptance.md
-    model: judge-model
-    settings:
-      maxTurns: 3
-    votes: 1
+    executor:
+      type: agent-cli
+      model: judge-model
+      settings:
+        maxTurns: 3
 advancement: manual

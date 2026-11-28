@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
+import com.github.oinsio.gnomish.adapter.agent.HostRoundEnvironmentSource
 import com.github.oinsio.gnomish.adapter.check.http.HttpRunContext
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.DenialCursorSource
@@ -15,7 +15,6 @@ import com.github.oinsio.gnomish.adapter.git.SandboxRoundEnvironmentSource
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
-import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.git.RunRound
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
@@ -28,7 +27,6 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
@@ -58,7 +56,7 @@ import spock.lang.TempDir
 
 /**
  * The shared medium of the round flow specs: the domain {@link Engine} over the real round
- * adapters of a {@code gnomish run}, in either mode. Sandboxed: {@link CliStageExecutor} with the
+ * adapters of a {@code gnomish run}, in either mode. Sandboxed: the {@code claude} entry's stage half ({@link ClaudeStageFixture}) with the
  * fake agent, {@link SandboxRoundEnvironmentSource} over an {@link EnvironmentLease}, {@link
  * EnvironmentAttemptPersistence}, and a box that is either a {@link LocalBoxEnvironment} (real
  * clone, in-box commits, harvest; no daemon) seen through an {@link ObservedBox}, or whatever a
@@ -107,13 +105,18 @@ abstract class RoundFlowSpecBase extends Specification implements BareGitRepoFix
     /** Runs the pipeline to its outcome, the fake agent playing {@code scenario} in {@code box}. */
     TaskOutcome run(PipelineDefinition definition, TaskExecutionEnvironment box, String scenario,
             ScriptedCheckRounds checks) {
+        run(definition, box, FakeAgentSupport.propertiesFor(scenario), checks)
+    }
+
+    /** Runs the pipeline to its outcome, {@code agent}'s binary playing the rounds in {@code box}. */
+    TaskOutcome run(PipelineDefinition definition, TaskExecutionEnvironment box, FactoryProperties agent,
+            ScriptedCheckRounds checks) {
         def lease = new EnvironmentLease({ -> box }, BRANCH, [
             new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), definition.stages())
         ])
         def source = new SandboxRoundEnvironmentSource(lease, runner, clone, TASK, rounds, new VirtualClock())
         // Ahead of the fixed instant the local box stamps process starts with, so wall time is positive.
-        def executor = new CliStageExecutor(FakeAgentSupport.propertiesFor(scenario),
-                new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)), { e -> } as AgentProgressListener, ChildEnvAllowlist.none(), LAW, source)
+        def executor = ClaudeStageFixture.executor(agent, new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)), ChildEnvAllowlist.none(), LAW, source)
         def persistence = new EnvironmentAttemptPersistence(box, runner, clone, objects(), rounds, ClaimEpochSource.NONE)
         engine(definition, CheckRouting.of(executor, checks), persistence, Files.createDirectories(tempDir.resolve('workspace')),
                 source.identity())
@@ -137,9 +140,8 @@ abstract class RoundFlowSpecBase extends Specification implements BareGitRepoFix
         // shared by the round source, the snapshot and the persistence.
         def cell = new CurrentRound()
         def hostGit = TaskGitFixture.real(runner).midRoundPush()
-        def rounds = hostGit.decorate(CliStageExecutor.hostRounds(clock, TestChildEnvironment.hostAllowlist()), cell)
-        def executor = hostGit.snapshotting(new CliStageExecutor(agent, clock, { e -> } as AgentProgressListener,
-        TestChildEnvironment.hostAllowlist(), LAW, rounds), cell)
+        def rounds = hostGit.decorate(new HostRoundEnvironmentSource(clock, TestChildEnvironment.hostAllowlist()), cell)
+        def executor = hostGit.snapshotting(ClaudeStageFixture.executor(agent, clock, TestChildEnvironment.hostAllowlist(), LAW, rounds, cell), cell)
         engine(definition, CheckRouting.of(executor, checks),
                 new GitAttemptPersistence(runner, worktree, TASK, ClaimEpochSource.NONE, cell, clock), worktree, rounds.identity())
     }
@@ -172,7 +174,7 @@ abstract class RoundFlowSpecBase extends Specification implements BareGitRepoFix
     /** Runs the pipeline to its outcome through {@code port}, the engine's one port for stage and check rounds. */
     static TaskOutcome engine(PipelineDefinition definition, StageExecutor port, AttemptPersistence persistence,
             Path workspace, RoundIdentity identity) {
-        def ports = new EnginePorts(port, new ScriptedJudgeVoter(), new RecordingEventListener(), persistence, VirtualTimeEquipment.on(new VirtualClock()), identity)
+        def ports = new EnginePorts(port, new RecordingEventListener(), persistence, VirtualTimeEquipment.on(new VirtualClock()), identity)
         new Engine().run(definition, FakeAgentSupport.defaultTaskContext(), TaskState.atStageStart('build'),
                 new DirectoryWorkspace(workspace), ports)
     }

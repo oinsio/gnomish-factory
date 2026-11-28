@@ -41,9 +41,17 @@ class AgentCoarseReachSpec extends Specification {
     /**
      * The coarse packages this module is declared to reach: the pipeline law, the briefing renderer,
      * and the shared command-run core ({@code adapter.command}), which the {@code command} built-in
-     * runs its rounds on beside the verify {@code command} check (design D2 of add-command-executor).
+     * runs its rounds on beside the verify {@code command} check (design D2 of add-command-executor),
+     * and the settings-key owners ({@code adapter.settings}): the {@code roundTimeout} shapes, which
+     * the agent rounds, the {@code command} built-in and the Claude dialect's settings judge share
+     * with the loader (design D6 of extract-agent-round-runner).
      */
-    private static final Set<String> ALLOWED_COARSE_PACKAGES = ['law', 'briefing', 'command'] as Set
+    private static final Set<String> ALLOWED_COARSE_PACKAGES = [
+        'law',
+        'briefing',
+        'command',
+        'settings'
+    ] as Set
 
     /** The packages this module owns; everything else under {@code ..adapter} is coarse. */
     private static final Set<String> OWN_PACKAGES = ['agent'] as Set

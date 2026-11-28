@@ -33,6 +33,22 @@ public interface RoundIdentity {
     Optional<RoundToken> takeToken();
 
     /**
+     * The token of the pending round a resuming run continues (design D11 of
+     * extract-agent-round-runner, "Resume"): the round the run's cell was restored with when the
+     * register named a pending round commit above its pending-round snapshot, while no record has
+     * taken its token yet. It takes nothing: the engine judges the round's entry against it ({@code
+     * PendingEntries.roundEntry}) before deciding between a {@code start} and a {@code poll}, and takes
+     * the token through {@link #takeToken} only when it continues the round.
+     *
+     * <p>The in-place identity has no branch and so no resume: it holds none.
+     *
+     * @return the restored pending round's token, or empty when the run continues no pending round
+     */
+    default Optional<RoundToken> pendingToken() {
+        return Optional.empty();
+    }
+
+    /**
      * The in-place run's identity: no task branch, so no round token is minted or recorded. Named
      * so the in-place composition site says so explicitly.
      *

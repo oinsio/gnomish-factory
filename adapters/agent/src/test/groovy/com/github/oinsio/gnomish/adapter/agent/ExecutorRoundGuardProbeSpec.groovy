@@ -26,7 +26,7 @@ class ExecutorRoundGuardProbeSpec extends AbstractDenialRoundSpec {
         def result = executorFor('plain-round', source).execute(requestFor())
 
         then: 'the round leaves as an infrastructure failure naming the guard, not as a graded result'
-        InfrastructureResults.endedBy(result, GuardUnavailableException)
+        InfrastructureResults.endedSaying(result, 'egress guard')
         InfrastructureResults.of(result).reason().contains('gnomish-guard-k1')
 
         and: 'the guard was probed at both ends, and the failed round still drained its denials'
@@ -45,7 +45,7 @@ class ExecutorRoundGuardProbeSpec extends AbstractDenialRoundSpec {
         def result = executorFor('plain-round', source).execute(requestFor())
 
         then: 'the probe precedes the launch: the failure is the guard, not the start'
-        InfrastructureResults.endedBy(result, GuardUnavailableException)
+        InfrastructureResults.endedSaying(result, 'egress guard')
         source.probes() == 1
     }
 

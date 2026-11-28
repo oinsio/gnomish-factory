@@ -59,7 +59,8 @@ final class RecordedKeyAdoption {
     }
 
     private static PendingRuns.Entry refusal(String executor, String cause) {
-        ExecutorResult refusal = ProgramFailures.infrastructure(executor, cause, UntrustedText.factory(""));
+        ExecutorResult refusal = ProgramFailures.infrastructure(
+                ProgramFailures.Subject.PROGRAM, executor, cause, UntrustedText.factory(""));
         return new PendingRuns.Entry(null, refusal);
     }
 }

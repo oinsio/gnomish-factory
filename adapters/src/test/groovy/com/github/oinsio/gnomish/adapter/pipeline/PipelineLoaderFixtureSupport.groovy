@@ -47,6 +47,7 @@ trait PipelineLoaderFixtureSupport implements GnomishTreeWriter {
                 getRoot(),
                 TrackerValidatorStub.acceptingGithub(),
                 TrackerValidatorStub.acceptingGithubActions(),
+                AgentSettingsValidator.UNJUDGED,
                 ConnectionAdmission.of(ConnectionProfiles.none()),
                 designatorKinds)
     }
@@ -89,8 +90,9 @@ verify:
     command: echo ok
   - type: judge
     criteriaFile: stages/plan/accept.md
-    model: judge-model
-    votes: 1
+    executor:
+      type: agent-cli
+      model: judge-model
 advancement: auto
 '''
     }

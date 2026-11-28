@@ -60,7 +60,7 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
             taskRepository() >> repository
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> ({} as Workspace)
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
         }
     }
 

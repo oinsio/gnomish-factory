@@ -17,6 +17,11 @@ import java.util.List;
  *   <li>no {@code api}, {@code agent-cli} or {@code program} stage declares a command (FR2).</li>
  * </ul>
  *
+ * <p>It is the one rule over an executor block wherever the block is declared (design D12 of
+ * extract-agent-round-runner): a stage's own {@code executor:}, located at {@code executor.*}, and a
+ * {@code judge} check's, located at {@code verify[<i>].executor.*} — so a judge block without a
+ * model gets the very error a stage's block without one gets, at its own location.
+ *
  * <p>A {@link CommandLine} is never blank, so a blank manifest command is the law load's located
  * error before the domain model exists, never an absent command here; likewise an absent model
  * reaches this rule as blank. Errors are located {@link ConfigError}s on the stage manifest
@@ -25,57 +30,69 @@ import java.util.List;
  * {@link StageSanityRule}, which owns the per-stage error order.
  *
  * <p>Implements FR11 of load-pipeline-config; FR10 of define-executor-contract; FR2, UX2 of
- * add-command-executor.
+ * add-command-executor; FR13, UX1 of extract-agent-round-runner.
  */
 final class StageMechanismRule {
 
     private StageMechanismRule() {}
 
-    static void validate(String manifest, StageDefinition.Executor executor, List<ConfigError> errors) {
+    /**
+     * Judges one executor block.
+     *
+     * @param manifest the stage manifest path
+     * @param where the block's location: {@link MechanismFieldErrors#STAGE_BLOCK} or {@code
+     *     verify[<i>].executor}
+     * @param executor the block
+     * @param errors the caller's accumulator
+     */
+    static void validate(String manifest, String where, StageDefinition.Executor executor, List<ConfigError> errors) {
         switch (executor.type()) {
             case API -> {
-                requireModel(manifest, executor, errors);
-                rejectCommand(manifest, executor, "api", errors);
+                requireModel(manifest, where, executor, errors);
+                rejectCommand(manifest, where, executor, "api", errors);
             }
             case AGENT_CLI -> {
-                requireModel(manifest, executor, errors);
-                rejectCommand(manifest, executor, "agent-cli", errors);
+                requireModel(manifest, where, executor, errors);
+                rejectCommand(manifest, where, executor, "agent-cli", errors);
             }
             // A program stage may omit the model; a present one is a setting (FR10 of define-executor-contract).
-            case PROGRAM -> rejectCommand(manifest, executor, "program", errors);
+            case PROGRAM -> rejectCommand(manifest, where, executor, "program", errors);
             case COMMAND -> {
-                rejectModel(manifest, executor, errors);
-                requireCommand(manifest, executor, errors);
+                rejectModel(manifest, where, executor, errors);
+                requireCommand(manifest, where, executor, errors);
             }
         }
     }
 
-    private static void requireModel(String manifest, StageDefinition.Executor executor, List<ConfigError> errors) {
+    private static void requireModel(
+            String manifest, String where, StageDefinition.Executor executor, List<ConfigError> errors) {
         if (executor.model().isBlank()) {
             errors.add(
                     new ConfigError(
                             manifest,
-                            "executor.model",
+                            where + ".model",
                             "missing required executor model; the model must be pinned in the manifest for every agent executor type (api, agent-cli)"));
         }
     }
 
-    private static void rejectModel(String manifest, StageDefinition.Executor executor, List<ConfigError> errors) {
+    private static void rejectModel(
+            String manifest, String where, StageDefinition.Executor executor, List<ConfigError> errors) {
         if (!executor.model().isBlank()) {
-            errors.add(MechanismFieldErrors.modelOnCommandStage(manifest));
+            errors.add(MechanismFieldErrors.modelOnCommandStage(manifest, where));
         }
     }
 
-    private static void requireCommand(String manifest, StageDefinition.Executor executor, List<ConfigError> errors) {
+    private static void requireCommand(
+            String manifest, String where, StageDefinition.Executor executor, List<ConfigError> errors) {
         if (executor.command() == null) {
-            errors.add(MechanismFieldErrors.missingCommand(manifest));
+            errors.add(MechanismFieldErrors.missingCommand(manifest, where));
         }
     }
 
     private static void rejectCommand(
-            String manifest, StageDefinition.Executor executor, String type, List<ConfigError> errors) {
+            String manifest, String where, StageDefinition.Executor executor, String type, List<ConfigError> errors) {
         if (executor.command() != null) {
-            errors.add(MechanismFieldErrors.commandOnStage(manifest, type));
+            errors.add(MechanismFieldErrors.commandOnStage(manifest, where, type));
         }
     }
 }

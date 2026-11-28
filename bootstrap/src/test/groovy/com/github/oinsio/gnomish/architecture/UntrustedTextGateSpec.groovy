@@ -50,10 +50,9 @@ import spock.lang.Specification
  * over exactly the families the current cut migrates and is never red over one it does not. The
  * table below holds cut A's families — git, docker, in-box exec and agent, plus the one domain
  * carrier the agent adapter constructs — and, since task 5.0, cut B's: tracker, manifest label,
- * branch document, and the report and status text they reach. A private Jackson wire record
- * ({@code DecisionRequestRead.Payload}) is deliberately absent: it is the shape the JSON has, not
- * an accessor the factory reads text through — the result reader mints its fields, and the
- * request the read builds from it is listed.
+ * branch document, and the report and status text they reach. The one answer read's refusal
+ * ({@code AnswerFileReading.Refused}) is listed for the text it took of a refused file; the answer
+ * it reads is the contract's, whose fields the result reader mints.
  *
  * <p>Lives in {@code :bootstrap} for the same reason as {@link AtomicWriteBoundarySpec}: this is
  * the module whose test classpath sees every layer at once.
@@ -86,7 +85,8 @@ class UntrustedTextGateSpec extends Specification {
      * that reason for every member rather than trusting this list.
      */
     private static final List<String> ANNOTATED_EXITS = [
-        'com.github.oinsio.gnomish.adapter.agent.JudgeVerdictExtractor',
+        // JudgeVerdictExtractor left at task 2.4 of extract-agent-round-runner: its final-text read
+        //     moved to the parser FinalTextObject; since task 4.3 it holds only the SARIF conversion.
         // Joined at task 7.1 of define-executor-contract: the program executor's result mapped onto
         //     the engine's shape — the executor's quality reason and denial texts become domain
         //     Findings, which hold plain text (the CheckFindings precedent).
@@ -103,6 +103,9 @@ class UntrustedTextGateSpec extends Specification {
         //     question, options, reason and details are written verbatim into state.json —
         //     split out of StateJsonMapper, the same branch-document writer.
         'com.github.oinsio.gnomish.adapter.git.state.StateStopMapper',
+        // Joined at task 2.5a of extract-agent-round-runner: the task.json decision entries' question
+        //     and options, split out of TaskJsonMapper when the entries gained them.
+        'com.github.oinsio.gnomish.adapter.git.state.TaskDecisionMapper',
         // Joined at task 4.2 of define-executor-contract: the task.json escalation reports' carried
         //     text, split out of TaskJsonMapper when the sixth report kind arrived.
         'com.github.oinsio.gnomish.adapter.git.state.TaskEscalationMapper',
@@ -198,8 +201,8 @@ class UntrustedTextGateSpec extends Specification {
         'com.github.oinsio.gnomish.adapter.git.RemoteDefaultBranch':
         'an ls-remote --symref answer into the default branch name, gated by DefaultBranch\'s rules',
         'com.github.oinsio.gnomish.adapter.git.SnapshotTipCheck':
-        'a registered commit\'s subject into the snapshot\'s or pending commit\'s stage, round and round token; the decision' +
-        ' request it reads at the token path is the document itself, handed raw to the tolerant reader that mints it',
+        'a registered commit\'s subject into the snapshot\'s or pending commit\'s stage, round and round token; the answer' +
+        ' file it reads at the token path is the document itself, handed raw to the one answer read that mints it',
         'com.github.oinsio.gnomish.adapter.git.TaskBranchLister':
         'for-each-ref output into the list of task-branch refs, each held to the factory\'s own prefix',
         'com.github.oinsio.gnomish.adapter.git.TaskWorktreeManager':
@@ -234,7 +237,12 @@ class UntrustedTextGateSpec extends Specification {
         'com.github.oinsio.gnomish.sandbox.environment.SandboxLifecycleObjectReader':
         'docker listings and inspect lines into listed objects with their labels, and into the' +
         ' timing Instants the sweep decides on',
-        'com.github.oinsio.gnomish.adapter.agent.TokenUsageMapper':
+        // FR3 of extract-agent-round-runner (task 2.4): the one read of the Claude dialect's final-text
+        //     fallback, moved out of JudgeVerdictExtractor (whose own reader left at task 4.3).
+        'com.github.oinsio.gnomish.adapter.agent.claude.FinalTextObject':
+        'an agent\'s final text into the JSON tree of the one object it carries, whose texts its readers' +
+        ' mint again in the agent family',
+        'com.github.oinsio.gnomish.adapter.agent.claude.TokenUsageMapper':
         'the round\'s model id into a telemetry key, held to ModelIdSyntax',
         // FR11, NFR-S4 of define-executor-contract: the working-copy-unchanged check's view, read
         // once BoundedCapture minted it at capture instead of handing the check a String.
@@ -276,11 +284,12 @@ class UntrustedTextGateSpec extends Specification {
         // Design D9 of define-executor-contract: the one bounded capture of an exec (a describe, a
         // non-streaming program run, git's view of a working copy) mints its output at capture.
         'com.github.oinsio.gnomish.sandbox.BoundedCapture': ['output'],
-        'com.github.oinsio.gnomish.adapter.agent.AgentEvent$InitEvent': ['sessionId', 'model'],
-        'com.github.oinsio.gnomish.adapter.agent.AgentEvent$AssistantEvent': ['sessionId', 'model'],
-        'com.github.oinsio.gnomish.adapter.agent.AgentEvent$UserEvent': ['sessionId'],
-        'com.github.oinsio.gnomish.adapter.agent.AgentEvent$ResultEvent': ['sessionId'],
-        'com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest': ['question', 'options'],
+        'com.github.oinsio.gnomish.adapter.agent.claude.AgentEvent$InitEvent': ['sessionId', 'model'],
+        'com.github.oinsio.gnomish.adapter.agent.claude.AgentEvent$AssistantEvent': ['sessionId', 'model'],
+        'com.github.oinsio.gnomish.adapter.agent.claude.AgentEvent$UserEvent': ['sessionId'],
+        'com.github.oinsio.gnomish.adapter.agent.claude.AgentEvent$ResultEvent': ['sessionId'],
+        // FR21 of extract-agent-round-runner: what the one answer read took of a refused answer file.
+        'com.github.oinsio.gnomish.app.port.agent.AnswerFileReading$Refused': ['written'],
         'com.github.oinsio.gnomish.domain.engine.Verdict$CannotVerify': ['reason', 'details'],
         'com.github.oinsio.gnomish.domain.engine.ExecutionResult$DecisionRequest': ['question', 'options'],
         'com.github.oinsio.gnomish.domain.engine.ExecutionResult$Failed': ['reason'],

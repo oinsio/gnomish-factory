@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyingStages
+import com.github.oinsio.gnomish.pendingkey.PendingKey
 import java.time.Duration
 
 /**
@@ -26,7 +27,7 @@ class PendingPollResumeSpec extends PendingPollSpecBase {
         def executor = new ScriptedExecutor([passed(), passed()])
 
         when:
-        def result = orchestrator(poll(executor)).verify(VerifyingStages.of([first, second]), CONTEXT, WORKSPACE, KEY,
+        def result = orchestrator(checkRounds(executor)).verify(VerifyingStages.of([first, second]), CONTEXT, WORKSPACE, KEY,
         state, TOKEN)
 
         then:
@@ -48,7 +49,7 @@ class PendingPollResumeSpec extends PendingPollSpecBase {
         def executor = new ScriptedExecutor([pending('k-new'), passed()])
 
         when:
-        def answer = poll(executor).answer(ci, ref(0, ci), round([ci], STATE.withPendingPolls([stale]), roundToken)).answer()
+        def answer = checkRounds(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci], STATE.withPendingPolls([stale]), roundToken)).answer()
 
         then:
         answer == new VerdictAnswer.Sarif([], null)
@@ -63,6 +64,24 @@ class PendingPollResumeSpec extends PendingPollSpecBase {
         'when the round has no token (in-place)' | null | 0 | null
     }
 
+    // D11 of extract-agent-round-runner: the round's own entry is the round's, never a check's — it
+    //     is not polled for a check, and a check's pending write does not carry it forward
+    def "FR10 of extract-agent-round-runner: a round entry of the round is not continued by a check and not written again"() {
+        given:
+        def ci = check()
+        def roundEntry = new PendingPollRecord(PendingSubject.ROUND, 0, TOKEN, new PendingKey('k-round'), clock.instant())
+        def executor = new ScriptedExecutor([pending('k-new'), passed()])
+
+        when:
+        checkRounds(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci], STATE.withPendingPolls([roundEntry]))).answer()
+
+        then:
+        turns(executor) == [null, [ISSUED, 'k-new']]
+        persistence.pending[0].state.pendingPolls()*.subject() == [
+            new PendingSubject.Check(ref(0, ci))
+        ]
+    }
+
     def "FR3: an entry of another check of the round is not this check's"() {
         given:
         def ci = check('ci')
@@ -73,7 +92,7 @@ class PendingPollResumeSpec extends PendingPollSpecBase {
         ])
 
         when:
-        poll(executor).answer(ci, ref(0, ci), round([ci, other], state)).answer()
+        checkRounds(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci, other], state)).answer()
 
         then:
         turns(executor) == [null]
@@ -94,14 +113,17 @@ class PendingPollResumeSpec extends PendingPollSpecBase {
         ])
 
         when:
-        orchestrator(poll(executor)).verify(VerifyingStages.of([first, second]), CONTEXT, WORKSPACE, KEY, state, TOKEN)
+        orchestrator(checkRounds(executor)).verify(VerifyingStages.of([first, second]), CONTEXT, WORKSPACE, KEY, state, TOKEN)
 
         then:
-        executor.requests.collect {
+        [
+            executor.requests,
+            executor.turns
+        ].transpose().collect { request, turn ->
             [
-                it.check(),
-                it.checkRef(),
-                it.pending()?.origin()
+                request.check(),
+                request.checkRef(),
+                turn?.origin()
             ]
         } == [
             [first, ref(0, first), null],
@@ -123,7 +145,7 @@ class PendingPollResumeSpec extends PendingPollSpecBase {
         def executor = new ScriptedExecutor([pending('k-2'), passed()])
 
         when:
-        def answer = poll(executor).answer(ci, ref(0, ci), round([ci], state)).answer()
+        def answer = checkRounds(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci], state)).answer()
 
         then:
         answer == new VerdictAnswer.Sarif([], null)
@@ -146,7 +168,7 @@ class PendingPollResumeSpec extends PendingPollSpecBase {
         ])
 
         when:
-        def answer = poll(executor).answer(ci, ref(0, ci), round([ci], state)).answer()
+        def answer = checkRounds(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci], state)).answer()
 
         then: 'one poll at once, then the timeout: no wait'
         turns(executor) == [[RECORDED, 'k-1']]
@@ -162,9 +184,9 @@ class PendingPollResumeSpec extends PendingPollSpecBase {
         def resumed = new ScriptedExecutor([passed()])
 
         when:
-        poll(started).answer(ci, ref(0, ci), round([ci], STATE, TOKEN, secondRound)).answer()
+        checkRounds(started).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci], STATE, TOKEN, secondRound)).answer()
         def written = persistence.pending[0].state
-        poll(resumed).answer(ci, ref(0, ci), round([ci], written, TOKEN, secondRound)).answer()
+        checkRounds(resumed).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci], written, TOKEN, secondRound)).answer()
 
         then:
         written.pendingPolls()*.attempt() == [2]

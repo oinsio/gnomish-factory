@@ -61,8 +61,8 @@ class UsageMarkdownRendererSpec extends Specification {
             ], [check(30)]),
             round('implement', 1, 1, [
                 gnome(120, priced('opus', new TokenUsage(200, 20, 2000, 6000), '0.60')),
-                Participants.verdict(Participants.JUDGE_EXECUTOR, 0, priced('haiku', new TokenUsage(50, 5, 0, 100), '0.05')),
-                Participants.verdict(Participants.JUDGE_EXECUTOR, 1, priced('haiku', new TokenUsage(40, 4, 0, 90), null))
+                Participants.verdict('claude', 0, priced('haiku', new TokenUsage(50, 5, 0, 100), '0.05')),
+                Participants.verdict('claude', 1, priced('haiku', new TokenUsage(40, 4, 0, 90), null))
             ], [check(45), check(15)]),
             round('review', 0, 2, [
                 gnome(30, priced('sonnet', new TokenUsage(10, 1, 0, 0), '0.01'))
@@ -121,7 +121,7 @@ class UsageMarkdownRendererSpec extends Specification {
         def rows = [
             round('review', 0, 0, [
                 gnome(10, priced('opus', new TokenUsage(1, 1, 0, 0), '2.5')),
-                Participants.verdict(Participants.JUDGE_EXECUTOR, 0, priced('haiku', new TokenUsage(7, 3, 0, 0), null))
+                Participants.verdict('claude', 0, priced('haiku', new TokenUsage(7, 3, 0, 0), null))
             ])
         ].collect { new UsageRow(it) }
 

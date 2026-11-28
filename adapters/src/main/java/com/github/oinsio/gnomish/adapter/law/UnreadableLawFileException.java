@@ -15,7 +15,7 @@ import java.io.Serial;
  * the CLI executor lets it propagate uncaught so {@code RoundExecution} shapes it
  * into {@code RoundOutcome.CannotExecute}; the judge side catches it and maps it to
  * {@code Verdict.CannotVerify}. Unchecked, following this codebase's established idiom for
- * infrastructure-failure signaling (see {@code MissingResultEventException}).
+ * infrastructure-failure signaling.
  *
  * <p>Because pipeline law binds once per invocation (D14), an unreadable law file is
  * unreadable for the whole invocation: every round or vote that needs it fails the

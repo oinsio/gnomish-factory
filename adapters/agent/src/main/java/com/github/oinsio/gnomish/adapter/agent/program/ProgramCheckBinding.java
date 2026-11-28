@@ -19,7 +19,9 @@ import java.util.List;
  * attempt-commit workspace, and released by the check round when the request ends. The box's guard
  * admits the operator's sandbox egress and the hosts the law grants this executor ({@link
  * ExecutorEgress#of}); its credentials are the program's own grant, the only credential layer it
- * receives ({@link ProgramSpawn}).
+ * receives ({@link ProgramSpawn}). The executor is bound behind {@link GuardedExecutor}, so the box's
+ * guard is probed before and after every request (design D13 of extract-agent-round-runner), and the
+ * executor's {@code PendingAdoption} role is handed beside the decorator, never through it.
  *
  * <p>The executor shares the run's table of pending runs of the program — built with its registry
  * entry, the same table its stage rounds use — scoped to the request's check ({@link CheckRef}), and
@@ -31,7 +33,8 @@ import java.util.List;
  * that answers every operation {@code failed/infrastructure} naming why, with no process spawned —
  * a cannot-verify the operator sees, never an exception out of the check round.
  *
- * <p>Implements FR1, FR3, FR11, NFR-S1 of migrate-verify-to-executor-contract.
+ * <p>Implements FR1, FR3, FR11, NFR-S1 of migrate-verify-to-executor-contract; FR15 of
+ * extract-agent-round-runner.
  */
 public final class ProgramCheckBinding {
 
@@ -86,13 +89,21 @@ public final class ProgramCheckBinding {
                 box.environment(),
                 equipment,
                 new PendingScope(runs, ref, commit));
-        return new BoundCheck(executor, box::close);
+        // The box's guard is probed around every request by its one owner (design D13 of
+        // extract-agent-round-runner): a dead guard is a cannot-verify, whatever the program answered.
+        // The adoption role is the program executor's own, handed beside the decorator, not through it.
+        return new BoundCheck(
+                GuardedExecutor.over(
+                        ProgramFailures.Subject.PROGRAM, program.declaration().name(), box.environment(), executor),
+                executor,
+                box::close);
     }
 
     private BoundCheck refused(String cause) {
         return BoundCheck.unboxed(new UnboxedProgram(
                 program.describe(),
-                ProgramFailures.infrastructure(program.declaration().name(), cause, emptyTail())));
+                ProgramFailures.infrastructure(
+                        ProgramFailures.Subject.PROGRAM, program.declaration().name(), cause, emptyTail())));
     }
 
     private static com.github.oinsio.gnomish.untrustedtext.UntrustedText emptyTail() {

@@ -97,7 +97,7 @@ class ScmBuiltInsWithoutBundleSpec extends Specification {
         ExecutorRegistry.of(DescribedLaws.connected((admitted as BuiltInConnections.Admission.Admitted).connections()),
                 definition, PipelineLaw.ofContent([:]), equipment,
                 BuiltInEntriesFixture.of(clock, [GNOMISH_SCM_STATUS_TOKEN: 'token', GNOMISH_GITHUB_ACTIONS_TOKEN: 'token']),
-                null)
+                null, AgentEntryFixture.idle(equipment))
     }
 
     // Scenario: verification/verdict-executors / Removing the vendor bundle keeps the SCM built-ins

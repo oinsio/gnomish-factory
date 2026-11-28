@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
@@ -148,7 +149,7 @@ class GnomeRangeInspectionSpec extends Specification implements BareGitRepoFixtu
     // Scenario: git/git-task-persistence / Decision request is the one permitted state-directory write
     def "FR16: the round's own decision request is the one permitted state-directory write"() {
         given:
-        def top = gnomeCommits(GnomeRangeInspection.decisionPath(KEY, RoundToken.of(base)), '{"question":"which db?"}')
+        def top = gnomeCommits(EnvelopePaths.answerFile(KEY, RoundToken.of(base)).relative(), '{"question":"which db?"}')
 
         expect:
         inspect(top) instanceof RangeVerdict.Clean
@@ -168,14 +169,8 @@ class GnomeRangeInspectionSpec extends Specification implements BareGitRepoFixtu
 
         where:
         description | path
-        'another round\'s token' | GnomeRangeInspection.decisionPath(KEY, OTHER)
+        'another round\'s token' | EnvelopePaths.answerFile(KEY, OTHER).relative()
         'the token-less name' | '.gnomish-task/decisions/implement-a0.json'
-    }
-
-    def "FR16: decisionPath spells the stage, the attempt and the round token"() {
-        expect:
-        GnomeRangeInspection.decisionPath(KEY, OTHER) ==
-                '.gnomish-task/decisions/implement-a0-' + 'f' * 40 + '.json'
     }
 
     def "FR13: the factory's own closing commit at the top is judged by its own rule"() {

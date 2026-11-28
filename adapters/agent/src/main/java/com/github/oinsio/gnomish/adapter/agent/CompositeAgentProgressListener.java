@@ -11,12 +11,12 @@ import org.slf4j.LoggerFactory;
  * Fans one {@link AgentProgressEvent} out to every listener in a fixed list, so a round can
  * register several subscribers — the executor's own listener ({@link
  * LoggingAgentProgressListener}) and the round environment's per-round listener (the sandboxed
- * mid-round harvest poll), joined in {@code ExecutorRoundExecution} — behind the single {@link
- * AgentProgressListener} slot {@link StreamJsonParser} accepts (design D10, task 9.4).
+ * mid-round harvest poll), joined by the agent round runner — behind the single {@link
+ * AgentProgressListener} slot {@link com.github.oinsio.gnomish.adapter.agent.claude.StreamJsonParser} accepts (design D10, task 9.4).
  *
  * <p>Unlike {@link com.github.oinsio.gnomish.status.CompositeEngineEventListener}, which
  * deliberately relies on its single caller's own outer try/catch ({@code Events.emit}), this
- * composite cannot: {@link AgentProgressEmitter}'s private {@code deliver} method wraps only the
+ * composite cannot: {@link com.github.oinsio.gnomish.adapter.agent.claude.AgentProgressEmitter}'s private {@code deliver} method wraps only the
  * <em>one</em> call it makes to whichever {@link AgentProgressListener} it was given, so if that
  * one listener is this
  * composite, an unguarded loop would let a throwing child both skip every listener after it in

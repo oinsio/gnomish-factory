@@ -6,6 +6,7 @@ import static com.github.oinsio.gnomish.adapter.law.PipelineDefinitionFixtures.s
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import com.github.oinsio.gnomish.gitobjects.GitObjectsFixture
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -42,7 +43,7 @@ class GitObjectsPipelineLawReaderSpec extends Specification implements GitObject
         write('.gnomish/instructions.md', 'Do the thing.')
         write('.gnomish/criteria.md', 'The output must be idempotent.')
         def definition = pipeline(stage('instructions.md', [
-            new VerifyCheck.Judge('criteria.md', 'claude-opus', [:], 1)
+            JudgeChecks.agent('criteria.md', 'claude-opus')
         ]))
 
         when:

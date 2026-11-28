@@ -163,13 +163,13 @@ public final class Engine {
             Workspace workspace,
             EnginePorts ports,
             StageDefinition stage) {
+        // One owner of pending work for the run's checks and its transform rounds alike (design D11
+        // of extract-agent-round-runner): a check enters it through CheckRounds, a round through TransformRound.
+        var poll = new PendingPoll(ports.executor(), ports.persistence(), ports.time(), ports.listener());
+        var checkRounds = new CheckRounds(ports, poll);
         var verifyOrchestrator = new VerifyOrchestrator(
-                new PendingPoll(
-                        ports.executor(), ports.persistence(), ports.attemptDelivery(), ports.time(), ports.listener()),
-                new JudgeVoting(ports.judgeVoter()),
-                ports.time().clock(),
-                ports.listener());
-        var loop = new StageAttemptLoop(ports, verifyOrchestrator, definition);
+                checkRounds, ports.describedExecutors(), ports.time().clock(), ports.listener());
+        var loop = new StageAttemptLoop(ports, verifyOrchestrator, poll, definition);
         var currentState = state;
         var currentStage = stage;
         while (true) {

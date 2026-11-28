@@ -32,7 +32,7 @@ class RecordIdentitySpec extends EventEmissionSpecBase {
     static final RoundToken SECOND = RoundToken.of('2222222222222222222222222222222222222222')
 
     EnginePorts portsWith(RoundIdentity identity) {
-        new EnginePorts(CheckRouting.of(executor, builtinRunner, commandRunner, externalClient), judgeVoter,
+        new EnginePorts(CheckRouting.of(executor, builtinRunner, commandRunner, externalClient),
                 listener, persistence, VirtualTimeEquipment.on(clock, sleeper), identity)
     }
 

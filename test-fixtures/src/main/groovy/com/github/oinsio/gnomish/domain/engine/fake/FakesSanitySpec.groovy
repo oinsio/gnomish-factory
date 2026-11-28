@@ -4,17 +4,14 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.TaskContext
-import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
-import com.github.oinsio.gnomish.domain.engine.Verdict
-import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
- * Sanity spec for the engine executor, check-runner, external-client and
- * judge-voter fakes: exercises their scripting, recording and throw-mode
+ * Sanity spec for the engine executor, check-runner and external-client
+ * fakes: exercises their scripting, recording and throw-mode
  * behavior so the fakes are proven to compile and work for the section 4–7
  * orchestration specs. These are test fakes for the add-stage-engine ports,
  * not production code.
@@ -63,23 +60,5 @@ class FakesSanitySpec extends Specification {
 
         then: 'the exhaustion is reported'
         thrown(IllegalStateException)
-    }
-
-    def "ScriptedJudgeVoter returns a vote sequence, counts votes and records the context"() {
-        given: 'a voter scripted with two votes'
-        def voter = new ScriptedJudgeVoter([
-            new JudgeVoter.Vote(new Verdict.Pass(null, []), Unpriced.of(['model-a': new TokenUsage(1, 2, 0, 0)])),
-            new JudgeVoter.Vote(new Verdict.Fail([]), [:]),
-        ])
-
-        when: 'voted twice'
-        def v0 = voter.vote(null, CTX, WS)
-        def v1 = voter.vote(null, CTX, WS)
-
-        then: 'the votes come back in order, the count is tracked and the context is recorded (FR7)'
-        v0.verdict() instanceof Verdict.Pass
-        v1.verdict() instanceof Verdict.Fail
-        voter.voteCount == 2
-        voter.contexts.every { it.is(CTX) }
     }
 }

@@ -8,7 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.ParticipantUsage
 import com.github.oinsio.gnomish.domain.engine.Participants
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.Stop
-import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
+import com.github.oinsio.gnomish.domain.pipeline.BuiltInExecutors
 import java.time.Instant
 
 /**
@@ -20,8 +20,8 @@ import java.time.Instant
  *
  * <p>A spec whose subject is not the participant list hands the executor's {@link ExecutorUsage};
  * the record's usage is then the one {@code transform} entry the engine builds from it, under the
- * executor name {@link #EXECUTOR} — the name a stage with no described executor records (FR15 of
- * define-executor-contract). A spec that needs judge votes or another role hands the list itself.
+ * executor name {@link #EXECUTOR} — the registry entry an {@code agent-cli} stage resolves to (FR15 of
+ * define-executor-contract; NFR-O1 of extract-agent-round-runner). A spec that needs judge votes or another role hands the list itself.
  *
  * <p>Test fixture, not production code; the production record has no shorter constructor.
  */
@@ -36,8 +36,8 @@ final class AttemptRecords {
     /** The round token every fixture record carries: a branch-mode round's tip. */
     static final RoundToken TOKEN = RoundToken.of('0123456789abcdef0123456789abcdef01234567')
 
-    /** The executor every fixture record's {@code transform} entry names: the agent CLI's type word. */
-    static final String EXECUTOR = Participants.typeWord(ExecutorType.AGENT_CLI)
+    /** The executor every fixture record's {@code transform} entry names: the agent entry {@code claude}. */
+    static final String EXECUTOR = BuiltInExecutors.CLAUDE
 
     private AttemptRecords() {}
 

@@ -6,7 +6,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
@@ -40,7 +39,7 @@ class ExecutorVersionPinSpec extends Specification {
     def listener = new RecordingEventListener()
 
     EnginePorts ports(DescribedExecutors described) {
-        new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), listener, persistence, VirtualTimeEquipment.on(new VirtualClock()),
+        new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), listener, persistence, VirtualTimeEquipment.on(new VirtualClock()),
                 AttemptDelivery.assumedDelivered(), described, RoundIdentity.inPlace())
     }
 
@@ -75,7 +74,7 @@ class ExecutorVersionPinSpec extends Specification {
 
     /** acme described at {@code version}; the {@code build} stage names it. */
     static DescribedExecutors acmeOnBuild(String version) {
-        new DescribedExecutors(versions(acme: version), ExecutorCredentialNames.none())
+        new DescribedExecutors(versions(acme: version), ExecutorCredentialNames.none(), [] as Set)
     }
 
     void passes(int rounds) {
@@ -118,7 +117,7 @@ class ExecutorVersionPinSpec extends Specification {
         given:
         passes(1)
         def pinned = new TaskState(new Position.AtStage('lint-stage'), 0, [], UsageSnapshot.EMPTY, versions(acme: '1'))
-        def described = new DescribedExecutors(versions(acme: '1', lint: '4'), ExecutorCredentialNames.none())
+        def described = new DescribedExecutors(versions(acme: '1', lint: '4'), ExecutorCredentialNames.none(), [] as Set)
 
         when: 'a stage naming lint runs after acme was pinned'
         new Engine().run(pipeline('build', 'lint-stage'), CONTEXT, pinned, new FakeWorkspace(), ports(described))

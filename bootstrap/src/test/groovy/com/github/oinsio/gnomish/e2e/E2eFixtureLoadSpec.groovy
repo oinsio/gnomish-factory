@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.e2e
 import com.github.oinsio.gnomish.adapter.pipeline.PipelineLoader
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
+import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
@@ -52,7 +53,7 @@ class E2eFixtureLoadSpec extends Specification {
         (verify[0] as VerifyCheck.Executor).checkId() == 'files_exist'
         verify[1] instanceof VerifyCheck.Executor
         verify[2] instanceof VerifyCheck.Judge
-        (verify[2] as VerifyCheck.Judge).votes() == 1
+        (verify[2] as VerifyCheck.Judge).executor().type() == ExecutorType.AGENT_CLI
     }
 
     // D18 of migrate-verify-to-executor-contract ("Where a refusal at run assembly goes"): the

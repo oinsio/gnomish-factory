@@ -13,14 +13,22 @@ import org.slf4j.LoggerFactory;
  * migrate-verify-to-executor-contract): the round's gnome work is closed by a snapshot commit before
  * the engine verifies it, on the box and on the host alike, through a {@link SnapshotMedium}. The
  * step owns what the two media share: the subject, chosen by the round's {@link RoundClose} ({@link
- * #subject}); the order — the medium's boundary verdict first, the commit only after a clean one;
- * and the one {@link CurrentRound#snapshotted} transition, so no second copy of either lives per
+ * #subject}); the order — the {@code state.json} lag of the round's pending round commits settled
+ * first ({@link PendingStateLag}), then the medium's boundary verdict, the commit only after a clean
+ * one; and the one {@link CurrentRound#snapshotted} transition, so no second copy of either lives per
  * medium (rule of two: both media are in this module, no classpath barrier allows a declared pair).
  *
  * <p>A verdict other than clean declines the snapshot: nothing is restored, committed or thrown, and
  * the cell keeps the open round without a snapshot. The round's persist then judges the same working
  * copy from the tip the round opened on, reports the violation and aborts the task — the place the
  * engine turns a boundary into {@code Aborted}, rather than into an executor that could not run.
+ *
+ * <p>A round that went pending (design D11 of extract-agent-round-runner, as amended 2026-11-25) is
+ * closed by this same step after its terminal poll: the order carries the round's registered chain
+ * from the cell, so the snapshot's only parent is the round's last registered commit — the last
+ * pending round commit — its subject names the token the round opened with, and its gnome range is
+ * judged from that parent ({@link SnapshotOrder#base}). A lag that cannot be settled throws: it is
+ * the round's infrastructure failure, not a verdict.
  *
  * <p>Kill windows: the step's one durable act is the medium's ref transaction. A kill before it
  * leaves the register on the previous closing commit — the shape "during the agent", whose owner is
@@ -29,7 +37,8 @@ import org.slf4j.LoggerFactory;
  * {@code lifecycle/task-branch-contract} capability. The cell is written after the transaction, and
  * dies with the process.
  *
- * <p>Implements FR19, NFR-R1 of migrate-verify-to-executor-contract; FR21 of add-sandbox-core.
+ * <p>Implements FR19, NFR-R1 of migrate-verify-to-executor-contract; FR21 of add-sandbox-core; FR10
+ * of extract-agent-round-runner.
  */
 final class RoundSnapshot {
 
@@ -57,12 +66,17 @@ final class RoundSnapshot {
      * @param close whether the round's executor completed: the subject's choice
      * @return the snapshot commit, or empty when the medium's verdict declined it
      * @throws IllegalStateException if no round opened — a snapshot names the round that owns it
-     * @throws GitPersistFailedException if the medium could not commit
+     * @throws GitPersistFailedException if the medium could not settle the pending lag, or commit
      */
     Optional<String> take(String taskId, String stage, int round, RoundClose close) {
         RoundToken token = rounds.opened();
         AttemptKey key = new AttemptKey(taskId, stage, round);
-        var order = new SnapshotOrder(key, token, subject(key, token, close));
+        // The round's registered chain: a round that went pending closes on its last pending round
+        // commit, judged from there (design D11 of extract-agent-round-runner, as amended 2026-11-25).
+        var order = new SnapshotOrder(key, token, subject(key, token, close), rounds.registeredChain());
+        medium.settle(order).ifPresent(failure -> {
+            throw new GitPersistFailedException(taskId, stage, round, "pending-commit lag", failure);
+        });
         RangeVerdict verdict = medium.judge(order);
         if (!(verdict instanceof RangeVerdict.Clean)) {
             // Not the verdict: the round's persist judges the same tree and reports it (one fault,
@@ -77,13 +91,16 @@ final class RoundSnapshot {
 
     /**
      * The one choice of a snapshot's subject by the round's close: {@code gnomish: snapshot}, which
-     * a pickup resumes as an interrupted verification, or {@code gnomish: unverified-snapshot}, which
-     * it never does. A persist that re-admits the snapshot judges it by the same choice.
+     * a pickup resumes as an interrupted verification, or {@code gnomish: unverified-snapshot} or
+     * {@code gnomish: pending-snapshot} (the snapshot a pending round commit lands on, design D11 of
+     * extract-agent-round-runner), which it never does. A persist that re-admits the snapshot judges
+     * it by the same choice.
      */
     static String subject(AttemptKey key, RoundToken token, RoundClose close) {
         return switch (close) {
-            case VERIFIABLE -> ServiceCommitMessages.snapshot(key.stage(), key.attempt(), token);
-            case UNVERIFIABLE -> ServiceCommitMessages.unverifiedSnapshot(key.stage(), key.attempt(), token);
+            case VERIFIABLE -> RoundSubject.snapshot(key.stage(), key.attempt(), token);
+            case UNVERIFIABLE -> RoundSubject.unverifiedSnapshot(key.stage(), key.attempt(), token);
+            case PENDING -> RoundSubject.pendingSnapshot(key.stage(), key.attempt(), token);
         };
     }
 }

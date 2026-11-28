@@ -68,17 +68,6 @@ and reports a parse failure as a typed outcome. No other component SHALL read su
 - **WHEN** a production class outside the owner opens a `GNOMISH_*` result path
 - **THEN** the architecture spec in the composition-root module fails naming the class
 
-### Requirement: Decision and findings files are result files
-The agent executor's decision file and the command check's findings file SHALL be read through
-the shared result reader with the same cap and untrusted-text posture; their tolerant fallbacks
-(raw text as question, synthetic finding) SHALL be preserved.
-**Implements**: FR6 of define-executor-contract
-
-#### Scenario: Garbage decision file keeps its fallback
-- **WHEN** the decision file contains unparseable text
-- **THEN** the round resolves as a decision request whose question is the raw text, read through
-  the shared reader
-
 ### Requirement: Credentials never travel in argv or inherited environment
 Credential names an executor declared SHALL be resolved through the secrets port and delivered
 only to that executor's process, by the environment seam's credential channel; they SHALL
@@ -92,3 +81,23 @@ appear in no argv, no log line, and no other process's environment.
 #### Scenario: Undeclared credential is refused
 - **WHEN** a law declares a credential for an executor whose describe does not list it
 - **THEN** the describe preflight reports a located error naming the executor and the variable, before the first round
+
+### Requirement: Answer and findings files each have one read
+An executor's answer file and the command check's findings file SHALL each be read through the
+shared result reader with its cap and untrusted-text posture, by one function per file kind. The
+findings file SHALL keep its synthetic-finding fallback; the answer file SHALL have none.
+**Implements**: FR21 of extract-agent-round-runner; FR6 of define-executor-contract
+
+#### Scenario: An unparseable answer file is refused, never a question
+- **WHEN** an answer file holds text that is not a valid answer
+- **THEN** the read refuses it with its cause, and no decision request is built from the text
+
+#### Scenario: The answer read has one caller path for live and recovery
+- **WHEN** production sources are scanned for reads of an answer file path
+- **THEN** every one goes through the one answer read, and the architecture spec in the
+  composition-root module fails naming a class that parses an answer file itself
+
+#### Scenario: A garbage findings file keeps its synthetic finding
+- **WHEN** a command check's findings file holds text that is not valid findings
+- **THEN** a warning is logged and the check keeps its synthetic result, as
+  `verification/verdict-executors` states it

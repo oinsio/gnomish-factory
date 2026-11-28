@@ -1,12 +1,10 @@
 package com.github.oinsio.gnomish.adapter.git
 
-import com.github.oinsio.gnomish.app.port.agent.RoundClose
-import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
+import com.github.oinsio.gnomish.app.port.agent.TerminalClose
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 
 /**
@@ -17,15 +15,18 @@ import java.nio.file.Path
  */
 final class PassThroughRounds implements RoundEnvironmentSource {
 
-    /** The request every round of this source reports, handed through untouched. */
-    static final RoundDecisionRequest DECISION = new RoundDecisionRequest(UntrustedText.agent('decision-content'), [])
-
     /** The round opened most recently — the handle a spec reads the recordings from. */
     FakeRound round
 
     @Override
     Round openRound(StageExecutor.Request request) {
         round = new FakeRound()
+        round
+    }
+
+    /** The round opened most recently, as a poll continues it. */
+    @Override
+    Round continueRound(StageExecutor.Request request) {
         round
     }
 
@@ -41,6 +42,7 @@ final class PassThroughRounds implements RoundEnvironmentSource {
         /** Identity only — a spec asserts the decorator hands back this very instance. */
         final TaskExecutionEnvironment environment = [:] as TaskExecutionEnvironment
         boolean closed
+        boolean wentPending
         boolean discarded
 
         @Override
@@ -49,23 +51,23 @@ final class PassThroughRounds implements RoundEnvironmentSource {
         }
 
         @Override
-        Path decisionFilePath() {
+        Path answerFilePath() {
             Path.of('decision.json')
         }
 
         @Override
-        Map<String, String> decisionEnvFragment() {
-            [GNOMISH_DECISION_FILE: 'decision.json']
+        Map<String, String> answerEnvFragment() {
+            [GNOMISH_ANSWER_FILE: 'decision.json']
         }
 
         @Override
-        void closeRound(RoundClose close) {
+        void goPending() {
+            wentPending = true
+        }
+
+        @Override
+        void closeRound(TerminalClose close) {
             closed = true
-        }
-
-        @Override
-        Optional<RoundDecisionRequest> readDecision() {
-            Optional.of(DECISION)
         }
 
         @Override

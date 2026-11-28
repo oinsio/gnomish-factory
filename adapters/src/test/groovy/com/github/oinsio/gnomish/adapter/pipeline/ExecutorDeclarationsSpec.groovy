@@ -97,12 +97,13 @@ class ExecutorDeclarationsSpec extends Specification {
     }
 
     // FR1, FR13 of migrate-verify-to-executor-contract (design D18): a law never declares a built-in,
-    //     so a declaration under any of the six names is refused at load, listing them
-    def "a declaration under the built-in name '#name' is a located error listing the six"() {
+    //     so a declaration under any of the seven names is refused at load, listing them; FR14, D12 of
+    //     extract-agent-round-runner reserved 'claude' among them
+    def "a declaration under the built-in name '#name' is a located error listing the seven"() {
         expect:
         ExecutorDeclarations.check([(name): program(['a'])]) == [
             error("executors.${name}".toString(), "executor '${name}' is a built-in's name, which a law cannot declare; "
-            + 'built-in names are files-exist, shell, github-actions, scm-status, http, command')
+            + 'built-in names are files-exist, shell, github-actions, scm-status, http, command, claude')
         ]
 
         where:

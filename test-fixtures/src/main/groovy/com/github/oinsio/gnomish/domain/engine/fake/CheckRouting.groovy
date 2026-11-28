@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.domain.engine.fake
 
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
+import com.github.oinsio.gnomish.domain.engine.port.PendingTurn
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
+import com.github.oinsio.gnomish.domain.pipeline.BuiltInExecutors
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 
 /**
@@ -33,30 +35,50 @@ class CheckRouting implements StageExecutor {
     /**
      * {@code stages} with its check rounds answered by executor name, the way the run's registry
      * resolves them: a {@code files-exist} check by {@code builtins}, a {@code shell} check by
-     * {@code commands}, any other executor's check by {@code others}.
+     * {@code commands}, a check of the agent entry {@code claude} — an agent judge check's round
+     * (design D2 of extract-agent-round-runner) — by {@code judges}, any other executor's check by
+     * {@code others}; {@code judges} defaults to {@code others}.
      */
     static CheckRouting of(StageExecutor stages, StageExecutor builtins, StageExecutor commands,
-            StageExecutor others = new ScriptedCheckRounds()) {
-        new CheckRouting(stages, byExecutor(builtins, commands, others))
+            StageExecutor others = new ScriptedCheckRounds(), StageExecutor judges = others) {
+        new CheckRouting(stages, byExecutor(builtins, commands, others, judges))
     }
 
-    /** Check rounds answered by executor name, as {@link #of(StageExecutor, StageExecutor, StageExecutor, StageExecutor)}. */
+    /** Check rounds answered by executor name, as {@link #of(StageExecutor, StageExecutor, StageExecutor, StageExecutor, StageExecutor)}. */
     static StageExecutor byExecutor(StageExecutor builtins, StageExecutor commands,
-            StageExecutor others = new ScriptedCheckRounds()) {
-        { StageExecutor.Request request ->
+            StageExecutor others = new ScriptedCheckRounds(), StageExecutor judges = others) {
+        Closure<StageExecutor> target = { StageExecutor.Request request ->
             switch (request.check().executorName()) {
                 case VerifyCheck.Executor.FILES_EXIST:
-                return builtins.execute(request)
+                return builtins
                 case VerifyCheck.Executor.SHELL:
-                return commands.execute(request)
+                return commands
+                case BuiltInExecutors.CLAUDE:
+                return judges
                 default:
-                return others.execute(request)
+                return others
             }
-        } as StageExecutor
+        }
+        new StageExecutor() {
+                    @Override
+                    ExecutionResult execute(StageExecutor.Request request) {
+                        target(request).execute(request)
+                    }
+
+                    @Override
+                    ExecutionResult poll(StageExecutor.Request request, PendingTurn turn) {
+                        target(request).poll(request, turn)
+                    }
+                }
     }
 
     @Override
     ExecutionResult execute(StageExecutor.Request request) {
         request.check() == null ? stages.execute(request) : checks.execute(request)
+    }
+
+    @Override
+    ExecutionResult poll(StageExecutor.Request request, PendingTurn turn) {
+        request.check() == null ? stages.poll(request, turn) : checks.poll(request, turn)
     }
 }

@@ -42,11 +42,11 @@ class FakeAgentScenarioLibrarySpec extends Specification {
 
     // FR3, D1: decision file present -> the adapter (once built) will map this
     // to DecisionNeeded; here we assert the fake actually writes it when wired.
-    def "decision-needed writes a well-formed decision file when GNOMISH_DECISION_FILE is wired"() {
+    def "decision-needed writes a well-formed decision file when GNOMISH_ANSWER_FILE is wired"() {
         given:
         Path decisionFile = workDir.resolve('decision.json')
         def invocation = new FakeAgentInvocation(
-                scenario: 'decision-needed', workingDirectory: workDir, decisionFilePath: decisionFile)
+                scenario: 'decision-needed', workingDirectory: workDir, answerFilePath: decisionFile)
 
         when:
         def result = invocation.run()
@@ -58,12 +58,12 @@ class FakeAgentScenarioLibrarySpec extends Specification {
     }
 
     // NFR-O2, D1: garbage decision content is still written verbatim — the
-    // adapter's tolerant read (not the fake) is responsible for degrading it.
+    // one answer read (not the fake) refuses it (FR21 of extract-agent-round-runner).
     def "decision-garbage writes unparseable content verbatim"() {
         given:
         Path decisionFile = workDir.resolve('decision.json')
         def invocation = new FakeAgentInvocation(
-                scenario: 'decision-garbage', workingDirectory: workDir, decisionFilePath: decisionFile)
+                scenario: 'decision-garbage', workingDirectory: workDir, answerFilePath: decisionFile)
 
         when:
         def result = invocation.run()
@@ -74,7 +74,7 @@ class FakeAgentScenarioLibrarySpec extends Specification {
     }
 
     // NFR-R3, D1: no decision file is written when the caller never wires
-    // $GNOMISH_DECISION_FILE — mirrors "no signal means Completed".
+    // $GNOMISH_ANSWER_FILE — mirrors "no signal means Completed".
     def "decision-needed writes nothing when no decision file path is wired"() {
         given:
         def invocation = new FakeAgentInvocation(scenario: 'decision-needed', workingDirectory: workDir)

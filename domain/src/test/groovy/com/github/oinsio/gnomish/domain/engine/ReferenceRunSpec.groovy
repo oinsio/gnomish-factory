@@ -6,11 +6,9 @@ import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
-import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -19,6 +17,7 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
@@ -66,8 +65,8 @@ class ReferenceRunSpec extends Specification {
         VerifyChecks.external(checkId, 'ci-platform', SECOND, TIMEOUT, VerifyCheck.TimeoutClass.QUALITY)
     }
 
-    static VerifyCheck.Judge judge(int votes) {
-        new VerifyCheck.Judge('criteria.md', 'judge-model', [:], votes)
+    static VerifyCheck.Judge judge() {
+        JudgeChecks.agent('criteria.md', 'judge-model')
     }
 
     static StageDefinition stage(String name, AdvancementMode advancement, List<VerifyCheck> verify) {
@@ -79,13 +78,13 @@ class ReferenceRunSpec extends Specification {
     // design(judge, auto) → build(command+builtin, auto) → ci(external, auto) → review(judge, manual)
     static PipelineDefinition pipeline() {
         new PipelineDefinition('1', new AutonomyLimits(3), [
-            stage('design', AdvancementMode.AUTO, [judge(1)]),
+            stage('design', AdvancementMode.AUTO, [judge()]),
             stage('build', AdvancementMode.AUTO, [
                 command('./gradlew test'),
                 builtin('files_exist')
             ]),
             stage('ci', AdvancementMode.AUTO, [external('ci/gate')]),
-            stage('review', AdvancementMode.MANUAL, [judge(1)])
+            stage('review', AdvancementMode.MANUAL, [judge()])
         ])
     }
 
@@ -101,9 +100,9 @@ class ReferenceRunSpec extends Specification {
 
     static EnginePorts portsFor(ScriptedExecutor executor, ScriptedCheckRounds builtinRunner,
             ScriptedCheckRounds commandRunner, ScriptedCheckRounds externalClient,
-            ScriptedJudgeVoter judgeVoter) {
+            ScriptedCheckRounds judges) {
         def clock = new VirtualClock()
-        new EnginePorts(CheckRouting.of(executor, builtinRunner, commandRunner, externalClient), judgeVoter,
+        new EnginePorts(CheckRouting.of(executor, builtinRunner, commandRunner, externalClient, judges),
                 new RecordingEventListener(), new InMemoryAttemptPersistence(), VirtualTimeEquipment.on(clock), RoundIdentity.inPlace())
     }
 
@@ -125,7 +124,7 @@ class ReferenceRunSpec extends Specification {
             ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'design', 0), []), [])
         ])
         def ports1 = portsFor(exec1, new ScriptedCheckRounds(), new ScriptedCheckRounds(),
-                new ScriptedCheckRounds(), new ScriptedJudgeVoter())
+                new ScriptedCheckRounds(), new ScriptedCheckRounds())
 
         when: 'run 1 drives the design stage'
         def outcome1 = new Engine().run(pipeline, context0, TaskState.atStageStart('design'), WORKSPACE, ports1)
@@ -162,14 +161,14 @@ class ReferenceRunSpec extends Specification {
             ScriptedCheckRounds.pending(),
             new Verdict.Pass(null, [])
         ])
-        def judge2 = new ScriptedJudgeVoter([
-            new JudgeVoter.Vote(new Verdict.Pass(null, []), [:]),
-            new JudgeVoter.Vote(new Verdict.Pass(null, []), [:])
+        def judge2 = new ScriptedCheckRounds([
+            new Verdict.Pass(null, []),
+            new Verdict.Pass(null, [])
         ])
         def persistence2 = new InMemoryAttemptPersistence()
         def clock2 = new VirtualClock()
         def sleeper2 = new VirtualSleeper(clock2)
-        def ports2 = new EnginePorts(CheckRouting.of(exec2, builtin2, command2, external2), judge2,
+        def ports2 = new EnginePorts(CheckRouting.of(exec2, builtin2, command2, external2, judge2),
                 new RecordingEventListener(), persistence2, VirtualTimeEquipment.on(clock2, sleeper2), RoundIdentity.inPlace())
 
         and: 'run 2 resumes from the recorded design state, its history reset by the decision commit'
@@ -201,7 +200,7 @@ class ReferenceRunSpec extends Specification {
         (buildRequests[1].feedback()[0].verdict() as Verdict.Fail).findings()[0].message() == 'tests red'
 
         and: 'all four check types were exercised'
-        judge2.voteCount == 2 // design + review
+        judge2.calls.size() == 2 // design + review
         command2.calls.size() == 2 // build attempt 0 (fail) + attempt 1 (pass)
         builtin2.calls.size() == 1 // build attempt 1 only (attempt 0 stopped at the failing command)
         external2.calls.size() == 2 // ci: a start answering pending, then a poll answering a pass

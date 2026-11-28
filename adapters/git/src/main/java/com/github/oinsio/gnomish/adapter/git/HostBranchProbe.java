@@ -12,9 +12,9 @@ import java.nio.file.Path;
  * ask both as their skip-with-WARN precondition, through the same git invocations rather than
  * copies of them. The committed range itself is judged by {@link GnomeRangeInspection}.
  *
- * <p>The tip read comes in two forms: {@link #currentHead()} is the durable-baseline reading that
- * refuses on a failed resolution, {@link #readHead()} the raw result the read-only mid-round poll
- * classifies for itself (FR13 of harden-logging-observability).
+ * <p>The tip read here is the raw result the read-only mid-round poll classifies for itself ({@link
+ * #readHead()}, FR13 of harden-logging-observability); the durable-baseline reading that refuses on
+ * a failed resolution is the round's opening, {@link RoundTokenMint}.
  *
  * <p>Implements FR12, NFR-S1 of add-git-workflow; FR13 of harden-logging-observability; FR13 of
  * tighten-spec-contract.
@@ -38,20 +38,7 @@ final class HostBranchProbe {
         this.expectedBranch = expectedBranch;
     }
 
-    /**
-     * The worktree's current {@code HEAD} SHA, verified before it is used (FR13 of
-     * harden-logging-observability): a blank baseline would make the next round's ancestry probe
-     * fail and attribute a history rewrite to the gnome on the strength of a read that never
-     * answered — so a failed resolution refuses here.
-     *
-     * @throws com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException if {@code HEAD}
-     *     cannot be resolved
-     */
-    String currentHead() {
-        return VerifiedTip.required("HEAD", "rev-parse", readHead());
-    }
-
-    /** The raw {@code rev-parse HEAD} invocation behind {@link #currentHead()}, for the poll. */
+    /** The raw {@code rev-parse HEAD} invocation, for the poll. */
     GitCommandResult readHead() {
         return runner.run(worktreeRoot, "rev-parse", "HEAD");
     }

@@ -5,7 +5,7 @@ import spock.lang.Specification
 
 /**
  * FR3, FR11 of migrate-verify-to-executor-contract (design D11 as amended 2026-11-14): a bound check
- * names its executor and the release of the environment it was bound in; an executor bound in no
+ * names its executor, the executor's adoption role when it takes one, and the release of the environment it was bound in; an executor bound in no
  * environment of its own releases nothing, and neither member may be missing.
  */
 class BoundCheckSpec extends Specification {
@@ -20,12 +20,13 @@ class BoundCheckSpec extends Specification {
 
         then:
         bound.executor().is(executor)
+        bound.adoption() == null
         noExceptionThrown()
     }
 
     def "FR11: a bound check refuses a missing #member"() {
         when:
-        new BoundCheck(executor, release)
+        new BoundCheck(executor, null, release)
 
         then:
         def refused = thrown(NullPointerException)

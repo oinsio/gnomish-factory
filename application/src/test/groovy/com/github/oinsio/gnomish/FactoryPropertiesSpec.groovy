@@ -58,7 +58,6 @@ class FactoryPropertiesSpec extends Specification {
     }
 
     // FR11/D7: CLI binary path defaults to "claude" from PATH when unset
-    // Scenario: executor/agent-executor / The binary defaults to claude on the PATH
     def "agent-cli-binary defaults to claude when null"() {
         when: 'a properties record is created without an explicit agent-cli-binary'
         def properties = new FactoryProperties('factory-01', null, null, null)

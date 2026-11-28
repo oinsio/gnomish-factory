@@ -40,7 +40,8 @@ final class HandAssembledCheckDispatch {
         def equipment = new ProgramRoundEquipment(ProgramBounds.DEFAULTS, VirtualTimeEquipment.on(clock),
                 TestChildEnvironment.hostAllowlist().programGrant(), Path.of('/tmp'), LastRegisteredCommit.NONE)
         new CheckDispatch(ExecutorRegistry.of(DescribedLaws.none(), definition, PipelineLaw.ofContent([:]), equipment,
-        builtIns ?: BuiltInEntriesFixture.of(clock), null), RunLaw.open(LawBinding.workingTree(lawRoot)).pinCheck())
+        builtIns ?: BuiltInEntriesFixture.of(clock), null, AgentEntryFixture.idle(equipment)), RunLaw.open(LawBinding.workingTree(lawRoot)).pinCheck(),
+        VerdictInput.IDENTIFIER_ONLY)
     }
 
     /**
@@ -52,8 +53,8 @@ final class HandAssembledCheckDispatch {
     static StageExecutor routedBoxed(StageExecutor stages, DescribedLaw described, PipelineDefinition definition,
             Path lawRoot, BuiltInEntries builtIns, ProgramRoundEquipment equipment, FreshBoxSource freshBoxes) {
         new CheckRoundRoute(stages, new CheckDispatch(ExecutorRegistry.of(described, definition,
-                PipelineLaw.ofContent([:]), equipment, builtIns, freshBoxes),
-                RunLaw.open(LawBinding.workingTree(lawRoot)).pinCheck()))
+                PipelineLaw.ofContent([:]), equipment, builtIns, freshBoxes, AgentEntryFixture.idle(equipment)),
+                RunLaw.open(LawBinding.workingTree(lawRoot)).pinCheck(), VerdictInput.IDENTIFIER_ONLY))
     }
 
     /**

@@ -48,7 +48,7 @@ class ConsoleOwnerGateSpec extends Specification {
         (OWNER) : 'the console owner: implements the port over stdin',
         'application/src/main/java/com/github/oinsio/gnomish/app/port/console/ConsoleIO.java' : 'the port: declares readLine, calls nothing',
         'application/src/main/java/com/github/oinsio/gnomish/app/ConsoleTakeoverConfirmation.java' : 'the one console read: the takeover [y/N] confirmation',
-        'adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/StreamJsonParser.java' : 'a BufferedReader over the agent CLI stdout, not the console',
+        'adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/claude/StreamJsonParser.java' : 'a BufferedReader over the agent CLI stdout, not the console',
     ]
 
     /** The allowlisted files that read a subprocess, not the operator: none may name the console port. */

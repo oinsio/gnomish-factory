@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
+import com.github.oinsio.gnomish.app.port.agent.TerminalClose
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
@@ -111,8 +112,8 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
         def round = source().openRound(request(2))
 
         then:
-        round.decisionFilePath().toString() == tokenPath(2)
-        round.decisionEnvFragment() == [GNOMISH_DECISION_FILE: tokenPath(2)]
+        round.answerFilePath().toString() == tokenPath(2)
+        round.answerEnvFragment() == [GNOMISH_ANSWER_FILE: tokenPath(2)]
     }
 
     def "FR13: each round records the tip it opened on as the run's token, so a repeated key names a new path"() {
@@ -120,16 +121,16 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
         def openTip = branchTip()
         def first = source().openRound(request(0))
         assert rounds.opened() == RoundToken.of(openTip)
-        def firstPath = first.decisionFilePath().toString()
-        first.closeRound(RoundClose.VERIFIABLE)
+        def firstPath = first.answerFilePath().toString()
+        first.closeRound(TerminalClose.VERIFIABLE)
 
         when: 'the same stage and attempt open again on the moved tip'
         def second = source().openRound(request(0))
 
         then: 'the token follows the tip, so the same key names a different file'
         rounds.opened() == RoundToken.of(branchTip())
-        second.decisionFilePath().toString() == tokenPath(0)
-        second.decisionFilePath().toString() != firstPath
+        second.answerFilePath().toString() == tokenPath(0)
+        second.answerFilePath().toString() != firstPath
     }
 
     // FR21 of define-executor-contract: the engine takes the round's token from the run's cell
@@ -173,31 +174,6 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
         round.roundListener() instanceof MidRoundHarvestListener
     }
 
-    def "FR23: readDecision returns empty when the agent wrote no decision file"() {
-        given:
-        def round = source().openRound(request())
-
-        expect:
-        round.readDecision().isEmpty()
-    }
-
-    def "FR23: readDecision returns the request the agent wrote at this round's decision path"() {
-        given:
-        def round = source().openRound(request(1))
-        def decisionFile = new File(
-                ((LocalBoxEnvironment) round.environment()).workingCopy.toFile(),
-                tokenPath(1))
-        decisionFile.parentFile.mkdirs()
-        decisionFile.text = '{"question":"which db?"}'
-
-        when:
-        def decision = round.readDecision()
-
-        then:
-        decision.isPresent()
-        decision.get().question().forLog() == 'which db?'
-    }
-
     def "FR21: closeRound snapshots the environment and records the harvested attempt commit"() {
         given:
         def openTip = branchTip()
@@ -205,7 +181,7 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
         new File(((LocalBoxEnvironment) round.environment()).workingCopy.toFile(), 'work.txt').text = 'gnome work'
 
         when:
-        round.closeRound(RoundClose.VERIFIABLE)
+        round.closeRound(TerminalClose.VERIFIABLE)
 
         then: 'the cell now holds the round closed by the harvested snapshot commit, under the token it opened with'
         def closed = rounds.closed()
@@ -226,7 +202,7 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
         new File(((LocalBoxEnvironment) round.environment()).workingCopy.toFile(), 'work.txt').text = 'gnome work'
 
         when:
-        round.closeRound(RoundClose.UNVERIFIABLE)
+        round.closeRound(TerminalClose.UNVERIFIABLE)
 
         then:
         def closed = rounds.closed()

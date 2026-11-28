@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.EngineEvent
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
+import com.github.oinsio.gnomish.domain.engine.PendingSubject
 import com.github.oinsio.gnomish.domain.engine.port.PendingTurn
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -14,9 +15,9 @@ import spock.lang.Specification
 
 /**
  * NFR-O1, UX1 of migrate-verify-to-executor-contract: the lines {@link LoggingEventListener} renders
- * from a pending check's wait — one DEBUG line per {@link EngineEvent.CheckPolled} (once per poll of
+ * from a pending check's wait — one DEBUG line per {@link EngineEvent.PendingPolled} (once per poll of
  * a loop, so DEBUG by the logging rule's level table) naming the executor, the key's prefix, the
- * turn, the elapsed and the remaining time; one INFO line per {@link EngineEvent.CheckTimedOut}
+ * turn, the elapsed and the remaining time; one INFO line per {@link EngineEvent.PendingTimedOut}
  * naming the class the wait was resolved to and what was still awaited. The key prefix and the
  * details are the executor's text and leave through their log exit.
  */
@@ -31,8 +32,8 @@ class LoggingEventListenerPollSpec extends Specification {
         LogCaptureSupport.capture(LoggingEventListener, Level.DEBUG, emit)
     }
 
-    private static EngineEvent.CheckTimedOut timedOut(ExecutionResult.FailureClass failureClass, UntrustedText details) {
-        new EngineEvent.CheckTimedOut(KEY, CHECK, 'scm-status', UntrustedText.subprocess('k-1'), Duration.ofMinutes(10),
+    private static EngineEvent.PendingTimedOut timedOut(ExecutionResult.FailureClass failureClass, UntrustedText details) {
+        new EngineEvent.PendingTimedOut(KEY, new PendingSubject.Check(CHECK), 'scm-status', UntrustedText.subprocess('k-1'), Duration.ofMinutes(10),
                 new ExecutionResult.Failed(failureClass, UntrustedText.factory('timed out'), [], details))
     }
 
@@ -40,7 +41,7 @@ class LoggingEventListenerPollSpec extends Specification {
     def "NFR-O1: a poll logs one DEBUG line naming its executor, key prefix, turn, elapsed and remaining time"() {
         when:
         def lines = capture {
-            listener.onEvent(new EngineEvent.CheckPolled(KEY, CHECK, 'scm-status',
+            listener.onEvent(new EngineEvent.PendingPolled(KEY, new PendingSubject.Check(CHECK), 'scm-status',
             UntrustedText.branchDocument('k-rotated'), PendingTurn.Origin.RECORDED, Duration.ofMinutes(2),
             Duration.ofMinutes(8)))
         }
@@ -51,11 +52,27 @@ class LoggingEventListenerPollSpec extends Specification {
                 'pending poll: executor=scm-status, key=k-rotated, turn=RECORDED, elapsed=PT2M, remaining=PT8M'
     }
 
+    // NFR-O2 of extract-agent-round-runner: a pending transform round's poll logs the line a verdict
+    //     poll does
+    def "NFR-O2: a pending round's poll logs the same DEBUG line naming executor, key prefix, elapsed and remaining"() {
+        when:
+        def lines = capture {
+            listener.onEvent(new EngineEvent.PendingPolled(KEY, PendingSubject.ROUND, 'remote-agent',
+            UntrustedText.subprocess('job-42'), PendingTurn.Origin.ISSUED, Duration.ofMinutes(1),
+            Duration.ofMinutes(59)))
+        }
+
+        then:
+        lines*.level == [Level.DEBUG]
+        lines[0].formattedMessage ==
+                'pending poll: executor=remote-agent, key=job-42, turn=ISSUED, elapsed=PT1M, remaining=PT59M'
+    }
+
     // NFR-O1: the key prefix is the executor's text, so it leaves through the log exit
     def "NFR-O1: a key prefix carrying a line break stays on the poll's one line"() {
         when:
         def lines = capture {
-            listener.onEvent(new EngineEvent.CheckPolled(KEY, CHECK, 'scm-status',
+            listener.onEvent(new EngineEvent.PendingPolled(KEY, new PendingSubject.Check(CHECK), 'scm-status',
             UntrustedText.subprocess('k\nforged line'), PendingTurn.Origin.ISSUED, Duration.ofSeconds(30),
             Duration.ofSeconds(570)))
         }

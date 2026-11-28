@@ -30,10 +30,11 @@ class RoundLogLineSpec extends Specification {
         MdcEventListener.clearAttemptScope()
     }
 
-    def lineOf(RoundExecutor executor, ExecutionResult.Status status) {
+    def lineOf(RoundExecutor executor, ExecutionResult.Status status, UntrustedText pendingKey = null, UntrustedText resumedKey = null) {
         def events = MdcAwareThread.taskScope(KEY.taskId()).withCloseable {
             LogCaptureSupport.capture(LoggingEventListener, Level.INFO) {
-                listeners.onEvent(new EngineEvent.ExecutionFinished(KEY, Participants.transform('agent-cli', ExecutorUsage.none()), executor, status))
+                listeners.onEvent(new EngineEvent.ExecutionFinished(KEY, Participants.transform(executor.name(), ExecutorUsage.none()), executor, status,
+                pendingKey, resumedKey))
             }
         }
         assert events.size() == 1
@@ -63,14 +64,41 @@ class RoundLogLineSpec extends Specification {
     // NFR-O2: an executor with no describe has no version and no protocol; a completed round no class or bound
     def "an undescribed executor's completed round line spells the absent values as a dash"() {
         when:
-        def line = lineOf(new RoundExecutor('agent-cli', null), new ExecutionResult.Completed())
+        def line = lineOf(new RoundExecutor('ghost', null), new ExecutionResult.Completed())
 
         then:
-        line.formattedMessage.contains('executor=agent-cli,')
+        line.formattedMessage.contains('executor=ghost,')
         line.formattedMessage.contains('protocolVersion=-')
         line.formattedMessage.contains('status=completed')
         line.formattedMessage.contains('class=-')
         line.formattedMessage.contains('bound=-')
+        line.formattedMessage.contains('pendingKey=-, resumedKey=-,')
+    }
+
+    // UX3, NFR-C2 of extract-agent-round-runner: a run has no ledger, so its round line names the key a start went pending with, or the one a resume took
+    def "a pending round's line names the key its start went pending with, or the key a resume took, neutralized"() {
+        when:
+        def line = lineOf(new RoundExecutor('service', UntrustedText.subprocess('1')), new ExecutionResult.Completed(),
+                pending == null ? null : UntrustedText.subprocess(pending), resumed == null ? null : UntrustedText.subprocess(resumed))
+
+        then:
+        line.formattedMessage.contains("pendingKey=${shownPending}, resumedKey=${shownResumed},")
+
+        where:
+        pending | resumed || shownPending | shownResumed
+        'job-7' | null || 'job-7' | '-'
+        null | 'job-7' || '-' | 'job-7'
+    }
+
+    // NFR-S2: a key is the executor's own text, so it reaches the line through its log exit
+    def "a pending key carrying control characters reaches the line neutralized"() {
+        when:
+        def line = lineOf(new RoundExecutor('service', null), new ExecutionResult.Completed(),
+                UntrustedText.subprocess("job\u001b[31m\nforged"), UntrustedText.subprocess("job\u001b[31m\nforged"))
+
+        then:
+        !line.formattedMessage.contains('\u001b')
+        !line.formattedMessage.contains('\n')
     }
 
     // NFR-O2, NFR-S2: the executor's own text leaves through its log exit — one line, no control bytes
@@ -86,7 +114,7 @@ class RoundLogLineSpec extends Specification {
     // NFR-O2: a quality failure names its class and no bound
     def "a quality failure names its class and reaches no bound"() {
         when:
-        def line = lineOf(new RoundExecutor('agent-cli', null),
+        def line = lineOf(new RoundExecutor('ghost', null),
                 new ExecutionResult.Failed(ExecutionResult.FailureClass.QUALITY, UntrustedText.subprocess('red'), [], null))
 
         then:

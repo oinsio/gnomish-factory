@@ -39,7 +39,7 @@ class CheckRoundRouteSpec extends Specification {
     def "FR1, FR2: a check request is a check round of the dispatch, and the stage chain is never asked"() {
         when:
         def result = route.execute(new StageExecutor.Request(context, stage, new DirectoryWorkspace(workingCopy), 0, [],
-        check, CheckRef.of(0, check), null))
+        check, CheckRef.of(0, check)))
 
         then:
         0 * stages._

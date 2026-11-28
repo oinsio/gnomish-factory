@@ -18,12 +18,14 @@ import java.util.stream.Collectors;
  * other placement of a check naming one of the law's programs — host mode, or the {@code same-box}
  * default of a check without credentials — is a located {@link ConfigError} naming the check (its
  * manifest and {@code verify[<i>]}) and the executor, which run assembly joins to the describe
- * refusal's errors. Pure.
+ * refusal's errors. A {@code judge} check whose block is a {@code program} is placed as its check
+ * round is ({@link VerifyCheck.Judge#asExecutorCheck()}: a fresh box), so it is refused in host mode
+ * alike (design D2 of extract-agent-round-runner). Pure.
  *
  * <p>The first change that binds a {@code program} check outside the fresh box (NG14's pickup) lifts
  * the refusal for its medium.
  *
- * <p>Implements FR1, FR3 of migrate-verify-to-executor-contract.
+ * <p>Implements FR1, FR3 of migrate-verify-to-executor-contract; FR4 of extract-agent-round-runner.
  */
 public final class ProgramCheckPlacement {
 
@@ -43,8 +45,8 @@ public final class ProgramCheckPlacement {
         for (StageDefinition stage : definition.stages()) {
             List<VerifyCheck> checks = stage.verify();
             for (int index = 0; index < checks.size(); index++) {
-                if (checks.get(index) instanceof VerifyCheck.Executor check
-                        && programs.contains(check.executorName())
+                var check = asCheckRound(checks.get(index));
+                if (programs.contains(check.executorName())
                         && (!freshBoxes || check.verifyIn() == VerifyCheck.VerifyIn.SAME_BOX)) {
                     errors.add(new ConfigError(
                             "stages/%s/stage.yaml".formatted(stage.name()),
@@ -55,6 +57,14 @@ public final class ProgramCheckPlacement {
             }
         }
         return errors;
+    }
+
+    /** The check as its check round names it: a judge by the executor its block resolves to. */
+    private static VerifyCheck.Executor asCheckRound(VerifyCheck check) {
+        return switch (check) {
+            case VerifyCheck.Executor executor -> executor;
+            case VerifyCheck.Judge judge -> judge.asExecutorCheck();
+        };
     }
 
     private static String why(boolean freshBoxes) {

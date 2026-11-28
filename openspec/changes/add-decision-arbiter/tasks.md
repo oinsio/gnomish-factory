@@ -14,8 +14,13 @@ archives first, the other rebases its delta). TDD throughout
       scope**, **advisory decision**; ban "referee"/"resolver" as synonyms
       (D4, FR9)
 - [ ] 1.2 `decisions:` section in the stage manifest: DTO, mapper,
-      validation (rulesFile confined to `.gnomish/`, positive cap, settings
-      vocabulary), pipeline-validator rule; fixtures (FR1)
+      validation (rulesFile confined to `.gnomish/`, positive cap),
+      pipeline-validator rule; fixtures. The arbiter is declared by the
+      stage's `executor:` block through the one block mapper and its rules
+      (`StageMechanismRule`, `ExecutorReferenceRule`,
+      `AgentSettingsValidator`, the role rule for `decision`) — no `model`
+      or `settings` key of the section's own, and `ExecutorBlockOwnerSpec`
+      of `extract-agent-round-runner` stays green (FR1)
 - [ ] 1.3 Decision-rules file joins the pipeline law freeze set + reader;
       spec: gnome edits invisible, resume re-freezes (FR2, D5)
 

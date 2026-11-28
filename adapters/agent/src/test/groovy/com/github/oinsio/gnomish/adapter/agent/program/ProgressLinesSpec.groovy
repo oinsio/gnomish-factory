@@ -15,8 +15,8 @@ import spock.lang.Specification
 import spock.lang.Timeout
 
 /**
- * {@link ProgressLines}, the live stdout reader of a {@code streams_progress} run (FR5, NFR-R2 of
- * define-executor-contract): a JSON line is DEBUG progress, a line that is not JSON is a contract
+ * {@link ProgressLines}, the live stdout reader of a {@code streams_progress} run, with each line judged
+ * by {@link ProgressJudge} (FR5, NFR-R2 of define-executor-contract): a JSON line is DEBUG progress, a line that is not JSON is a contract
  * violation logged and skipped — the first at WARN, the rest at DEBUG — and every chunk moves the
  * instant the silence bound is measured from. The fake has exited with its stdout waiting in the
  * pipe before the reader starts, so the reader reads it all and ends; no order between threads is
@@ -27,14 +27,15 @@ class ProgressLinesSpec extends Specification {
 
     static final Instant NOW = Instant.parse('2026-10-31T10:00:00Z')
 
-    LogCaptureSupport logs = LogCaptureSupport.attach(ProgressLines, Level.DEBUG)
+    LogCaptureSupport logs = LogCaptureSupport.attach(ProgressJudge, Level.DEBUG)
 
     def cleanup() {
         logs.detach()
     }
 
     private ProgressLines read(String stdout, InstantSource clock = new VirtualClock(NOW)) {
-        def lines = ProgressLines.start(ChildOutput.stdout(new FakeProcess(0, stdout) {}), clock, 'acme')
+        def lines = ProgressLines.start(ChildOutput.stdout(new FakeProcess(0, stdout) {}), clock,
+                ProgressJudge.LINE_CAP_BYTES, new ProgressJudge('acme'))
         assert lines.await(Duration.ofSeconds(10))
         lines
     }
@@ -77,7 +78,7 @@ class ProgressLinesSpec extends Specification {
     // FR5: an overlong line is kept to the cap, its rest read and dropped, and the next line still judged
     def "FR5: a line past the line cap is cut to the cap and the next line is still read"() {
         when:
-        read('{"a":"' + 'x' * (ProgressLines.LINE_CAP_BYTES + 10) + '"}\n{"step":3}\n')
+        read('{"a":"' + 'x' * (ProgressJudge.LINE_CAP_BYTES + 10) + '"}\n{"step":3}\n')
 
         then: 'the cut line is no JSON, the next one is progress'
         logs.list.count { it.level == Level.WARN } == 1
@@ -87,7 +88,7 @@ class ProgressLinesSpec extends Specification {
     // FR5, NFR-O2: a cut line is reported as cut, not as a line that is not JSON — at WARN first, at DEBUG after
     def "FR5: a line past the line cap that no longer parses is named as cut, at WARN first and at DEBUG after"() {
         given:
-        def overlong = '{"a":"' + 'x' * (ProgressLines.LINE_CAP_BYTES + 10) + '"}'
+        def overlong = '{"a":"' + 'x' * (ProgressJudge.LINE_CAP_BYTES + 10) + '"}'
 
         when:
         read(overlong + '\n' + overlong + '\nnot json\n')
@@ -135,22 +136,28 @@ class ProgressLinesSpec extends Specification {
 
         where:
         size || warns | outcome
-        ProgressLines.LINE_CAP_BYTES || 0 | 'kept whole'
-        ProgressLines.LINE_CAP_BYTES + 1 || 1 | 'cut, so not JSON'
+        ProgressJudge.LINE_CAP_BYTES || 0 | 'kept whole'
+        ProgressJudge.LINE_CAP_BYTES + 1 || 1 | 'cut, so not JSON'
     }
 
-    // NFR-O2: the reader's lines carry the round's MDC, set on the thread that started it
-    def "NFR-O2: progress lines carry the round's task key from the starting thread's MDC"() {
+    // NFR-O2: the reader's lines carry the round's MDC, set on the thread that started it — the reader
+    //     thread of every program and agent round (the agent round runner's since task 5.1 of
+    //     extract-agent-round-runner)
+    // Scenario: observability/factory-logging / Pump thread keeps the task
+    def "NFR-O2: progress lines carry the round's task key, stage and attempt from the starting thread's MDC"() {
         given:
         MDC.put('taskId', 'TASK-7')
+        MDC.put('stage', 'implement')
+        MDC.put('attempt', '2')
 
         when:
         read('{"step":1}\n')
 
         then:
-        logs.list.find {
+        def mdc = logs.list.find {
             it.formattedMessage.contains('progress:')
-        }.MDCPropertyMap.taskId == 'TASK-7'
+        }.MDCPropertyMap
+        mdc.subMap(['taskId', 'stage', 'attempt']) == [taskId: 'TASK-7', stage: 'implement', attempt: '2']
 
         cleanup:
         MDC.clear()

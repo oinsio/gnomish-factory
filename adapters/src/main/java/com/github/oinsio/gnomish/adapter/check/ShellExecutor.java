@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.check;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
+import com.github.oinsio.gnomish.domain.pipeline.BuiltInExecutors;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.executorcontract.Answer;
 import com.github.oinsio.gnomish.executorcontract.Describe;
@@ -84,7 +85,7 @@ public final class ShellExecutor implements Executor {
     public static Describe describeAnswer() {
         return new Describe(
                 Describe.SPOKEN_PROTOCOL_VERSION,
-                UntrustedText.factory("built-in"),
+                UntrustedText.factory(BuiltInExecutors.VERSION),
                 List.of(Role.VERDICT),
                 List.of(),
                 settingsSchema(),

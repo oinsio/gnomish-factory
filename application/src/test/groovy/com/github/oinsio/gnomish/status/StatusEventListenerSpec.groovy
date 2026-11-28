@@ -78,7 +78,7 @@ class StatusEventListenerSpec extends Specification {
         event << [
             new EngineEvent.RunStarted(TASK_ID, new Position.AtStage('implement'), 0),
             new EngineEvent.AttemptStarted(key()),
-            new EngineEvent.ExecutionFinished(key(), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed()),
+            new EngineEvent.ExecutionFinished(key(), Participants.transform('ghost', ExecutorUsage.none()), new RoundExecutor('ghost', null), new ExecutionResult.Completed()),
             new EngineEvent.CheckStarted(key(), new CheckRef(0, UntrustedText.manifest('builtin:files_exist'))),
             new EngineEvent.CheckFinished(key(), passingCheck(), null),
             new EngineEvent.TaskFinished(TASK_ID, new TaskOutcome.Completed(TaskState.atStageStart('review'))),

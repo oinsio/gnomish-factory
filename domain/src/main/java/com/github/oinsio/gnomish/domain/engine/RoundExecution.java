@@ -6,12 +6,14 @@ import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
 import java.time.Instant;
-import org.jspecify.annotations.Nullable;
+import java.util.List;
 
 /**
  * The round mechanics the {@link StageAttemptLoop} delegates one round to: build the
  * {@link AttemptKey}, assemble the executor request with the prior attempts' failed check
- * results as feedback (FR4), run the {@link StageExecutor}, and shape its {@link ExecutionResult}
+ * results as feedback (FR4), run the round's requests through {@link TransformRound} — its {@code
+ * start}, and its polls when it went {@code pending} on an executor declaring {@code poll} (design D11
+ * of extract-agent-round-runner) — and shape the {@link ExecutionResult} it ended on
  * into a sealed {@link RoundOutcome} by the {@link AttemptAccounting} the {@link
  * ExecutorOutcomeClassifier} gives it — the one place a status is classified (FR7 of
  * define-executor-contract, design D10). This class switches over the accounting only:
@@ -27,50 +29,50 @@ import org.jspecify.annotations.Nullable;
  *   <li>{@link AttemptAccounting.Escalate} records nothing ({@link RoundOutcome.Unrecorded}).
  * </ul>
  *
- * <p>When the executor port itself throws — a failure before any round existed, or its own
- * retries exhausted — this catches the throw, logs it at ERROR, and turns it into the {@code
- * failed/infrastructure} result the classifier takes (FR10, NFR-O1). An adapter whose round died
- * reports that as a result instead, carrying the round's egress denials (FR1 of
- * fix-denial-attribution-durability; FR7 of define-executor-contract). {@link RoundFailures} writes the one operator line of a thrown and of a reported
- * failure alike. A check-adapter throw is {@link
- * VerifyOrchestrator}'s to handle. Every executed round — recorded or not, a thrown failure as
+ * <p>A throw of the executor port is caught, logged at ERROR and turned into the {@code
+ * failed/infrastructure} result the classifier takes (FR10, NFR-O1); an adapter whose round died
+ * reports a result instead, with the round's egress denials (FR1 of fix-denial-attribution-durability;
+ * FR7 of define-executor-contract). {@link RoundFailures} writes the one operator line of a thrown and
+ * of a reported failure alike; a check-adapter throw is {@link VerifyOrchestrator}'s. Every executed round — recorded or not, a thrown failure as
  * the {@code failed/infrastructure} result it stands for — emits {@link EngineEvent.ExecutionFinished}
  * through {@link Events#emit} BEFORE any verify chain (FR12), naming the executor that ran it and the
  * status it reached, so the round's log and ledger lines cover every run (NFR-O2, UX3 of
- * define-executor-contract). Package-private and reentrant: it holds only immutable injected collaborators (NFR-R1).
- * The {@code startedAt} instant the loop captured is threaded onto every {@link AttemptRecord}
+ * define-executor-contract). Reentrant: it holds only immutable collaborators (NFR-R1). The {@code startedAt} instant the loop captured is threaded onto every {@link AttemptRecord}
  * (FR15 of add-manual-run, design D11). The round's denials ride the result onto the record and
  * are never consulted by a verdict (FR2, FR3 of fix-denial-report-attachment). Every recorded round
  * names itself: its task, stage and number from the {@link AttemptKey}, its round token taken once
  * from the run's {@link RoundIdentity} — never re-derived from the position or the history (FR14,
- * FR21 of define-executor-contract, design D13). An unrecorded round takes no token. The verify
- * chain gets that same token with the state the round ran from, so a pending entry names its round
- * by it (design D21 of migrate-verify-to-executor-contract).
+ * FR21 of define-executor-contract, design D13), through the round's one {@link RoundTokenTake}, so
+ * a pending round's entry and its record carry one token. An unrecorded round that never went
+ * pending takes no token. The verify chain gets that same token with the state the round ran from,
+ * so a pending entry names its round by it (design D21 of migrate-verify-to-executor-contract).
  *
  * <p>Implements FR4, FR6, FR10, FR12, FR13, NFR-O1 of add-stage-engine; FR15 of add-manual-run;
  * FR2, FR3 of fix-denial-report-attachment; FR1 of fix-denial-attribution-durability;
  * FR5 of split-logtext-leaves; FR5 of make-checkpoint-gate-durable; FR20 of
  * fix-terminal-receipt-convergence; FR7 of define-executor-contract; FR20 of
- * migrate-verify-to-executor-contract.
+ * migrate-verify-to-executor-contract; FR10, NFR-O2, UX3 of extract-agent-round-runner.
  */
 final class RoundExecution {
 
-    private final StageExecutor executor;
+    private final TransformRound transform;
     private final VerifyOrchestrator verifyOrchestrator;
     private final EngineEventListener listener;
     private final DescribedExecutors described;
     private final RoundIdentity rounds;
 
     /**
-     * Wires the round's collaborators from a run's ports — the executor, the listener the {@code
+     * Wires the round's collaborators from a run's ports — the executor and the pending poll its
+     * {@link TransformRound} runs the round's requests through, the listener the {@code
      * ExecutionFinished} event is emitted to, and the run's {@link DescribedExecutors} the round's
      * executor is named from; all immutable, so this collaborator carries no mutable state (NFR-R1).
      *
      * @param ports the run's collaborators; never null
      * @param verifyOrchestrator the verify chain the round's checks run through; never null
+     * @param poll the engine's one owner of pending work, a pending round's polls go through; never null
      */
-    RoundExecution(EnginePorts ports, VerifyOrchestrator verifyOrchestrator) {
-        this.executor = ports.executor();
+    RoundExecution(EnginePorts ports, VerifyOrchestrator verifyOrchestrator, PendingPoll poll) {
+        this.transform = new TransformRound(ports, poll);
         this.verifyOrchestrator = verifyOrchestrator;
         this.listener = ports.listener();
         this.described = ports.describedExecutors();
@@ -78,20 +80,17 @@ final class RoundExecution {
     }
 
     /**
-     * Executes one round of {@code stage} from {@code state} and shapes the result into a
-     * sealed {@link RoundOutcome}. The round number is the current attempt history size (0-based)
-     * and forms the {@link AttemptKey} the request and any verify chain share; the feedback is
-     * the failed check results of all prior attempts (FR4). The executor runs the round, the
-     * classifier gives its accounting, and the round is shaped from it. A {@link RuntimeException}
-     * the executor throws is caught, logged at ERROR naming the round key, and classified as the
-     * {@code failed/infrastructure} result it stands for (FR10, NFR-O1), with no denials.
+     * Executes one round of {@code stage} from {@code state} and shapes the result it ended on into a
+     * sealed {@link RoundOutcome}. The round number is the size (0-based) of the stage's own history
+     * in the {@link Engine#resumedFrom} view; the feedback is the failed check results of all prior
+     * attempts (FR4). A {@link RuntimeException} the requests throw is caught, logged at ERROR naming
+     * the round key, and classified as the {@code failed/infrastructure} result it stands for (FR10,
+     * NFR-O1), with no denials. {@code state} is the last persisted state: the round's and the verify
+     * chain's pending writes carry it unchanged but for their entries (D21 item 12 of
+     * migrate-verify-to-executor-contract).
      *
      * <p>Implements FR4, FR6, FR10, FR12, FR13, NFR-O1 of add-stage-engine; FR7 of
-     * define-executor-contract.
-     *
-     * <p>{@code state} is the last persisted state: the verify chain's pending writes carry it
-     * unchanged but for their entries (D21 item 12 of migrate-verify-to-executor-contract); the round's
-     * number and feedback come from its {@link Engine#resumedFrom} view, the stage's own history.
+     * define-executor-contract; FR10 of extract-agent-round-runner.
      *
      * @param context the task's identity and human decisions; never null
      * @param state the last persisted state this round resumes from; never null
@@ -103,76 +102,77 @@ final class RoundExecution {
      */
     RoundOutcome execute(
             TaskContext context, TaskState state, Workspace workspace, StageDefinition stage, Instant startedAt) {
-        var key = keyOf(context, state, stage);
-        int number = key.attempt();
-        var feedback = RoundRecords.priorFailures(Engine.resumedFrom(state));
-        ExecutionResult result;
-        try {
-            result = executor.execute(new StageExecutor.Request(context, stage, workspace, number, feedback));
-        } catch (RuntimeException ex) {
-            var failed = RoundFailures.thrown(key, ex);
-            return shape(
-                    context, state, workspace, stage, startedAt, failed, ExecutorOutcomeClassifier.classify(failed));
-        }
-        var accounting = ExecutorOutcomeClassifier.classify(result);
-        RoundFailures.reported(key, accounting);
-        return shape(context, state, workspace, stage, startedAt, result, accounting);
-    }
-
-    /**
-     * The round's key: its task, stage and number — the size (0-based) of the stage's own history,
-     * the {@link Engine#resumedFrom} view of {@code state}.
-     */
-    private static AttemptKey keyOf(TaskContext context, TaskState state, StageDefinition stage) {
-        return new AttemptKey(
+        var key = new AttemptKey(
                 context.taskId(),
                 stage.name(),
                 Engine.resumedFrom(state).attempts().size());
+        var feedback = RoundRecords.priorFailures(Engine.resumedFrom(state));
+        var token = new RoundTokenTake(rounds);
+        PendingRun run;
+        try {
+            run = transform.run(
+                    new StageExecutor.Request(context, stage, workspace, key.attempt(), feedback), key, state, token);
+        } catch (RuntimeException ex) {
+            var failed = RoundFailures.thrown(key, ex);
+            var thrown = new PendingRun(failed, null, null, List.of(failed.usage()));
+            var round = new Round(key, startedAt, token, ExecutorOutcomeClassifier.classify(failed));
+            return shape(context, state, workspace, stage, round, thrown);
+        }
+        var accounting = ExecutorOutcomeClassifier.classify(run.result());
+        RoundFailures.reported(key, accounting);
+        return shape(context, state, workspace, stage, new Round(key, startedAt, token, accounting), run);
     }
+
+    /**
+     * The round being shaped: its key, its start instant, its one token take and the accounting the
+     * classifier gave the result it ended on.
+     */
+    private record Round(AttemptKey key, Instant startedAt, RoundTokenTake token, AttemptAccounting accounting) {}
 
     /**
      * Shapes the round from its accounting, the variant the class javadoc lists. Exhaustive
      * switch, no {@code default}. Every round emits {@link EngineEvent.ExecutionFinished} before any
-     * verify chain (FR12).
+     * verify chain (FR12), naming the key a pending round went pending with or was resumed by (UX3 of
+     * extract-agent-round-runner); its record carries one {@code transform} entry per request
+     * (NFR-O2 of extract-agent-round-runner).
      */
     private RoundOutcome shape(
             TaskContext context,
             TaskState state,
             Workspace workspace,
             StageDefinition stage,
-            Instant startedAt,
-            ExecutionResult result,
-            AttemptAccounting accounting) {
-        var key = keyOf(context, state, stage);
+            Round round,
+            PendingRun run) {
+        var key = round.key();
         var executor = described.executorOf(stage);
-        var executed = Participants.transform(executor.name(), result.usage());
-        Events.emit(listener, new EngineEvent.ExecutionFinished(key, executed, executor, result.status()));
-        return switch (accounting) {
+        var executed = run.usages().stream()
+                .map(usage -> Participants.transform(executor.name(), usage))
+                .toList();
+        var result = run.result();
+        Events.emit(
+                listener,
+                new EngineEvent.ExecutionFinished(
+                        key, executed.getLast(), executor, result.status(), run.pendingKey(), run.resumedKey()));
+        return switch (round.accounting()) {
             case AttemptAccounting.Proceed ignored ->
-                verified(context, state, workspace, stage, identity(key, startedAt, executed), result);
+                verified(context, state, workspace, stage, identity(round, executed), result);
             case AttemptAccounting.BurnAttempt burn ->
-                RoundRecords.qualityFailed(identity(key, startedAt, executed), stage, result, burn);
-            case AttemptAccounting.EndStage end ->
-                RoundRecords.stopped(identity(key, startedAt, executed), result, end);
+                RoundRecords.qualityFailed(identity(round, executed), stage, result, burn);
+            case AttemptAccounting.EndStage end -> RoundRecords.stopped(identity(round, executed), result, end);
             case AttemptAccounting.Escalate escalate -> new RoundOutcome.Unrecorded(key, escalate);
         };
     }
 
-    /**
-     * The recorded round's identity: the key, the start instant, the token taken for it and the
-     * executor's participant entry.
-     */
-    private RecordedRound identity(AttemptKey key, Instant startedAt, ParticipantUsage executed) {
-        @Nullable RoundToken token = rounds.takeToken().orElse(null);
-        return new RecordedRound(key, token, startedAt, executed);
+    /** The recorded round's identity: key, start instant, the one take's token, executor entries. */
+    private static RecordedRound identity(Round round, List<ParticipantUsage> executed) {
+        return new RecordedRound(round.key(), round.token().token(), round.startedAt(), executed);
     }
 
     /**
      * Runs the verify chain for a {@code completed} round with no answer, derives its overall
-     * {@link Verdict} from the chain (design D4), and captures it as an {@link AttemptRecord} with
-     * the executor's and the judge votes' participant entries and an explicit {@link AttemptRecord.Result} classification of that
-     * verdict (FR13, design D5). The verdict is computed once and reused for both the record's
-     * result and the returned {@link RoundOutcome.Judged}.
+     * {@link Verdict} from the chain (design D4), and captures it as an {@link AttemptRecord} with the
+     * executor's and the judge votes' participant entries and the verdict's {@link
+     * AttemptRecord.Result} (FR13, design D5); the verdict is computed once for both.
      */
     private RoundOutcome.Judged verified(
             TaskContext context,

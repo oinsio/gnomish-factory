@@ -13,7 +13,7 @@ class StageSpecContractCommandSpec extends Specification {
     static final String LAUNCHER = '''\
 if ! out=$(./gradlew -q checkSpecContract -PspecContractChanges=true 2>&1); then
   printf '%s\\n' "$out" | tail -40
-  echo "read .claude/rules/traceability.md and escalate through \\$GNOMISH_DECISION_FILE"
+  echo "read .claude/rules/traceability.md and escalate through \\$GNOMISH_ANSWER_FILE"
   exit 1
 fi
 '''

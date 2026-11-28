@@ -95,6 +95,30 @@ class StructuralValidationSpec extends Specification {
         ]) || 'inputs[0].producerOutputId' | "missing required field 'producerOutputId'"
     }
 
+    // FR13, UX1 of extract-agent-round-runner: a judge check's executor block gets the stage block's
+    //     shape checks, located under verify[<i>].executor; an absent one is the mapper's to report
+    def "a judge check's executor block is shape-checked at its own location: #scenario"() {
+        given:
+        def stage = stageWith(verify: [
+            new VerifyCheckDto.Command('true'),
+            new VerifyCheckDto.Judge('accept.md', block)
+        ])
+
+        expect:
+        StructuralValidation.checkStage('stages/build/stage.yaml', stage)*.where() == expectedWhere
+
+        where:
+        scenario | block || expectedWhere
+        'a sound block' | exec([:]) || []
+        'no block (the mapper reports it)' | null || []
+        'missing type' | exec(type: null) || ['verify[1].executor.type']
+        'unknown type' | exec(type: 'foo') || ['verify[1].executor.type']
+        'a sandbox binding' | exec(sandbox: new SandboxDto([], false, 'host')) || [
+            'verify[1].executor.sandbox.binding'
+        ]
+        'a blank model on a command block' | exec(type: 'command', model: ' ') || ['verify[1].executor.model']
+    }
+
     def "structural problems are all reported in one pass"() {
         given: 'a stage missing purpose and carrying an unknown executor type'
         def stage = stageWith(purpose: null, executor: exec(type: 'foo'))

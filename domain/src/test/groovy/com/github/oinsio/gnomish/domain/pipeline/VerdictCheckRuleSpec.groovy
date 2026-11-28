@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.pipeline
 
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 import java.time.Duration
 import spock.lang.Specification
 
@@ -99,7 +100,7 @@ class VerdictCheckRuleSpec extends Specification {
         when:
         def errors = VerdictCheckRule.validate(pipeline([
             check(VerifyCheck.Token.EXTERNAL, 'sonarqube', VerifyCheck.VerifyIn.SAME_BOX),
-            new VerifyCheck.Judge('criteria.md', 'claude-sonnet-4-5', [:], 1),
+            JudgeChecks.agent('criteria.md', 'claude-sonnet-4-5'),
             check(VerifyCheck.Executor.SCM_STATUS, VerifyCheck.VerifyIn.SAME_BOX)
         ], [
             declared('sonarqube', ['SONAR_TOKEN'])
@@ -141,6 +142,23 @@ class VerdictCheckRuleSpec extends Specification {
         ])) == []
 
         where:
-        executor << BuiltInExecutors.NAMES + ['acme', '']
+        executor << BuiltInExecutors.CHECK_NAMES + ['acme', '']
+    }
+
+    // FR14, D12 of extract-agent-round-runner: reserving 'claude' leaves a check naming it an unknown
+    //     executor, as before the reservation — an agent reaches a check only through a judge block
+    def "FR14: a check naming the reserved agent entry 'claude' is an unknown executor"() {
+        when:
+        def errors = VerdictCheckRule.validate(pipeline([
+            check('claude', VerifyCheck.VerifyIn.FRESH_BOX, ['ci'])
+        ], [
+            declared('acme', [])
+        ]))
+
+        then:
+        errors*.message() == [
+            "check 'sonar/gate' names unknown executor 'claude'; the registry's executors are "
+            + 'files-exist, shell, github-actions, scm-status, http, command, acme'
+        ]
     }
 }

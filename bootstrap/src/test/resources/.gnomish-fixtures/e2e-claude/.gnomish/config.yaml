@@ -1,0 +1,3 @@
+schemaVersion: "1"
+autonomy:
+  attemptLimit: 3

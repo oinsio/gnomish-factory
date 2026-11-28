@@ -33,8 +33,8 @@ class AttemptRecordSpec extends Specification {
         given: 'a check result, the executor entry and one judge vote'
         def check = passResult()
         def usage = [
-            Participants.transform('agent-cli', new ExecutorUsage(Duration.ofSeconds(5), [], [:])),
-            Participants.verdict('agent-cli', 0, Unpriced.of(['m': new TokenUsage(1, 1, 0, 0)]))
+            Participants.transform('claude', new ExecutorUsage(Duration.ofSeconds(5), [], [:])),
+            Participants.verdict('claude', 0, Unpriced.of(['m': new TokenUsage(1, 1, 0, 0)]))
         ]
 
         when: 'a record is created'
@@ -52,7 +52,7 @@ class AttemptRecordSpec extends Specification {
     def "the participant list is copied and cannot be modified"() {
         given:
         def usage = [
-            Participants.transform('agent-cli', ExecutorUsage.none())
+            Participants.transform('claude', ExecutorUsage.none())
         ]
         def record = AttemptRecords.of(0, AttemptRecord.Result.PASSED, STARTED, [], usage, [], Stop.none())
 

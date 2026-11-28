@@ -1,13 +1,9 @@
 package com.github.oinsio.gnomish.adapter.agent.program;
 
-import com.github.oinsio.gnomish.executorcontract.ExecutorContractJson;
-import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.subprocess.ChildOutput;
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.InstantSource;
@@ -18,72 +14,97 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
 /**
- * The live stdout reader of a {@code program} run whose describe declares {@code streams_progress}
- * (FR5 of define-executor-contract; design D3): in the shape of the agent round's {@code
- * StreamDrain}, it reads the {@link ChildOutput}'s stream view on a virtual thread started at the
- * launch, so the silence bound sees each line as it arrives. Each line is NDJSON progress, logged at
- * DEBUG and never parsed for a result; a line that is not JSON is a contract violation, logged and
- * skipped — the first of a run at WARN, the rest at DEBUG and counted, so a chatty executor does not
- * flood the operator plane.
+ * The live stdout reader of a run whose output is read line by line while it runs (FR5 of
+ * define-executor-contract; design D3; FR1, FR8 of extract-agent-round-runner): it reads the {@link
+ * ChildOutput}'s stream view on a virtual thread started at the launch, so the silence bound sees each
+ * line as it arrives, and hands every line to its {@link Sink} — a {@code streams_progress} program's
+ * progress judgement ({@link ProgressJudge}), or the agent round runner's dialect parse. Both readers
+ * of a child's output by line take this one reader, so the line cap, the activity stamp and the stop
+ * cannot be spelled twice.
  *
- * <p>Every chunk read, whole line or not, is a sign of life: {@link #lastActivity()} moves on each.
- * A line is kept to {@link #LINE_CAP_BYTES}; the rest of an overlong line is read and dropped, so no
- * line grows the reader's memory past the cap. A cut line that no longer parses is reported as cut,
- * not as one that is not JSON: the cause is its length.
+ * <p>Every chunk read, whole line or not, is a sign of life: {@link #lastActivity()} moves on each, and
+ * {@link #anyRead()} says whether any byte arrived at all, which the startup-read bound waits on. A
+ * line is kept to the cap its caller names; the rest of an overlong line is read and dropped, so no
+ * line grows the reader's memory past the cap, and the sink is told the line was cut.
  *
  * <p>Like every reader of a child's output it reads only through the owner's non-parking view and
  * closes no pipe (ADR 0018): the drain ends at the exit with nothing pending, or on {@link #close()},
  * the owner's stop. Its join is bounded by the handle's post-exit bound the caller passes; this class
  * holds no bound of its own ({@code DrainOwnerGateSpec}). The round thread's MDC is applied on the
- * reader's thread, so its lines carry the round's task, stage and attempt.
+ * reader's thread, so the sink's lines carry the round's task, stage and attempt.
  *
- * <p>Implements FR5, NFR-O2, NFR-R2 of define-executor-contract.
+ * <p>Implements FR5, NFR-O2, NFR-R2 of define-executor-contract; FR1, FR8, NFR-R1 of
+ * extract-agent-round-runner.
  */
-final class ProgressLines implements AutoCloseable {
+public final class ProgressLines implements AutoCloseable {
 
-    /** The most bytes of one progress line kept. */
-    static final int LINE_CAP_BYTES = 64 * 1024;
+    /**
+     * What a reader hands each line to, on the reader's thread, in arrival order. A sink calls nothing
+     * that blocks on the round: it runs while the process runs.
+     */
+    public interface Sink {
+
+        /**
+         * One line, without its terminator; the last line of a stream is handed over even when it
+         * has no terminator, and even when it is empty.
+         *
+         * @param line the line's bytes, at most the reader's cap; never null
+         * @param cut whether the line was longer than the cap and its rest dropped
+         */
+        void line(byte[] line, boolean cut);
+
+        /** The stream has ended; called once, on the reader's thread, after the last line. */
+        default void ended() {}
+    }
 
     private static final Logger log = LoggerFactory.getLogger(ProgressLines.class);
 
     private final ChildOutput output;
     private final InstantSource clock;
-    private final String executor;
+    private final int lineCapBytes;
+    private final Sink sink;
     private final Thread thread;
     private volatile Instant lastActivity;
+    private volatile boolean anyRead;
     private volatile boolean ended;
-    private int violations;
 
-    private ProgressLines(ChildOutput output, InstantSource clock, String executor) {
+    private ProgressLines(ChildOutput output, InstantSource clock, int lineCapBytes, Sink sink) {
         this.output = output;
         this.clock = clock;
-        this.executor = executor;
+        this.lineCapBytes = lineCapBytes;
+        this.sink = sink;
         this.lastActivity = clock.instant();
         @Nullable Map<String, String> roundMdc = MDC.getCopyOfContextMap();
-        this.thread = Thread.ofVirtual().name("program-progress").unstarted(() -> drain(roundMdc));
+        this.thread = Thread.ofVirtual().name("stdout-lines").unstarted(() -> drain(roundMdc));
     }
 
     /**
      * Starts reading {@code output} at once.
      *
-     * @param output the launched program's stdout; never null, read by this reader from here on
+     * @param output the launched process's stdout; never null, read by this reader from here on
      * @param clock the read-time source each chunk is stamped with; never null
-     * @param executor the executor's name, for the log lines; never blank
+     * @param lineCapBytes the most bytes of one line kept; positive
+     * @param sink what each line is handed to; never null
      * @return the running reader; never null
      */
-    static ProgressLines start(ChildOutput output, InstantSource clock, String executor) {
-        ProgressLines lines = new ProgressLines(output, clock, executor);
+    public static ProgressLines start(ChildOutput output, InstantSource clock, int lineCapBytes, Sink sink) {
+        ProgressLines lines = new ProgressLines(output, clock, lineCapBytes, sink);
         lines.thread.start();
         return lines;
     }
 
     /** The instant the last bytes arrived, or the start when none have. */
-    Instant lastActivity() {
+    public Instant lastActivity() {
         return lastActivity;
     }
 
+    /** Whether any byte has arrived since the start. */
+    public boolean anyRead() {
+        return anyRead;
+    }
+
     /** Whether the stream has ended: the exit with nothing pending, the owner's stop, or a failed read. */
-    boolean ended() {
+    public boolean ended() {
         return ended;
     }
 
@@ -93,7 +114,7 @@ final class ProgressLines implements AutoCloseable {
      * @param slice how long to wait; never null, zero for no wait
      * @return whether the stream has ended
      */
-    boolean endsWithin(Duration slice) {
+    public boolean endsWithin(Duration slice) {
         if (!ended && !slice.isZero()) {
             try {
                 thread.join(slice);
@@ -110,7 +131,7 @@ final class ProgressLines implements AutoCloseable {
      * @param postExitBound the handle's post-exit bound; never null
      * @return whether the reader finished within it; a reader still running is stopped
      */
-    boolean await(Duration postExitBound) {
+    public boolean await(Duration postExitBound) {
         try {
             if (thread.join(postExitBound)) {
                 return true;
@@ -124,7 +145,8 @@ final class ProgressLines implements AutoCloseable {
 
     /**
      * Stops the reader: the owner's stop, which the view's next read observes within a tick; no pipe
-     * is closed. The reader calls no listener, so nothing on its thread needs an interrupt.
+     * is closed. The reader calls nothing that waits on the round, so nothing on its thread needs an
+     * interrupt.
      */
     @Override
     public void close() {
@@ -138,15 +160,10 @@ final class ProgressLines implements AutoCloseable {
         try (InputStream in = output.stream()) {
             readLines(in);
         } catch (IOException e) {
-            log.debug(
-                    "the progress stream of program executor '{}' failed; the run is judged by its result",
-                    executor,
-                    e);
+            log.debug("a stdout stream read line by line failed; the run is judged by what it left", e);
         } finally {
             ended = true;
-            if (violations > 1) {
-                log.debug("program executor '{}' wrote {} non-JSON progress lines", executor, violations);
-            }
+            sink.ended();
             MDC.clear();
         }
     }
@@ -158,49 +175,19 @@ final class ProgressLines implements AutoCloseable {
         int read;
         while ((read = in.read(chunk)) != -1) {
             lastActivity = clock.instant();
+            anyRead = true;
             for (int index = 0; index < read; index++) {
                 if (chunk[index] == '\n') {
-                    judge(line, cut);
+                    sink.line(line.toByteArray(), cut);
                     line.reset();
                     cut = false;
-                } else if (line.size() < LINE_CAP_BYTES) {
+                } else if (line.size() < lineCapBytes) {
                     line.write(chunk[index]);
                 } else {
                     cut = true;
                 }
             }
         }
-        judge(line, cut);
-    }
-
-    private void judge(ByteArrayOutputStream bytes, boolean cut) {
-        UntrustedText line = UntrustedText.subprocess(bytes.toString(StandardCharsets.UTF_8));
-        if (line.isBlank()) {
-            return;
-        }
-        try {
-            ExecutorContractJson.reader().readTree(bytes.toByteArray());
-            log.debug("program executor '{}' progress: {}", executor, line.forLog());
-        } catch (IOException notJson) {
-            violations++;
-            if (violations == 1) {
-                log.warn(
-                        OperatorEvent.PROGRAM_PROGRESS_NOT_JSON.head()
-                                + "program executor '{}' wrote a progress line {}; skipped: {}",
-                        executor,
-                        cut
-                                ? "over " + LINE_CAP_BYTES / 1024 + " KiB that was cut and no longer parses"
-                                : "that is not JSON, a contract violation",
-                        line.forLog());
-            } else if (cut) {
-                log.debug(
-                        "program executor '{}' wrote another progress line over {} KiB that was cut; skipped: {}",
-                        executor,
-                        LINE_CAP_BYTES / 1024,
-                        line.forLog());
-            } else {
-                log.debug("program executor '{}' wrote another non-JSON progress line: {}", executor, line.forLog());
-            }
-        }
+        sink.line(line.toByteArray(), cut);
     }
 }

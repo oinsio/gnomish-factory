@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent
 
+import com.github.oinsio.gnomish.adapter.agent.claude.ClaudeVerdictRounds
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramResultMapping
 import com.github.oinsio.gnomish.adapter.briefing.BriefingSections
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
@@ -30,15 +31,16 @@ import com.github.oinsio.gnomish.executorcontract.RoleInputs
 import com.github.oinsio.gnomish.executorcontract.Workspace
 import com.github.oinsio.gnomish.httpegress.HttpCheckExchange
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import spock.lang.Specification
 import spock.lang.TempDir
 
 /**
- * The findings funnel across its three sources (FR15 of add-sandbox-core): a judge's reply, an
- * external check's response and a command check's findings file each enter through their own real
- * reader — the two checks as check rounds of their built-in executors, mapped by the one contract →
+ * The findings funnel across its three sources (FR15 of add-sandbox-core): a judge's reply (a real
+ * Claude {@code verdict} round), an external check's response and a command check's findings file
+ * each enter through their own real reader — the two checks as check rounds of their built-in executors, mapped by the one contract →
  * domain mapping — leave as a verdict whose findings are one {@link Finding} shape, and reach the next
  * attempt's feedback sink alike. Control flow reads the verdict's own field — {@code passed}, the
  * HTTP status, the exit code — so a finding that addresses the factory decides nothing.
@@ -111,8 +113,11 @@ class FindingsFunnelSpec extends Specification {
         } || Verdict.Fail
     }
 
+    /** The verdict of a judge's live check round: a real Claude {@code verdict} round whose structured output is {@code reply}. */
     Verdict judgeSays(String reply) {
-        new JudgeVerdictExtractor().extract(UntrustedText.agent(reply))
+        def workspace = Files.createDirectories(tempDir.resolve('judge-workspace'))
+        def stderr = Files.createDirectories(tempDir.resolve('judge-stderr'))
+        ClaudeVerdictRounds.verdict(ClaudeVerdictRounds.fixture(workspace, stderr), ClaudeVerdictRounds.structured(reply))
     }
 
     Verdict httpAnswers(int status, String body) {

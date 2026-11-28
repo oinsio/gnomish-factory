@@ -6,16 +6,19 @@ import spock.lang.Specification
 
 /**
  * Design D7/D10 of make-checkpoint-gate-durable; D13, D14 of define-executor-contract: a round's
- * identity has one parse and one cell. {@code RoundToken.of} is called by exactly three producers —
- * {@code SandboxRoundEnvironmentSource} mints a fresh container round's token over the open tip,
- * {@code MidRoundPushRounds} mints a fresh git-mode host round's token over the worktree tip (task
- * 5.1 of define-executor-contract), {@code SnapshotTipCheck} reuses a resumed round's token from its
+ * identity has one parse and one cell. {@code RoundToken.of} is called by exactly two producers —
+ * {@code RoundTokenMint}, the one minting step of a fresh round in either branch mode, which both
+ * {@code SandboxRoundEnvironmentSource} (over the open tip) and {@code MidRoundPushRounds} (over the
+ * worktree tip) call (M1, design D7 of extract-agent-round-runner, which collapsed the pair the two
+ * sources kept by hand), and {@code SnapshotTipCheck}, which reuses a resumed round's token from its
  * snapshot subject (never mints) — plus one reader of the durable record, {@code StateJsonMapper},
  * which rebuilds a recorded round's token from {@code state.json} through the same parse
  * ({@code crash-consistency.md} item 14) and opens no round. The per-run {@code CurrentRound} cell
- * has exactly three writers: {@code open} at round open (the two minting sources), {@code
+ * has exactly three writers: {@code open} at round open (the one minting step), {@code
  * snapshotted} at the snapshot — the one round snapshot step, for the box and the host worktree alike
- * (design D22 of migrate-verify-to-executor-contract) — {@code restore} on the resume path. The types make a consumer of a closed round unable
+ * (design D22 of migrate-verify-to-executor-contract) — {@code restore} at the run's assembly, before
+ * the engine's first request, for an interrupted verification and a pending round alike (design D11
+ * of extract-agent-round-runner, "Resume": one recovery producer of the cell). The types make a consumer of a closed round unable
  * to compile against an open one; what they cannot stop is a fourth writer — a second minting of
  * the token from some other tip read, or a component recording a round it did not open — and that
  * is the two-recovery-owners shape {@code crash-consistency.md} item 3 forbids. This scan stops it.
@@ -35,17 +38,18 @@ import spock.lang.Specification
  * of anything. Allowlisting it would pin a fixture to keep calling the writers; scanning it would
  * fail on the one legitimate test stand-in. Every other production source is scanned.
  *
- * <p>FR13, FR15 of make-checkpoint-gate-durable; FR14, FR21 of define-executor-contract.
+ * <p>FR13, FR15 of make-checkpoint-gate-durable; FR14, FR21 of define-executor-contract; M1, FR11 of
+ * extract-agent-round-runner.
  */
 class CurrentRoundWriterSpec extends Specification {
 
     private static final String GIT = 'adapters/git/src/main/java/com/github/oinsio/gnomish/adapter/git/'
 
-    private static final String SOURCE = GIT + 'SandboxRoundEnvironmentSource.java'
+    /** The one minting step both branch-mode round sources call (M1 of extract-agent-round-runner). */
+    private static final String MINT_STEP = GIT + 'RoundTokenMint.java'
 
-    private static final String SNAPSHOT_CHECK = GIT + 'SnapshotTipCheck.java'
-
-    private static final String HOST_GIT = GIT + 'MidRoundPushRounds.java'
+    /** The one parse of a factory subject's {@code <stage>#<round> <token>}, the snapshot check's (FR11). */
+    private static final String SNAPSHOT_CHECK = GIT + 'RoundSubject.java'
 
     /** The durable record's reader: rebuilds the recorded token, mints no round's identity. */
     private static final String STATE_READER = GIT + 'state/StateJsonMapper.java'
@@ -67,16 +71,18 @@ class CurrentRoundWriterSpec extends Specification {
     /** The one round snapshot step of both media (design D22 of migrate-verify-to-executor-contract). */
     private static final String SNAPSHOT = GIT + 'RoundSnapshot.java'
 
+    /** The run's assembly: the one recovery producer of the cell (D11 of extract-agent-round-runner, "Resume"). */
     private static final String RESUME =
-    'adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/ResumeVerificationStageExecutor.java'
+    'bootstrap/src/main/java/com/github/oinsio/gnomish/app/ExecutorAdapterSelector.java'
 
     private static final Pattern MINT = ~/\bRoundToken\s*\.\s*of\s*\(|import\s+static\s+[\w.]*\bRoundToken\.(of|\*)\s*;/
 
     private static final Pattern DECLARED = ~/\bCurrentRound\s+(\w+)\b|\b(\w+)\s*=\s*new\s+CurrentRound\s*\(/
 
-    // FR13, FR15; FR21 of define-executor-contract: one parse, three producers — a fresh round mints
-    // in either branch mode, a resumed one reuses its record — and the record's reader
-    def "FR13, FR15, FR21: RoundToken.of is called in production only by the two round sources, the snapshot check and the three record readers"() {
+    // FR13, FR15; FR21 of define-executor-contract; M1 of extract-agent-round-runner: one parse, two
+    // producers — a fresh round mints through the one step in either branch mode, a resumed one
+    // reuses its record — and the record's readers
+    def "FR13, FR15, FR21, M1: RoundToken.of is called in production only by the minting step, the snapshot check and the three record readers"() {
         given:
         def sources = scanned()
 
@@ -91,8 +97,7 @@ class CurrentRoundWriterSpec extends Specification {
         then: 'every producer reached, nothing else'
         minters == [
             SNAPSHOT_CHECK,
-            SOURCE,
-            HOST_GIT,
+            MINT_STEP,
             STATE_READER,
             PENDING_READER,
             SNAPSHOT_READER
@@ -120,7 +125,7 @@ class CurrentRoundWriterSpec extends Specification {
 
         where:
         writer | owners
-        'open' | [SOURCE, HOST_GIT]
+        'open' | [MINT_STEP]
         'snapshotted' | [SNAPSHOT]
         'restore' | [RESUME]
     }

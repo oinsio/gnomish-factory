@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.e2e.paidsmoke
 
-import com.github.oinsio.gnomish.adapter.agent.AgentRoundResultExtractor
-import com.github.oinsio.gnomish.adapter.agent.StreamJsonParser
-import com.github.oinsio.gnomish.adapter.agent.TimestampedEvent
+import com.github.oinsio.gnomish.adapter.agent.claude.AgentEvent
+import com.github.oinsio.gnomish.adapter.agent.claude.StreamJsonParser
+import com.github.oinsio.gnomish.adapter.agent.claude.TimestampedEvent
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.ProcessStartException
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -22,7 +22,7 @@ import java.time.InstantSource
  * this class proves login the only way available: a trivial, cheap {@code claude -p} round (prompt
  * on stdin — FR24, D18 of add-sandbox-core) with a short timeout that must produce a real
  * stream-json {@code result} event. The round runs through the {@code TaskExecutionEnvironment}
- * port, the same seam {@code CliStageExecutor}/{@code CliJudgeVoter} use. Any of "binary not on
+ * port, the same seam the agent round runner uses. Any of "binary not on
  * PATH", "process fails to start", "round times out" (typically an interactive login prompt
  * blocking on stdin), or "no result event parsed" is treated as "not logged in" and reported with a
  * specific, actionable reason — never a hang, never a bare stack trace.
@@ -80,15 +80,18 @@ final class ClaudeLoginPreflight {
                     + 'interactive login prompt. Run `claude login` manually, then retry paidSmokeTest.')
         }
 
-        try {
-            def result = new AgentRoundResultExtractor().extract(events, clock.instant())
-            return Result.success(result.sessionId())
-        } catch (RuntimeException e) {
+        def result = events.collect {
+            it.event()
+        }.findAll {
+            it instanceof AgentEvent.ResultEvent
+        }
+        if (result.isEmpty()) {
             return Result.failure(
                     "'${binary}' ran but produced no usable result event — not authenticated, or the "
                     + "CLI's stream-json protocol changed. Run 'claude login' and re-check manually "
-                    + "before retrying. (${e.message})")
+                    + 'before retrying.')
         }
+        return Result.success((result.last() as AgentEvent.ResultEvent).sessionId())
     }
 
     /** Outcome of check: either proof of a logged-in CLI, or a specific failure reason. */

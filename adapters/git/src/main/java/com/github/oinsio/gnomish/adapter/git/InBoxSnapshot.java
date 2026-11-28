@@ -2,8 +2,10 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,7 +18,14 @@ import org.slf4j.LoggerFactory;
  * tighten-spec-contract), under the subject the step chose.
  *
  * <p>The box's range is judged at its admission, where the gnome's in-box commits first become
- * visible to the factory, so this medium's verdict before the commit is always clean. An admitted
+ * visible to the factory, so this medium's verdict before the commit is always clean. The admission
+ * judges {@code register..snapshot}, and the register names the round's last registered commit, so
+ * a round that went pending is judged from its last pending round commit — the box's {@code HEAD},
+ * which the in-box pending commit moved, and so the snapshot's parent (design D11 of
+ * extract-agent-round-runner, as amended 2026-11-25). Before the commit stages the working tree, the
+ * {@code state.json} that commit left lagging in the box's index and working tree is settled in the
+ * box ({@link PendingStateLag}), so the snapshot changes no path under the state directory the
+ * admission refuses. An admitted
  * snapshot is a closing commit (design D13 of tighten-spec-contract): the branch and the register
  * move to it in one ref transaction. A refused or unverifiable snapshot moves nothing; it is still
  * the round's attempt commit, and the round's persist judges it again
@@ -26,7 +35,8 @@ import org.slf4j.LoggerFactory;
  * for, carries branch and register to origin together.
  *
  * <p>Implements FR21 of add-sandbox-core; FR13 of harden-logging-observability; FR13, NFR-S2 of
- * tighten-spec-contract; FR19 of migrate-verify-to-executor-contract.
+ * tighten-spec-contract; FR19 of migrate-verify-to-executor-contract; FR10 of
+ * extract-agent-round-runner.
  */
 final class InBoxSnapshot implements SnapshotMedium {
 
@@ -39,6 +49,7 @@ final class InBoxSnapshot implements SnapshotMedium {
 
     private final TaskExecutionEnvironment environment;
     private final HarvestAdmission admission;
+    private final PendingStateLag lag;
 
     /**
      * @param environment the task's bound environment; snapshot commits run through its exec
@@ -48,6 +59,12 @@ final class InBoxSnapshot implements SnapshotMedium {
     InBoxSnapshot(TaskExecutionEnvironment environment, GitRunner runner, Path cloneDir) {
         this.environment = environment;
         this.admission = new HarvestAdmission(runner, cloneDir);
+        this.lag = new PendingStateLag(WorkingCopyGit.inBox(environment));
+    }
+
+    @Override
+    public Optional<UntrustedText> settle(SnapshotOrder order) {
+        return lag.settle(order.chain());
     }
 
     @Override

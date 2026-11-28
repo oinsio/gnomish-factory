@@ -16,7 +16,7 @@ Define `StatusReport`, a single pure model of a task's progress built from `(Tas
 
 ### Requirement: JSON contract v1, state-derived
 The JSON document SHALL carry `"version": 1` and use camelCase names, ISO-8601 UTC timestamps, millisecond durations, and a lowerCamel `"type"` discriminator for sealed variants, with the sections `task`, `position`, `outcome`, `currentStage`, `totals`, `lastEscalation` and `lastDecision`.
-**Implements**: FR11 of add-manual-run; FR6 of make-run-headless; FR10, FR12, UX1 of make-checkpoint-gate-durable; FR15, FR16, FR17, UX4 of define-executor-contract
+**Implements**: FR11 of add-manual-run; FR6 of make-run-headless; FR10, FR12, UX1 of make-checkpoint-gate-durable; FR15, FR16, FR17, UX4 of define-executor-contract; FR4 of extract-agent-round-runner
 **Notes**: The withdrawn live-only fields — the `activity` section (`executing`, `verifying`, `awaitingInput`) and `currentStage.attemptLimit` — were never filled by any producer outside a test fixture, and `attemptLimit` was emitted as `0` by every production render.
 **Notes**: The withdrawal, the `awaitingApproval` position, the attempt `stop`, the attempt identity, the participant list and the snapshot are pre-release amendments: no release has shipped contract v1, so the version stays 1.
 
@@ -48,7 +48,7 @@ The JSON document SHALL carry `"version": 1` and use camelCase names, ISO-8601 U
             "durationMillis": 41250 } ],
         "denials": [],
         "usage": [
-          { "role": "transform", "executor": "agent-cli", "provenance": "reported",
+          { "role": "transform", "executor": "claude", "provenance": "reported",
             "wallMillis": 183000,
             "byTool": [ { "name": "Edit", "calls": 4, "totalMillis": 2100 } ],
             "byModel": {
@@ -123,7 +123,7 @@ The JSON document SHALL carry `"version": 1` and use camelCase names, ISO-8601 U
 - **THEN** the document carries the finding in full; truncation is a text-render concern
 
 #### Scenario: Judge votes are participants
-- **WHEN** a round ran a judge check with two votes
+- **WHEN** a round ran two judge checks
 - **THEN** the attempt's `usage` carries two `verdict` entries with `vote` 0 and 1, each with its own `byModel`
 
 #### Scenario: Text render names the snapshot's position

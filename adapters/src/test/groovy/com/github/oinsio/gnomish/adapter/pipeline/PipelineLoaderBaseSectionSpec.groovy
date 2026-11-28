@@ -307,7 +307,7 @@ task-branch:
 
         then:
         renderedErrors(outcome) == [
-            "config.yaml: defualt: unknown field 'defualt'"
+            "config.yaml: task-branch.base.defualt: unknown field 'defualt'"
         ]
     }
 
@@ -320,7 +320,7 @@ task-branch:
 
         then:
         renderedErrors(outcome) == [
-            "config.yaml: select: unknown field 'select'"
+            "config.yaml: task-branch.base.select: unknown field 'select'"
         ]
     }
 
@@ -351,7 +351,7 @@ task-branch:
 
         then:
         renderedErrors(load.outcome()) == [
-            "config.yaml: menu: unknown field 'menu'"
+            "config.yaml: task-branch.base.menu: unknown field 'menu'"
         ]
         load.base() == BaseDefinition.none()
     }

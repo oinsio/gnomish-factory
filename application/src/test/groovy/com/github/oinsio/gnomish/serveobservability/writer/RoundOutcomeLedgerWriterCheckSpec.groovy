@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.EngineEvent
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.RoundExecutor
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
@@ -23,8 +24,9 @@ import spock.lang.TempDir
  * {@link RoundOutcomeLedgerWriter} for an executor check (NFR-O1, UX3 of
  * migrate-verify-to-executor-contract): the check's finish event writes one {@code roundOutcome}
  * line, role {@code verdict}, naming the executor, the status its rounds ended on, the check's index
- * and — for a check this instance resumed — the key it took up from the pending record. A judge
- * check's finish, which carries no outcome, and every other non-round event write nothing.
+ * and — for a check this instance resumed — the key it took up from the pending record. Every
+ * non-round event writes nothing. The same lines over the engine's own events are {@link
+ * RecordedExecutorNameSpec}'s.
  */
 class RoundOutcomeLedgerWriterCheckSpec extends Specification implements RotatingLedgerAppenderFixture {
 
@@ -46,6 +48,8 @@ class RoundOutcomeLedgerWriterCheckSpec extends Specification implements Rotatin
         }
     }
 
+    static final RoundExecutor SCM_STATUS = new RoundExecutor('scm-status', UntrustedText.factory('built-in'))
+
     private static EngineEvent.CheckFinished finished(int index, CheckOutcome outcome) {
         new EngineEvent.CheckFinished(KEY, new CheckResult(new CheckRef(index, UntrustedText.manifest('external:scm-status:ci')),
                 new Verdict.Pass(null, []), Duration.ZERO), outcome)
@@ -55,7 +59,7 @@ class RoundOutcomeLedgerWriterCheckSpec extends Specification implements Rotatin
     // UX3: the resuming instance's line shows the resume as `resumed key=<prefix>`
     def "a resumed check's line names the executor, the verdict role, its status, its index and the resumed key"() {
         when:
-        writer().onEvent(finished(1, new CheckOutcome('scm-status', new ExecutionResult.Completed(),
+        writer().onEvent(finished(1, new CheckOutcome(SCM_STATUS, new ExecutionResult.Completed(),
                 UntrustedText.branchDocument('sonar-AY12'))))
 
         then:
@@ -68,11 +72,12 @@ class RoundOutcomeLedgerWriterCheckSpec extends Specification implements Rotatin
                 taskId : 'TASK-9',
                 stage : 'build',
                 attempt : 1,
-                executor : 'scm-status',
+                executor : 'scm-status@built-in',
                 role : 'verdict',
                 status : 'completed',
                 check : 1,
-                resumedKey: 'sonar-AY12'
+                resumedKey: 'sonar-AY12',
+                pendingKey: null
             ]
         ]
     }
@@ -80,7 +85,7 @@ class RoundOutcomeLedgerWriterCheckSpec extends Specification implements Rotatin
     // NFR-O1: the status is the one the check's rounds ended on, in the round line's words
     def "a check that ended #why reads status=#token and no resumed key"() {
         when:
-        writer().onEvent(finished(0, new CheckOutcome('http', status, null)))
+        writer().onEvent(finished(0, new CheckOutcome(new RoundExecutor('http', UntrustedText.factory('built-in')), status, null)))
 
         then:
         ledgerLines().collect { [it.status, it.resumedKey] } == [[token, null]]
@@ -94,7 +99,7 @@ class RoundOutcomeLedgerWriterCheckSpec extends Specification implements Rotatin
     }
 
     // NFR-O2: only the round event and an executor check's finish write a line
-    def "no other engine event writes a line, a judge check's finish included"() {
+    def "no other engine event writes a line, a check finish carrying no outcome included"() {
         when:
         writer().onEvent(new EngineEvent.AttemptStarted(KEY))
         writer().onEvent(new EngineEvent.RunStarted('TASK-9', new Position.AtStage('build'), 0))

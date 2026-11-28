@@ -74,10 +74,10 @@ class EngineEventSpec extends Specification {
     def "ExecutionFinished exposes its components as constructed"() {
         given: 'a key and usage'
         def key = sampleKey()
-        def usage = Participants.transform('agent-cli', ExecutorUsage.none())
+        def usage = Participants.transform('claude', ExecutorUsage.none())
 
         when: 'an ExecutionFinished event is created'
-        def event = new EngineEvent.ExecutionFinished(key, usage, new RoundExecutor('agent-cli', null), new ExecutionResult.Completed())
+        def event = new EngineEvent.ExecutionFinished(key, usage, new RoundExecutor('ghost', null), new ExecutionResult.Completed())
 
         then: 'the components are exposed exactly as constructed'
         event.key() == key

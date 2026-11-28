@@ -23,7 +23,7 @@ import spock.lang.Specification
  *       call chained on the accessor, a JDK {@code inputReader(}/{@code errorReader(}, or the accessor
  *       wrapped in a reader. The stream <em>view</em> of a {@code ChildOutput} ({@code
  *       output.stream()}) is deliberately not a hit: it is the owner's pull form (D1), whose
- *       {@code read} runs the non-parking steps, and {@code StreamDrain} and {@code
+ *       {@code read} runs the non-parking steps, and {@code ProgressLines} and {@code
  *       TaskExecutionEnvironmentContract.readFully} read it legitimately. A raw stream can reach a
  *       reader only through the accessor, so the read is judged where the accessor is.</li>
  *   <li><b>sleep</b>: {@code Thread.sleep(}.</li>
@@ -102,7 +102,6 @@ class ChildOutputOwnerGateSpec extends Specification {
         def childOutput = Class.forName('com.github.oinsio.gnomish.subprocess.ChildOutput')
         def starts = [
             'com.github.oinsio.gnomish.subprocess.Drain': ['start', 'capped', 'into'],
-            'com.github.oinsio.gnomish.adapter.agent.StreamDrain': ['start'],
             'com.github.oinsio.gnomish.adapter.command.BoundedTail': ['start'],
             'com.github.oinsio.gnomish.adapter.agent.program.ProgressLines': ['start'],
         ].collectMany { owner, names ->

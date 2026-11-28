@@ -1,8 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
-import com.github.oinsio.gnomish.domain.engine.AttemptKey;
-import com.github.oinsio.gnomish.domain.engine.RoundToken;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
@@ -140,18 +138,6 @@ final class GnomeRangeInspection {
         }
         return violated(EnvelopePaths.DIR + " was modified by the gnome: "
                 + UntrustedText.subprocess(String.join(", ", refused)).forLog());
-    }
-
-    /**
-     * The single gnome-writable path under {@code .gnomish-task/} for one round (FR23 of
-     * add-sandbox-core; FR13, FR16 of make-checkpoint-gate-durable): {@code
-     * .gnomish-task/decisions/<stage>-a<attempt>-<token>.json} — the one spelling of the decision
-     * path, used by {@link BranchDecisionFile}'s handle and by the admission's carve-out. There is
-     * no token-less form: a stage and attempt repeat across visits of a stage, so only the round
-     * token names the round that owns the file.
-     */
-    static String decisionPath(AttemptKey key, RoundToken token) {
-        return EnvelopePaths.DECISIONS_DIR + "/" + key.stage() + "-a" + key.attempt() + "-" + token.commit() + ".json";
     }
 
     private static RangeVerdict violated(String sentence) {

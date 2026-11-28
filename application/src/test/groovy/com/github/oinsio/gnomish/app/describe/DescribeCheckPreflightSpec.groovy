@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.Sandbox
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 
 /**
  * The describe preflight's check use site (FR1 of migrate-verify-to-executor-contract): a verify
@@ -37,7 +38,7 @@ class DescribeCheckPreflightSpec extends DescribePreflightSpecBase {
         def outcome = preflight().describe(environment, law(['acme': describeAs('transform-only')],
         verifying(
                 check(VerifyCheck.Token.EXECUTOR, 'github-actions'),
-                new VerifyCheck.Judge('criteria.md', 'model', [:], 1),
+                JudgeChecks.agent('criteria.md', 'model'),
                 check(VerifyCheck.Token.EXTERNAL, 'acme'))))
 
         then:

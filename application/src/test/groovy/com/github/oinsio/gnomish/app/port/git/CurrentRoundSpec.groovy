@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.git
 
+import com.github.oinsio.gnomish.app.port.agent.AnswerFileReading
 import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import spock.lang.Specification
@@ -93,7 +94,7 @@ class CurrentRoundSpec extends Specification {
         def rounds = new CurrentRound()
 
         when:
-        rounds.restore(new PendingVerification('snap-9', 'build', 2, SECOND, Optional.empty(), 'snap-9', ['snap-9']))
+        rounds.restore(new PendingVerification('snap-9', 'build', 2, SECOND, RoundClose.VERIFIABLE, new AnswerFileReading.Absent(), 'snap-9', ['snap-9']))
 
         then:
         rounds.closed() == new ClosedRound(SECOND, 'snap-9', 'snap-9', RoundClose.VERIFIABLE)
@@ -108,7 +109,7 @@ class CurrentRoundSpec extends Specification {
         def live = new CurrentRound()
 
         when:
-        restored.restore(new PendingVerification('snap-9', 'build', 2, SECOND, Optional.empty(), 'pend-9', ['pend-9', 'snap-9']))
+        restored.restore(new PendingVerification('snap-9', 'build', 2, SECOND, RoundClose.VERIFIABLE, new AnswerFileReading.Absent(), 'pend-9', ['pend-9', 'snap-9']))
         live.open(SECOND)
         live.snapshotted('snap-9', RoundClose.VERIFIABLE)
         live.pendingRegistered('pend-9')
@@ -147,7 +148,7 @@ class CurrentRoundSpec extends Specification {
 
     def "FR15: restore is open-then-snapshotted over the recorded round, replacing whatever was held"() {
         given:
-        def pending = new PendingVerification('snap-9', 'implement', 2, SECOND, Optional.empty(), 'snap-9', ['snap-9'])
+        def pending = new PendingVerification('snap-9', 'implement', 2, SECOND, RoundClose.VERIFIABLE, new AnswerFileReading.Absent(), 'snap-9', ['snap-9'])
         def restored = new CurrentRound()
         restored.open(FIRST)
         restored.snapshotted('snap-1', RoundClose.VERIFIABLE)
@@ -217,7 +218,7 @@ class CurrentRoundSpec extends Specification {
         rounds.takeToken()
 
         when:
-        rounds.restore(new PendingVerification('snap-9', 'implement', 2, SECOND, Optional.empty(), 'snap-9', ['snap-9']))
+        rounds.restore(new PendingVerification('snap-9', 'implement', 2, SECOND, RoundClose.VERIFIABLE, new AnswerFileReading.Absent(), 'snap-9', ['snap-9']))
 
         then:
         rounds.takeToken() == Optional.of(SECOND)

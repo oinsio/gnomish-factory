@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.usage.wire;
 
+import com.github.oinsio.gnomish.app.describe.ExecutorRoles;
 import com.github.oinsio.gnomish.domain.engine.ExecutorRole;
 import com.github.oinsio.gnomish.domain.engine.ModelUsage;
 import com.github.oinsio.gnomish.domain.engine.RoundToken;
@@ -70,7 +71,7 @@ public final class UsageSnapshotWire {
         ordered.forEach((role, models) -> {
             var wire = new TreeMap<String, com.github.oinsio.gnomish.executorcontract.ModelUsage>();
             models.forEach((model, tokens) -> wire.put(model, UsageWireParts.toModel(new ModelUsage(tokens, null))));
-            roles.put(ParticipantUsageWire.toRole(role).wire(), wire);
+            roles.put(ExecutorRoles.contract(role).wire(), wire);
         });
         return roles;
     }
@@ -81,7 +82,7 @@ public final class UsageSnapshotWire {
         roles.forEach((token, models) -> {
             var tokens = new LinkedHashMap<String, TokenUsage>();
             models.forEach((model, usage) -> tokens.put(model, UsageWireParts.tokensOf(usage)));
-            byRole.put(ParticipantUsageWire.fromRole(Role.fromWire(token).orElse(null)), tokens);
+            byRole.put(ExecutorRoles.domain(Role.fromWire(token).orElse(null)), tokens);
         });
         return byRole;
     }

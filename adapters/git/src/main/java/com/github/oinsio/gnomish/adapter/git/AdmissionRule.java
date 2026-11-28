@@ -42,7 +42,8 @@ record AdmissionRule(PathPermit gnome, Optional<FactoryTop> top) {
 
     /** A mid-round harvest of round {@code key}: gnome commits only, its request the one permitted path. */
     static AdmissionRule midRound(AttemptKey key, RoundToken token) {
-        return new AdmissionRule(PathPermit.only(GnomeRangeInspection.decisionPath(key, token)), Optional.empty());
+        return new AdmissionRule(
+                PathPermit.only(EnvelopePaths.answerFile(key, token).relative()), Optional.empty());
     }
 
     /**
@@ -53,7 +54,7 @@ record AdmissionRule(PathPermit gnome, Optional<FactoryTop> top) {
      * design D22 of migrate-verify-to-executor-contract).
      */
     static AdmissionRule snapshot(AttemptKey key, RoundToken token, String subject) {
-        String decision = GnomeRangeInspection.decisionPath(key, token);
+        String decision = EnvelopePaths.answerFile(key, token).relative();
         return closing(PathPermit.only(decision), subject, PathPermit.only(decision));
     }
 
@@ -64,7 +65,7 @@ record AdmissionRule(PathPermit gnome, Optional<FactoryTop> top) {
      */
     static AdmissionRule state(AttemptKey key, AttemptRecord recorded, RoundToken token, String tracePath) {
         return closing(
-                PathPermit.only(GnomeRangeInspection.decisionPath(key, token)),
+                PathPermit.only(EnvelopePaths.answerFile(key, token).relative()),
                 ServiceCommitMessages.round(recorded),
                 PathPermit.only(EnvelopePaths.STATE_JSON_PATH, tracePath));
     }

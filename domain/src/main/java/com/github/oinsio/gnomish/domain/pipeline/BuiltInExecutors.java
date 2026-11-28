@@ -1,17 +1,20 @@
 package com.github.oinsio.gnomish.domain.pipeline;
 
+import com.github.oinsio.gnomish.domain.engine.ExecutorRole;
 import java.util.List;
 
 /**
- * The six built-in executor names (design D18 of migrate-verify-to-executor-contract, "The six
- * built-in names have one owner"): the five verdict built-ins and the {@code command} stage
- * built-in, compiled into the factory and registered by it, never declared by a law. This is the
- * one spelling of the set: the law's load validation refuses a declaration under any of the six
- * and lists them beside the law's own declarations when a check names an unknown executor, and the
- * executor registry's refusal reads the same set as a safety net behind that load error. Each
- * built-in's own {@code NAME} constant refers to its constant here.
+ * The seven built-in executor names (design D18 of migrate-verify-to-executor-contract, "The six
+ * built-in names have one owner"; design D12 of extract-agent-round-runner): the five verdict
+ * built-ins, the {@code command} stage built-in, and {@code claude}, the agent entry an {@code
+ * agent-cli} block resolves to — compiled into the factory and registered by it, never declared by a
+ * law. This is the one spelling of the set: the law's load validation refuses a declaration under
+ * any of the seven, and the executor registry's refusal reads the same set as a safety net behind
+ * that load error. A check names a verdict built-in or the {@code command} built-in by name, never
+ * {@link #CLAUDE}: an agent reaches a check only through a {@code judge} check's executor block
+ * ({@link #CHECK_NAMES}). Each built-in's own {@code NAME} constant refers to its constant here.
  *
- * <p>Implements FR1, FR13 of migrate-verify-to-executor-contract.
+ * <p>Implements FR1, FR13 of migrate-verify-to-executor-contract; FR14 of extract-agent-round-runner.
  */
 public final class BuiltInExecutors {
 
@@ -33,13 +36,46 @@ public final class BuiltInExecutors {
     /** The built-in a {@code command} stage runs: its declared command line. */
     public static final String COMMAND = "command";
 
-    /** The six names, in the order an operator reads them. */
-    public static final List<String> NAMES = List.of(FILES_EXIST, SHELL, GITHUB_ACTIONS, SCM_STATUS, HTTP, COMMAND);
+    /**
+     * The roles the {@link #COMMAND} built-in serves (design D12 of extract-agent-round-runner): its
+     * one statement, read by the judge role rule, which refuses a {@code command} judge block unless
+     * the list holds {@code verdict}, and by the built-in's own describe and round start, which map it
+     * onto the contract's roles. {@code ExecutorRegistryEntrySpec} pins the real entry's describe to
+     * this list.
+     */
+    public static final List<ExecutorRole> COMMAND_ROLES = List.of(ExecutorRole.TRANSFORM);
+
+    /**
+     * The agent entry an {@code agent-cli} executor block resolves to (design D12 of
+     * extract-agent-round-runner): the Claude dialect's stage and check halves.
+     */
+    public static final String CLAUDE = "claude";
+
+    /**
+     * The describe version of every built-in (design D12 of extract-agent-round-runner, "The version
+     * of a built-in"): one fact, "compiled into this factory". Each built-in's describe reads it, and
+     * {@code DescribedExecutors} answers it for a built-in's rounds and checks, so a record reads
+     * {@code claude@built-in}. Shown, never pinned: the build that ran is the {@code factoryVersion}
+     * every ledger line carries. {@code BuiltInVersionOwnerSpec} keeps this the word's one spelling.
+     */
+    public static final String VERSION = "built-in";
+
+    /** The seven names, in the order an operator reads them. */
+    public static final List<String> NAMES =
+            List.of(FILES_EXIST, SHELL, GITHUB_ACTIONS, SCM_STATUS, HTTP, COMMAND, CLAUDE);
+
+    /**
+     * The built-in names a check may name by its {@code executor} or {@code provider}: every name but
+     * {@link #CLAUDE}, which a check reaches only through a {@code judge} check's executor block
+     * (design D12 of extract-agent-round-runner rejects a name-only reference).
+     */
+    public static final List<String> CHECK_NAMES =
+            NAMES.stream().filter(name -> !name.equals(CLAUDE)).toList();
 
     private BuiltInExecutors() {}
 
     /**
-     * Whether {@code name} is one of the six built-in names.
+     * Whether {@code name} is one of the seven built-in names.
      *
      * @param name an executor name; never null
      * @return {@code true} for a built-in's name

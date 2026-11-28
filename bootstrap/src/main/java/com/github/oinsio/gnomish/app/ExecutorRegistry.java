@@ -32,20 +32,25 @@ import org.jspecify.annotations.Nullable;
  *       amended 2026-11-13) — its stage rounds and, in a run with fresh boxes, its check rounds,
  *       each request in a box of its own ({@link ProgramCheckBinding}, task 5.3);
  *   <li>the built-ins' entries ({@link BuiltInEntries}): the {@code command} stage built-in, and each
- *       verdict built-in the law's checks name.
+ *       verdict built-in the law's checks name;
+ *   <li>the agent entry under the reserved name {@link BuiltInExecutors#CLAUDE} ({@link
+ *       RegistryEntry#agent}, built by {@link ClaudeEntry}; design D12 of extract-agent-round-runner):
+ *       its stage half and its check half over the agent round runner.
  * </ul>
  *
- * <p>A law that declares an executor under one of the six {@link BuiltInExecutors} names is refused
+ * <p>A law that declares an executor under one of the seven {@link BuiltInExecutors} names is refused
  * at load; the refusal here, over the same set, is the safety net behind that load error, so neither
- * entry silently replaces the other. {@code agent-cli} is not an entry: it keeps its type-keyed arm in
- * {@link ExecutorDispatch} until {@code extract-agent-round-runner}.
+ * entry silently replaces the other. The agent entry serves every agent stage round, which {@link
+ * ExecutorDispatch} resolves under its reserved name (task 5.1a of extract-agent-round-runner), and
+ * every judge check whose block is an agent's (task 4.1); no executor check names {@code claude}
+ * ({@link BuiltInExecutors#CHECK_NAMES}).
  *
  * <p>Built once per run at run assembly and immutable (design D12; {@code process-invariants.md}):
  * nothing bound is cached here, so a bound executor lives for its round or its check. The run's own
  * thread reads it.
  *
  * <p>Implements FR9, FR10 of define-executor-contract; FR8 of add-command-executor; FR1, FR3, FR13 of
- * migrate-verify-to-executor-contract.
+ * migrate-verify-to-executor-contract; FR14 of extract-agent-round-runner.
  */
 final class ExecutorRegistry {
 
@@ -66,6 +71,7 @@ final class ExecutorRegistry {
      * @param builtIns the run's built-ins, handed in typed by the selector; never null
      * @param freshBoxes the run's fresh boxes, which a program's check binds through; {@code null} for
      *     a host run, whose program entries bind no check (proposal NG14)
+     * @param agent the agent entry, named {@link BuiltInExecutors#CLAUDE}; never null
      * @return the registry; never null
      * @throws IllegalStateException when the law declares an executor under a built-in's name
      */
@@ -75,7 +81,8 @@ final class ExecutorRegistry {
             PipelineLaw law,
             ProgramRoundEquipment equipment,
             BuiltInEntries builtIns,
-            @Nullable FreshBoxSource freshBoxes) {
+            @Nullable FreshBoxSource freshBoxes,
+            RegistryEntry agent) {
         Map<ExecutorName, RegistryEntry> byName = new LinkedHashMap<>();
         for (ExecutorDeclaration declaration : definition.executors()) {
             String name = declaration.name();
@@ -102,6 +109,7 @@ final class ExecutorRegistry {
         for (RegistryEntry entry : builtIns.of(definition, described)) {
             byName.put(entry.name(), entry);
         }
+        byName.put(agent.name(), agent);
         return new ExecutorRegistry(byName);
     }
 

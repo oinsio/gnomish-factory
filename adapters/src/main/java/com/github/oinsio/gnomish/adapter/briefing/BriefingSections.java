@@ -2,10 +2,12 @@ package com.github.oinsio.gnomish.adapter.briefing;
 
 import com.github.oinsio.gnomish.domain.engine.CheckResult;
 import com.github.oinsio.gnomish.domain.engine.Decision;
+import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
 import com.github.oinsio.gnomish.domain.pipeline.ArtifactInput;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 
 /**
@@ -18,7 +20,8 @@ import java.util.List;
  * and the verdict instruction, without prior-attempt feedback or input
  * artifacts.
  *
- * <p>Implements FR14 of add-agent-executor; FR4 of remove-interactive-console.
+ * <p>Implements FR14 of add-agent-executor; FR4 of remove-interactive-console; FR9 of
+ * extract-agent-round-runner.
  * The logic itself carries forward FR3 of add-manual-run.
  */
 public final class BriefingSections {
@@ -125,22 +128,46 @@ public final class BriefingSections {
         return sb.toString();
     }
 
-    /** Renders the decisions section: author (or "unattributed") and body per decision. */
+    /**
+     * Renders the decisions section, the one renderer of a task's decisions for the stage round
+     * prompt and the judge prompt: a decision that answers a decision request as its question, its
+     * options and the reply; any other as author (or "unattributed") and body (FR9 of
+     * extract-agent-round-runner). The question and the options leave their carriers through the
+     * console exit, as the task goal does.
+     */
     public static void renderDecisions(StringBuilder out, List<Decision> decisions) {
         out.append("=== Decisions ===\n");
         if (decisions.isEmpty()) {
             out.append("(none)\n");
         } else {
             for (Decision decision : decisions) {
-                String author = decision.author() != null ? decision.author() : "unattributed";
-                out.append("- ")
-                        .append(author)
-                        .append(": ")
-                        .append(decision.body())
-                        .append('\n');
+                renderDecision(out, decision);
             }
         }
         out.append('\n');
+    }
+
+    private static void renderDecision(StringBuilder out, Decision decision) {
+        String author = decision.author() != null ? decision.author() : "unattributed";
+        EscalationReport.DecisionNeeded asked = decision.answers();
+        if (asked == null) {
+            out.append("- ").append(author).append(": ").append(decision.body()).append('\n');
+            return;
+        }
+        out.append("- question: ").append(asked.question().forConsole()).append('\n');
+        if (asked.options().isEmpty()) {
+            out.append("  options: (none, an open question)\n");
+        } else {
+            out.append("  options:\n");
+            for (UntrustedText option : asked.options()) {
+                out.append("    * ").append(option.forConsole()).append('\n');
+            }
+        }
+        out.append("  reply (")
+                .append(author)
+                .append("): ")
+                .append(decision.body())
+                .append('\n');
     }
 
     /**

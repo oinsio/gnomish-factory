@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.domain.pipeline;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -139,6 +140,29 @@ public record StageDefinition(
          */
         public Executor(ExecutorType type, String model, Map<String, Object> settings) {
             this(type, model, settings, Sandbox.none());
+        }
+
+        /**
+         * The registry name this block resolves to (design D12 of extract-agent-round-runner): an
+         * agent block the reserved {@link BuiltInExecutors#CLAUDE}, a {@code program} block the
+         * declaration it names, a {@code command} block the built-in {@link
+         * BuiltInExecutors#COMMAND}. An {@code api} block has no executor of its own and takes the
+         * agent's name, as the stage dispatch's agent arm serves it; a judge is refused that type
+         * at load.
+         *
+         * <p>Implements FR4, FR14 of extract-agent-round-runner.
+         *
+         * @return the name the run's registry resolves; never null
+         * @throws NullPointerException for a {@code program} block naming no declaration, which
+         *     {@code ExecutorReferenceRule} refuses at load
+         */
+        public String registryName() {
+            return switch (type) {
+                case AGENT_CLI, API -> BuiltInExecutors.CLAUDE;
+                case PROGRAM ->
+                    Objects.requireNonNull(name, "a program block names its executor (ExecutorReferenceRule)");
+                case COMMAND -> BuiltInExecutors.COMMAND;
+            };
         }
     }
 }

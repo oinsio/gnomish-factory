@@ -6,7 +6,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
@@ -47,7 +46,7 @@ class AdvancementSpec extends Specification {
     def sleeper = new VirtualSleeper(clock)
 
     EnginePorts ports() {
-        new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), listener, persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
+        new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), listener, persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
     }
 
     static VerifyCheck.Executor builtin(String name) {
@@ -219,7 +218,7 @@ class AdvancementSpec extends Specification {
 
     private static EnginePorts freshPorts(ScriptedExecutor executor,
             InMemoryAttemptPersistence persistence = new InMemoryAttemptPersistence()) {
-        new EnginePorts(CheckRouting.of(executor, new ScriptedCheckRounds(), new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), new RecordingEventListener(),
+        new EnginePorts(CheckRouting.of(executor, new ScriptedCheckRounds(), new ScriptedCheckRounds(), new ScriptedCheckRounds()), new RecordingEventListener(),
                 persistence, VirtualTimeEquipment.on(new VirtualClock()), RoundIdentity.inPlace())
     }
 }

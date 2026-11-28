@@ -4,6 +4,7 @@ import static com.github.oinsio.gnomish.adapter.law.PipelineDefinitionFixtures.p
 import static com.github.oinsio.gnomish.adapter.law.PipelineDefinitionFixtures.stage
 
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -30,7 +31,7 @@ class PipelineLawReaderSpec extends Specification {
         write('instructions.md', 'Do the thing.')
         write('criteria.md', 'The output must be idempotent.')
         def definition = pipeline(stage('instructions.md', [
-            new VerifyCheck.Judge('criteria.md', 'claude-opus', [:], 1)
+            JudgeChecks.agent('criteria.md', 'claude-opus')
         ]))
 
         when:

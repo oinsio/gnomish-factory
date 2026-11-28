@@ -10,8 +10,8 @@ of every consult.
 ## ADDED Requirements
 
 ### Requirement: Arbiter configuration is per stage and optional
-A stage manifest MAY declare a `decisions:` section naming the arbiter
-model, its settings, a `rulesFile`, and `maxDecisions`; a stage without the
+A stage manifest MAY declare a `decisions:` section naming the arbiter by
+the `executor:` block a stage declares, a `rulesFile`, and `maxDecisions`; a stage without the
 section SHALL keep the pre-arbiter behavior (decision rounds park for a
 human) exactly.
 **Implements**: FR1 of add-decision-arbiter

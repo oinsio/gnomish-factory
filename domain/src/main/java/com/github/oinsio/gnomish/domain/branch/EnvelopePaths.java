@@ -1,5 +1,8 @@
 package com.github.oinsio.gnomish.domain.branch;
 
+import com.github.oinsio.gnomish.domain.engine.AttemptKey;
+import com.github.oinsio.gnomish.domain.engine.RoundToken;
+
 /**
  * The one spelling of the {@code .gnomish-task/} state directory and the paths beneath it, for
  * every module: the branch readers and writers of the git adapter, the container tip reader in the
@@ -52,10 +55,28 @@ public final class EnvelopePaths {
     public static final String STATE_JSON_PATH = DIR + STATE_FILE;
 
     /**
-     * The gnome-writable subtree of the decision-file protocol, without a trailing separator — the
-     * shape a git pathspec exclusion takes.
+     * The gnome-writable subtree that holds the rounds' answer files, without a trailing separator —
+     * the shape a git pathspec exclusion takes.
      */
     public static final String DECISIONS_DIR = DIR + "decisions";
 
     private EnvelopePaths() {}
+
+    /**
+     * The answer file of one round in a branch mode (FR9 of extract-agent-round-runner, design D3):
+     * {@code .gnomish-task/decisions/<stage>-a<attempt>-<token>.json}, the one gnome-writable file
+     * under the state directory and the branch-durable location of a {@code decision-request}
+     * answer. The round is handed this path in {@code GNOMISH_ANSWER_FILE}, the branch-side reader
+     * reads exactly it at the tip, and the admission permits exactly it. There is no token-less
+     * form: a stage and attempt repeat across visits of a stage, so only the round token names the
+     * round that owns the file (FR13, FR16 of make-checkpoint-gate-durable).
+     *
+     * @param key the round's stage and attempt; never null
+     * @param token the round's token; never null
+     * @return the round's answer file; never null
+     */
+    public static EnvelopePath answerFile(AttemptKey key, RoundToken token) {
+        return new EnvelopePath(
+                DECISIONS_DIR + "/" + key.stage() + "-a" + key.attempt() + "-" + token.commit() + ".json");
+    }
 }

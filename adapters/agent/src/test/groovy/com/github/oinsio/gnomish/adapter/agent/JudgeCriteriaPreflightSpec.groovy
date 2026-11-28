@@ -1,48 +1,52 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
-import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.executorcontract.FailureClass
+import com.github.oinsio.gnomish.executorcontract.Status
+import com.github.oinsio.gnomish.executorcontract.Usage
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import spock.lang.Specification
 
 /**
- * FR13, NFR-R1, D8 of add-agent-executor; FR19, D14 of add-sandbox-core: {@link
- * JudgeCriteriaPreflight} is the judge-side mirror of the executor's control-file
- * read — where the executor lets an unreadable law file propagate as {@link
- * com.github.oinsio.gnomish.adapter.law.UnreadableLawFileException} (an
- * infrastructure failure with no port-level exception channel to catch it), the
- * {@code JudgeVoter} port has no such channel: {@code vote()} never throws
- * (NFR-R1), so {@code CliJudgeVoter} must catch it here and return a {@link
- * com.github.oinsio.gnomish.domain.engine.Verdict.CannotVerify} Vote instead —
- * "before any process starts, never a criteria-less vote". Criteria come from
- * the frozen {@link PipelineLaw}, not the working copy.
+ * FR13, NFR-R1, D8 of add-agent-executor; FR19, D14 of add-sandbox-core; FR4 of
+ * extract-agent-round-runner: {@link JudgeCriteriaPreflight} runs ahead of a judge check's request —
+ * an acceptance-criteria file the frozen {@link PipelineLaw} could not read is the request's answer,
+ * {@code failed/infrastructure} naming the file, "before any process starts, never a criteria-less
+ * vote", and is never thrown. Criteria come from the frozen law, not the working copy; the engine
+ * writes the one operator line for the cannot-verify it derives to, so the preflight logs nothing.
  */
 class JudgeCriteriaPreflightSpec extends Specification {
 
-    def "a criteria file frozen readable in the law yields no CannotVerify signal"() {
+    def "a criteria file frozen readable in the law yields no refusal"() {
         given:
         def law = PipelineLaw.ofContent(['criteria.md': 'The output must be idempotent.'])
-        def check = new VerifyCheck.Judge('criteria.md', 'claude-opus', [:], 1)
 
-        when:
-        def result = JudgeCriteriaPreflight.checkReadable(law, check)
-
-        then:
-        result.isEmpty()
+        expect:
+        JudgeCriteriaPreflight.refusal(law, 'criteria.md').isEmpty()
     }
 
-    def "a criteria file the frozen law could not read yields CannotVerify naming the criteria file"() {
+    def "a criteria file the frozen law could not read is a failed/infrastructure refusal naming the file"() {
         given:
         def law = PipelineLaw.ofContent([:])
-        def check = new VerifyCheck.Judge('missing-criteria.md', 'claude-opus', [:], 1)
+        def logs = LogCaptureSupport.attach(JudgeCriteriaPreflight)
 
         when:
-        def result = JudgeCriteriaPreflight.checkReadable(law, check)
+        def result = JudgeCriteriaPreflight.refusal(law, 'missing-criteria.md')
 
         then:
-        result.isPresent()
-        def verdict = result.get()
-        !verdict.reason().isBlank()
-        verdict.reason().forLog().contains('missing-criteria.md')
-        verdict.details() != null
+        def refusal = result.get()
+        refusal.status() == Status.FAILED
+        refusal.failureClass() == FailureClass.INFRASTRUCTURE
+        refusal.reason().forLog() == "the judge's acceptance criteria file 'missing-criteria.md' is unreadable"
+        refusal.details().forLog().startsWith('law file could not be read: missing-criteria.md')
+        refusal.answer() == null
+        refusal.usage() == Usage.absent()
+        refusal.denials() == []
+
+        and: 'nothing is logged here: the engine writes the one line'
+        logs.list.isEmpty()
+
+        cleanup:
+        logs?.detach()
     }
 }

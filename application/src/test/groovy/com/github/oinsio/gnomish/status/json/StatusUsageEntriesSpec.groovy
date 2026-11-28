@@ -49,8 +49,8 @@ class StatusUsageEntriesSpec extends Specification {
                     'model-a': new ModelUsage(new TokenUsage(5, 6, 7, 8), null)])
         def usage = [
             executed,
-            Participants.verdict('agent-cli', 0, Unpriced.of(['model-a': new TokenUsage(100, 20, 0, 0)])),
-            Participants.verdict('agent-cli', 1, Unpriced.of(['model-a': new TokenUsage(150, 30, 0, 0)]))
+            Participants.verdict('claude', 0, Unpriced.of(['model-a': new TokenUsage(100, 20, 0, 0)])),
+            Participants.verdict('claude', 1, Unpriced.of(['model-a': new TokenUsage(150, 30, 0, 0)]))
         ]
         def attempt = AttemptRecords.of(
                 0, AttemptRecord.Result.PASSED, Instant.parse("2026-07-17T09:00:00Z"), [], usage, [], Stop.none())
@@ -90,7 +90,7 @@ class StatusUsageEntriesSpec extends Specification {
                 0, AttemptRecord.Result.PASSED, Instant.parse("2026-07-17T09:00:00Z"), [],
                 [
                     Participants.transform('acme', ExecutorUsage.none()),
-                    Participants.verdict('agent-cli', 0, [:])
+                    Participants.verdict('claude', 0, [:])
                 ], [],
                 Stop.none())
         def state = new TaskState(new Position.AtStage("implement"), 0, [attempt], UsageSnapshot.EMPTY, ExecutorVersions.none())

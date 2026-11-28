@@ -56,7 +56,7 @@ class MdcEventListenerSpec extends Specification {
         def listener = new MdcEventListener()
 
         when:
-        listener.onEvent(new EngineEvent.ExecutionFinished(key(1, 'implement'), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed()))
+        listener.onEvent(new EngineEvent.ExecutionFinished(key(1, 'implement'), Participants.transform('ghost', ExecutorUsage.none()), new RoundExecutor('ghost', null), new ExecutionResult.Completed()))
 
         then:
         MDC.get('stage') == 'implement'

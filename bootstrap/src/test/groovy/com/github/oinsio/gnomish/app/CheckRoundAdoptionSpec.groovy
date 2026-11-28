@@ -26,8 +26,8 @@ import spock.lang.Specification
  * FR3, FR11, NFR-R1 of migrate-verify-to-executor-contract (design D14): the {@code RECORDED} arm of
  * the check round — a key the resume path read from the pending record is handed to the executor's
  * {@link PendingAdoption} before its poll, and only then; an {@code ISSUED} key and an executor that
- * takes no role are polled as they are. The role is read from the executor the entry bound, before the
- * pin decorator wraps it.
+ * takes no role are polled as they are. The role reaches the round in the {@code BoundCheck}, beside
+ * the executor, as its binding built it; no decorator takes it.
  */
 class CheckRoundAdoptionSpec extends Specification {
 
@@ -35,11 +35,11 @@ class CheckRoundAdoptionSpec extends Specification {
 
     private static final PendingKey KEY = new PendingKey('recorded-1')
 
-    private static StageExecutor.Request poll(PendingTurn.Origin origin) {
+    private static StageExecutor.Request request() {
         new StageExecutor.Request(new TaskContext('TASK-1', UntrustedText.tracker('t'), UntrustedText.tracker('b'), []),
         new StageDefinition('build', 'p', [], [], new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'm', [:]),
         'i.md', [], new AutonomyLimits(3), AdvancementMode.AUTO), new com.github.oinsio.gnomish.domain.engine.port.Workspace() {}, 0, [],
-        CHECK, CheckRef.of(0, CHECK), new PendingTurn(KEY, origin))
+        CHECK, CheckRef.of(0, CHECK))
     }
 
     private static ExecutorResult pending() {
@@ -53,7 +53,7 @@ class CheckRoundAdoptionSpec extends Specification {
         ExecutorRequest adopted = null
 
         when:
-        def result = new CheckRound(bound, adoption, CHECK).execute(poll(PendingTurn.Origin.RECORDED))
+        def result = new CheckRound(bound, adoption, CHECK).poll(request(), new PendingTurn(KEY, PendingTurn.Origin.RECORDED))
 
         then:
         1 * adoption.adopt(_, KEY) >> { ExecutorRequest r, PendingKey k ->
@@ -73,20 +73,22 @@ class CheckRoundAdoptionSpec extends Specification {
         def adoption = Mock(PendingAdoption)
 
         when:
-        new CheckRound(bound, adoption, CHECK).execute(poll(PendingTurn.Origin.ISSUED))
+        new CheckRound(bound, adoption, CHECK).poll(request(), new PendingTurn(KEY, PendingTurn.Origin.ISSUED))
 
         then:
         0 * adoption.adopt(_, _)
         1 * bound.poll(_, KEY) >> pending()
     }
 
-    def "FR3, D14: the adoption role is the bound executor's own when it takes one, and absent otherwise"() {
+    def "FR3, D14: no adoption role means a RECORDED key is polled as it is"() {
         given:
-        def adopting = Mock(Executor, additionalInterfaces: [PendingAdoption])
-        def plain = Mock(Executor)
+        def bound = Mock(Executor)
 
-        expect:
-        CheckRound.adoptionOf(adopting).is(adopting)
-        CheckRound.adoptionOf(plain) == null
+        when:
+        new CheckRound(bound, null, CHECK).poll(request(), new PendingTurn(KEY, PendingTurn.Origin.RECORDED))
+
+        then:
+        1 * bound.poll(_, KEY) >> pending()
+        0 * bound.start(_)
     }
 }

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
+import com.github.oinsio.gnomish.domain.engine.port.PendingTurn
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyingStages
 import com.github.oinsio.gnomish.pendingkey.PendingKey
@@ -21,9 +22,9 @@ class PendingPollRotationSpec extends PendingPollSpecBase {
     private ScriptedExecutor counting(List<ExecutionResult> script, List<Integer> writesBefore) {
         new ScriptedExecutor(script) {
                     @Override
-                    ExecutionResult execute(StageExecutor.Request request) {
+                    protected ExecutionResult respond(StageExecutor.Request request, PendingTurn turn) {
                         writesBefore << persistence.pending.size()
-                        super.execute(request)
+                        super.respond(request, turn)
                     }
                 }
     }
@@ -41,7 +42,7 @@ class PendingPollRotationSpec extends PendingPollSpecBase {
         def since = clock.instant()
 
         when:
-        def answer = poll(executor).answer(ci, ref(0, ci), round([ci])).answer()
+        def answer = checkRounds(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci])).answer()
 
         then: 'the second write came after the poll that returned k-2 and before the poll of k-2'
         answer == new VerdictAnswer.Sarif([], null)
@@ -77,7 +78,7 @@ class PendingPollRotationSpec extends PendingPollSpecBase {
         def ci = check()
 
         when:
-        poll(executor).answer(ci, ref(0, ci), round([ci])).answer()
+        checkRounds(executor).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci])).answer()
 
         then:
         turns(executor) == [
@@ -100,7 +101,7 @@ class PendingPollRotationSpec extends PendingPollSpecBase {
         def executor = new ScriptedExecutor([pending('k-new'), passed()])
 
         when:
-        poll(executor).answer(checks[index], ref(index, checks[index]), round(checks, STATE.withPendingPolls(recorded))).answer()
+        checkRounds(executor).answer(checks[index], DescribedExecutors.none().executorOf(checks[index]), ref(index, checks[index]), round(checks, STATE.withPendingPolls(recorded))).answer()
 
         then:
         turns(executor) == [
@@ -113,7 +114,7 @@ class PendingPollRotationSpec extends PendingPollSpecBase {
         def written = persistence.pending*.state*.pendingPolls()
         written.size() == 1
         written[0] == recorded.withIndex().collect { PendingPollRecord e, int i ->
-            i == index ? new PendingPollRecord(e.check(), e.attempt(), e.token(), new PendingKey('k-new'), e.since()) : e
+            i == index ? new PendingPollRecord(e.subject(), e.attempt(), e.token(), new PendingKey('k-new'), e.since()) : e
         }
 
         where:
@@ -132,16 +133,14 @@ class PendingPollRotationSpec extends PendingPollSpecBase {
             passed()
         ]) {
             @Override
-            ExecutionResult execute(StageExecutor.Request request) {
-                if (request.pending() != null) {
-                    persistence.failPending = new IllegalStateException('killed before the rotated commit')
-                }
-                super.execute(request)
+            ExecutionResult poll(StageExecutor.Request request, PendingTurn turn) {
+                persistence.failPending = new IllegalStateException('killed before the rotated commit')
+                super.poll(request, turn)
             }
         }
 
         when:
-        def verified = orchestrator(poll(dying)).verify(VerifyingStages.of([ci]), CONTEXT, WORKSPACE, KEY, STATE, TOKEN)
+        def verified = orchestrator(checkRounds(dying)).verify(VerifyingStages.of([ci]), CONTEXT, WORKSPACE, KEY, STATE, TOKEN)
 
         then: 'the new key is never polled, the check is cannot-verify, and the last write that landed names k-1'
         turns(dying) == [null, [ISSUED, 'k-1']]
@@ -156,7 +155,7 @@ class PendingPollRotationSpec extends PendingPollSpecBase {
         def refusing = new ScriptedExecutor([
             result(new ExecutionResult.Failed(ExecutionResult.FailureClass.INFRASTRUCTURE, refusal, [], null))
         ])
-        def answer = poll(refusing).answer(ci, ref(0, ci), round([ci], persistence.pending[0].state)).answer()
+        def answer = checkRounds(refusing).answer(ci, DescribedExecutors.none().executorOf(ci), ref(0, ci), round([ci], persistence.pending[0].state)).answer()
 
         then: 'the previous key is polled, nothing is started, and the infrastructure failure names the key'
         turns(refusing) == [[RECORDED, 'k-1']]

@@ -37,12 +37,16 @@ final class EnvelopeMediumRule {
 
     /**
      * The literals rule 2 rejects. The directory is matched without its closing quote so that
-     * {@code ".gnomish-task/"} and {@code ".gnomish-task/decisions"} are hits too.
+     * {@code ".gnomish-task/"} and {@code ".gnomish-task/decisions"} are hits too. The answer
+     * file's directory name ({@code "decisions"}, FR9 of extract-agent-round-runner) is a hit on
+     * its own, so its subtree cannot be re-joined from {@code EnvelopePaths.DIR} by hand beside
+     * {@code EnvelopePaths.answerFile}.
      */
     static final List<String> PATH_LITERALS = [
         '".gnomish-task',
         '"task.json"',
-        '"state.json"'
+        '"state.json"',
+        '"decisions'
     ]
 
     private static final String READ_OWNER_HINT =

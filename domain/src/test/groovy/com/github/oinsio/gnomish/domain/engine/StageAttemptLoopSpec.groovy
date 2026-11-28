@@ -6,20 +6,20 @@ import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
-import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
+import com.github.oinsio.gnomish.domain.pipeline.BuiltInExecutors
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+import com.github.oinsio.gnomish.testfixtures.JudgeChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
@@ -44,14 +44,13 @@ class StageAttemptLoopSpec extends Specification {
     def builtinRunner = new ScriptedCheckRounds()
     def commandRunner = new ScriptedCheckRounds()
     def externalClient = new ScriptedCheckRounds()
-    def judgeVoter = new ScriptedJudgeVoter()
     def persistence = new InMemoryAttemptPersistence()
     def listener = new RecordingEventListener()
     def clock = new VirtualClock()
     def sleeper = new VirtualSleeper(clock)
 
     EnginePorts ports() {
-        new EnginePorts(CheckRouting.of(executor, builtinRunner, commandRunner, externalClient), judgeVoter,
+        new EnginePorts(CheckRouting.of(executor, builtinRunner, commandRunner, externalClient),
                 listener, persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
     }
 
@@ -59,8 +58,8 @@ class StageAttemptLoopSpec extends Specification {
         VerifyChecks.builtin(name, [:])
     }
 
-    static VerifyCheck.Judge judge(int votes) {
-        new VerifyCheck.Judge('criteria.md', 'model', [:], votes)
+    static VerifyCheck.Judge judge() {
+        JudgeChecks.agent('criteria.md', 'model')
     }
 
     static StageDefinition stage(String name, int attemptLimit, List<VerifyCheck> verify) {
@@ -127,23 +126,29 @@ class StageAttemptLoopSpec extends Specification {
     // Scenario: pipeline/stage-engine / Round metrics carry wall time, tool aggregates and per-model tokens
     def "records the executor and judge usage of the round"() {
         given: 'a stage with a judge check that cannot verify, and a Completed executor reporting usage'
-        def stageDef = stage('build', 3, [judge(1)])
+        def stageDef = stage('build', 3, [judge()])
         def executorUsage = new ExecutorUsage(Duration.ofSeconds(4), [], Unpriced.of(['model-a': new TokenUsage(100, 40, 0, 0)]))
         executor.scripted << completed(executorUsage)
         def voteTokens = ['model-a': new TokenUsage(7, 3, 0, 0)]
-        judgeVoter.scripted << new JudgeVoter.Vote(new Verdict.CannotVerify(UntrustedText.subprocess('model unparseable'), UntrustedText.subprocess('gibberish')), Unpriced.of(voteTokens))
+        // The judge's check round (design D2 of extract-agent-round-runner) answers failed/infrastructure
+        // with the usage it reported, as a malformed reply comes to.
+        externalClient.scripted << new ExecutionResult(
+                new ExecutionResult.Failed(ExecutionResult.FailureClass.INFRASTRUCTURE,
+                UntrustedText.subprocess('model unparseable'), [], UntrustedText.subprocess('gibberish')),
+                null, new ExecutorUsage(Duration.ZERO, [], Unpriced.of(voteTokens)),
+                new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
 
         when: 'the run is driven'
         def outcome = new Engine().run(pipeline(stageDef), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())
 
         then: 'the round records the executor as its transform entry, verbatim'
         def record = outcome.finalState().attempts()[0]
-        record.usage()[0] == Participants.transform('api', executorUsage)
+        record.usage()[0] == Participants.transform('claude', executorUsage)
         record.usage()[0].wallTime() == Duration.ofSeconds(4)
         record.usage()[0].byModel() == ['model-a': new ModelUsage(new TokenUsage(100, 40, 0, 0), null)]
 
         and: 'and the judge vote gathered during verification as its own verdict entry, vote 0'
-        record.usage()[1] == Participants.verdict(Participants.JUDGE_EXECUTOR, 0, Unpriced.of(voteTokens))
+        record.usage()[1] == Participants.verdict(BuiltInExecutors.CLAUDE, 0, Unpriced.of(voteTokens))
         record.usage()*.role() == [
             ExecutorRole.TRANSFORM,
             ExecutorRole.VERDICT

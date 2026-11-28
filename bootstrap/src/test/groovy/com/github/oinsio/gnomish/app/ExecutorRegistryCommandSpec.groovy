@@ -5,11 +5,8 @@ import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.describe.ProgramBounds
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.LastRegisteredCommit
-import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
-import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.TaskContext
-import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
@@ -43,9 +40,10 @@ import spock.lang.Timeout
  * wrapper over the entry's factory, opening its rounds through the run's one round source (design D18
  * of migrate-verify-to-executor-contract: entries bound at resolution). A command round is
  * observed by the process it launches in the round's real host environment, whose launch hands back a
- * {@link FakeProcess} that has already exited; an agent round by the request the agent arm receives.
- * The mixed pipeline is driven through the run's real {@link ExecutorDispatch}, whose {@code COMMAND}
- * arm maps a command stage's type to this entry's name.
+ * {@link FakeProcess} that has already exited; an agent round, since task 5.1a of
+ * extract-agent-round-runner, by the fake dialect's CLI the {@code claude} entry launches in the same
+ * environment. The mixed pipeline is driven through the run's real {@link ExecutorDispatch}, whose
+ * {@code COMMAND} arm maps a command stage's type to this entry's name.
  */
 @Timeout(30)
 class ExecutorRegistryCommandSpec extends Specification {
@@ -54,7 +52,6 @@ class ExecutorRegistryCommandSpec extends Specification {
     Path workingCopy
 
     def clock = new VirtualClock()
-    def agent = Mock(StageExecutor)
     def law = PipelineLaw.ofContent(['instructions.md': 'build it'])
     List<List<String>> launched = []
     List<StageExecutor.Request> opened = []
@@ -63,6 +60,9 @@ class ExecutorRegistryCommandSpec extends Specification {
     def setup() {
         def launch = { ProcessBuilder builder, StdinSource stdin ->
             launched << builder.command()
+            if (builder.command().first() == 'fake-agent') {
+                return new FakeProcess(0, 'hello m s\ndone ok\n') {}
+            }
             def process = FakeProcess.running()
             process.exit(0)
             process
@@ -78,13 +78,11 @@ class ExecutorRegistryCommandSpec extends Specification {
     private RoundEnvironmentSource rounds() {
         def round = [environment: {
                 host
-            }, decisionFilePath: {
-                null
-            }, decisionEnvFragment: {
+            }, answerFilePath: {
+                Path.of('answer.json')
+            }, answerEnvFragment: {
                 [:]
-            }, closeRound: { }, readDecision: {
-                Optional.empty()
-            }, discard: { }] as RoundEnvironmentSource.Round
+            }, closeRound: { }, discard: { }] as RoundEnvironmentSource.Round
         [openRound: { StageExecutor.Request request ->
                 opened << request
                 round
@@ -113,7 +111,8 @@ class ExecutorRegistryCommandSpec extends Specification {
         def equipment = new ProgramRoundEquipment(ProgramBounds.DEFAULTS, VirtualTimeEquipment.on(clock),
                 TestChildEnvironment.hostAllowlist().programGrant(), Path.of('/tmp'), LastRegisteredCommit.NONE)
         def described = new DescribedLaw(LawBinding.workingTree(Path.of('/tmp/law')), [(declared): ProgramInBox.describe()])
-        ExecutorRegistry.of(described, definition(declared), law, equipment, BuiltInEntriesFixture.of(clock), null)
+        ExecutorRegistry.of(described, definition(declared), law, equipment, BuiltInEntriesFixture.of(clock), null,
+                AgentEntryFixture.idle(equipment, law))
     }
 
     private static StageExecutor.Request request(StageDefinition stage) {
@@ -126,7 +125,7 @@ class ExecutorRegistryCommandSpec extends Specification {
         def build = request(stage('build', ExecutorType.COMMAND, './gradlew build'))
 
         when:
-        def result = new ExecutorDispatch(registry(), rounds(), agent).execute(build)
+        def result = new ExecutorDispatch(registry(), rounds()).execute(build)
 
         then: 'the round was opened by the run round source, for this request'
         opened.size() == 1
@@ -147,28 +146,29 @@ class ExecutorRegistryCommandSpec extends Specification {
     }
 
     // Scenario: executor/command-executor / Mixed pipeline dispatches per stage
-    def "FR8: in a mixed pipeline each stage runs through the dispatch: the agent stage on the agent arm, the command stage on the built-in and never on the agent arm"() {
+    // FR14 of extract-agent-round-runner (task 5.1a): the agent stage runs on the claude entry, the
+    //     command stage on the built-in, each through the run's one round source
+    def "FR8: in a mixed pipeline each stage runs through the dispatch: the agent stage on the claude entry, the command stage on the built-in"() {
         given: 'the run dispatch over the registry, built once at wiring'
         def registry = registry()
-        def dispatch = new ExecutorDispatch(registry, rounds(), agent)
+        def dispatch = new ExecutorDispatch(registry, rounds())
         def implement = request(stage('implement', ExecutorType.AGENT_CLI, null))
         def build = request(stage('build', ExecutorType.COMMAND, './gradlew build'))
-        def agentResult = ExecutionResult.completed(ExecutorUsage.none(),
-                new ToolTrace(new AttemptKey('TASK-1', 'implement', 0), []), [])
 
         when:
         def implemented = dispatch.execute(implement)
         def built = dispatch.execute(build)
 
-        then: 'the agent stage reached the agent arm and opened no registry round'
-        1 * agent.execute(implement) >> agentResult
-        implemented.is(agentResult)
+        then: 'each stage opened its round through the run round source'
+        opened == [implement, build]
 
-        and: 'the command stage ran on the built-in, never on the agent arm'
-        0 * agent.execute(build)
-        opened == [build]
-        launched.size() == 1
-        launched[0].last() == './gradlew build'
+        and: 'the agent stage launched the claude entry\'s CLI and completed'
+        launched[0] == ['fake-agent', 'transform']
+        implemented.status() instanceof ExecutionResult.Completed
+
+        and: 'the command stage ran the declared command on the built-in'
+        launched.size() == 2
+        launched[1].last() == './gradlew build'
         built.status() instanceof ExecutionResult.Completed
     }
 

@@ -37,8 +37,8 @@ class StateUsageRoundTripSpec extends Specification {
                     new ToolUsage('lint', 2, Duration.ofMillis(300))
                 ],
                 ['acme-model-1': new ModelUsage(new TokenUsage(120, 45, 0, 10), new BigDecimal('0.0031'))]))
-        def unpriced = Participants.verdict('agent-cli', 0, ['claude-j': new ModelUsage(new TokenUsage(7, 3, 0, 0), null)])
-        def absent = Participants.verdict('agent-cli', 1, [:])
+        def unpriced = Participants.verdict('claude', 0, ['claude-j': new ModelUsage(new TokenUsage(7, 3, 0, 0), null)])
+        def absent = Participants.verdict('claude', 1, [:])
         AttemptRecords.of(0, AttemptRecord.Result.PASSED, STARTED, [], [executor, unpriced, absent], [], Stop.none())
     }
 

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent.program;
 
 import com.github.oinsio.gnomish.app.describe.ProgramChannel;
+import com.github.oinsio.gnomish.app.describe.QuietStdoutBounds;
 import com.github.oinsio.gnomish.app.port.check.PendingAdoption;
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorDeclaration;
 import com.github.oinsio.gnomish.executorcontract.Capability;
@@ -65,12 +66,8 @@ public final class ProgramExecutor implements Executor, PendingAdoption {
         this.describe = describe;
         this.environment = environment;
         this.equipment = equipment;
-        this.spawn = new ProgramSpawn(
-                declaration,
-                describe.capabilities().contains(Capability.STREAMS_PROGRESS),
-                credentials,
-                environment,
-                equipment);
+        this.spawn =
+                new ProgramSpawn(declaration, QuietStdoutBounds.applyTo(describe), credentials, environment, equipment);
     }
 
     @Override
@@ -94,12 +91,7 @@ public final class ProgramExecutor implements Executor, PendingAdoption {
         }
         return switch (check().view()) {
             case WorkingCopyView.Unreadable unreadable ->
-                ProgramFailures.infrastructure(
-                        declaration.name(),
-                        "a " + request.role().wire() + " run must leave the working copy unchanged (policy "
-                                + WorkingCopyCheck.policy(request.policy())
-                                + "), and its state could not be taken before the run: " + unreadable.why(),
-                        UntrustedText.factory(""));
+                new WorkingCopyRefusal(ProgramFailures.Subject.PROGRAM, declaration.name(), request).before(unreadable);
             case WorkingCopyView.Taken before ->
                 settled(request, null, new PendingRuns.Entry(before), ProgramChannel.START);
         };
@@ -173,7 +165,7 @@ public final class ProgramExecutor implements Executor, PendingAdoption {
         if (before == null || result.pendingKey() != null) {
             return result;
         }
-        return check().judge(declaration.name(), request, before, result);
+        return check().judge(ProgramFailures.Subject.PROGRAM, declaration.name(), request, before, result);
     }
 
     private WorkingCopyCheck check() {
@@ -182,6 +174,7 @@ public final class ProgramExecutor implements Executor, PendingAdoption {
     }
 
     private ExecutorResult refused(String cause) {
-        return ProgramFailures.infrastructure(declaration.name(), cause, UntrustedText.factory(""));
+        return ProgramFailures.infrastructure(
+                ProgramFailures.Subject.PROGRAM, declaration.name(), cause, UntrustedText.factory(""));
     }
 }

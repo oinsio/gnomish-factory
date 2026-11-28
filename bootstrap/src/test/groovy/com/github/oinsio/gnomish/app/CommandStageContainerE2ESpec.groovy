@@ -136,7 +136,7 @@ class CommandStageContainerE2ESpec extends Specification implements BareGitRepoF
 
         and: "the only model the run used is the agent stage's: the fake agent's"
         with(records.participant('review', 0)) {
-            get('executor').asText() == 'agent-cli'
+            get('executor').asText() == 'claude'
             get('byModel').fieldNames().toList() == ['claude-fake-main-1']
         }
 

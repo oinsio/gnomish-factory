@@ -13,8 +13,8 @@ import java.nio.file.Path
  * environment of the box's {@link ProcessBuilder}, since a running JVM cannot change its own.
  *
  * <p>Arguments: the factory clone, the box root, the branch to materialize, then the fake agent's
- * command. The round plays {@code decision-needed} and names no decision file of its own (a judge
- * vote's or a check's shape), so the only {@code GNOMISH_DECISION_FILE} the fake could write to is
+ * command. The round plays {@code decision-needed} and names no answer file of its own (a judge
+ * vote's or a check's shape), so the only {@code GNOMISH_ANSWER_FILE} the fake could write to is
  * one the box let through from this JVM. Exits with the fake's exit code.
  *
  * <p>FR22, M10 of make-checkpoint-gate-durable.
@@ -24,10 +24,10 @@ final class FixtureBoxRoundProcess {
     private FixtureBoxRoundProcess() {}
 
     /** The line this process prints first, so the spec can prove the plant reached this JVM. */
-    static final String PLANTED_PREFIX = 'parent GNOMISH_DECISION_FILE='
+    static final String PLANTED_PREFIX = 'parent GNOMISH_ANSWER_FILE='
 
     static void main(String[] args) {
-        println(PLANTED_PREFIX + System.getenv('GNOMISH_DECISION_FILE'))
+        println(PLANTED_PREFIX + System.getenv('GNOMISH_ANSWER_FILE'))
         def box = new LocalBoxEnvironment(Path.of(args[0]), Files.createDirectories(Path.of(args[1])))
         box.materialize(args[2], null)
         def command = new ExecCommand(args.drop(3).toList(), [GNOMISH_FAKE_SCENARIO: 'decision-needed'], null, StderrPolicy.MERGED)

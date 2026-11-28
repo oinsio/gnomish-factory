@@ -58,7 +58,7 @@ class HostSnapshotFlowSpec extends Specification implements HostSnapshotRound {
         and: 'the register and the branch name the snapshot, carrying the round\'s subject and token'
         def snapshot = tip()
         registeredId(cloneDir, TASK) == snapshot
-        subjectOf(cloneDir, snapshot) == ServiceCommitMessages.snapshot('implement', ROUND, token)
+        subjectOf(cloneDir, snapshot) == RoundSubject.snapshot('implement', ROUND, token)
         gitOutput(cloneDir, 'rev-parse', snapshot + '^') == gitOutput(worktree(), 'rev-parse', 'HEAD^')
 
         and: 'a host check runs in the worktree, and the worktree is the snapshot\'s tree: nothing differs from it'
@@ -192,7 +192,7 @@ class HostSnapshotFlowSpec extends Specification implements HostSnapshotRound {
 
         then:
         def snapshot = tip()
-        subjectOf(cloneDir, snapshot) == ServiceCommitMessages.snapshot('implement', ROUND, cell.opened())
+        subjectOf(cloneDir, snapshot) == RoundSubject.snapshot('implement', ROUND, cell.opened())
         gitOutput(cloneDir, 'log', '-1', '--format=%B', snapshot).contains('4711')
         new SnapshotTipCheck(runner, cloneDir).inspect(TASK).get().attemptCommit() == snapshot
     }

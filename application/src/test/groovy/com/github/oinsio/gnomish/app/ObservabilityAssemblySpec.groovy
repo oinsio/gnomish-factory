@@ -230,7 +230,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
 
         when: 'NFR-O2, UX3 of define-executor-contract: a round finishes through the roundOutcome write point'
         observability.roundOutcomeLedgerWriter().onEvent(new EngineEvent.ExecutionFinished(
-                        new AttemptKey('github:o/r#1', 'build', 0), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null),
+                        new AttemptKey('github:o/r#1', 'build', 0), Participants.transform('ghost', ExecutorUsage.none()), new RoundExecutor('ghost', null),
                         new ExecutionResult.Completed()))
 
         then: 'a taskOutcome line lands for the SAME ref this test assigned to the slot ledger'

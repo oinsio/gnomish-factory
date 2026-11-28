@@ -41,17 +41,6 @@ class ParticipantUsageWireSpec extends Specification {
         role << ExecutorRole.values()
     }
 
-    def "NFR-R3: every domain role maps onto the contract role of its name, and every contract role back"() {
-        expect:
-        ParticipantUsageWire.toRole(role).name() == role.name()
-        ParticipantUsageWire.fromRole(ParticipantUsageWire.toRole(role)) == role
-        ParticipantUsageWire.toRole(ParticipantUsageWire.fromRole(contract)) == contract
-
-        where:
-        role << ExecutorRole.values()
-        contract << Role.values()
-    }
-
     def "NFR-R3: provenance #provenance maps to #wire and back"() {
         expect:
         ParticipantUsageWire.toProvenance(provenance) == wire

@@ -16,45 +16,38 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * The sandboxed realization of the engine's {@link AttemptPersistence} port
- * (FR21, FR22, design D15, D16): where host mode closes a round as one worktree
- * commit ({@link GitAttemptPersistence}), a sandboxed round closes in two steps
- * — the executor's snapshot commit ({@link EnvironmentRoundSnapshot}, already
- * harvested by the time this port is called) and this class's <b>state
- * commit</b>: {@code state.json} and the round trace written through the
- * environment channel ({@code putFile}), committed in-box (hooks off at argv
- * level), harvested into the task's quarantine, checked, and admitted.
+ * The sandboxed realization of the engine's {@link AttemptPersistence} port (FR21, FR22, design
+ * D15, D16): where host mode closes a round as one worktree commit ({@link GitAttemptPersistence}),
+ * a sandboxed round closes in two steps — the executor's snapshot commit ({@link
+ * EnvironmentRoundSnapshot}, already harvested by the time this port is called) and this class's
+ * <b>state commit</b>: {@code state.json} and the round trace written through the environment
+ * channel ({@code putFile}), committed in-box (hooks off at argv level), harvested into the task's
+ * quarantine, checked, and admitted.
  *
- * <p>Harvest-boundary integrity (D16; design D18 of tighten-spec-contract) is
- * factory-side and trusted, and owned by two checks this class only sequences:
- * the <b>admission</b> ({@link HarvestAdmission}, the one {@link
- * GnomeRangeInspection} of the range above the register — FR23) and, on the
- * harvested state commit itself, the parent-check and the byte-exact read-back
- * ({@link HarvestedStateCommitCheck}, FR22). The snapshot is judged first, again:
- * an admitted snapshot is already on the branch and passes without a move, while
- * one its admission refused is a boundary violation here, thrown before anything
- * is written in-box — the persist is where the engine turns a boundary into
- * {@code Aborted}. The state commit is judged before the branch moves to it, so a
+ * <p>Harvest-boundary integrity (D16; design D18 of tighten-spec-contract) is factory-side and
+ * trusted, and owned by two checks this class only sequences: the <b>admission</b> ({@link
+ * HarvestAdmission}, the one {@link GnomeRangeInspection} of the range above the register — FR23)
+ * and, on the harvested state commit itself, the parent-check and the byte-exact read-back ({@link
+ * HarvestedStateCommitCheck}, FR22). The snapshot is judged first, again: an admitted snapshot is
+ * already on the branch and passes without a move, while one its admission refused is a boundary
+ * violation here, thrown before anything is written in-box — the persist is where the engine turns
+ * a boundary into {@code Aborted}. The state commit is judged before the branch moves to it, so a
  * refused one never becomes branch state.
  *
- * <p>The round being persisted is read whole from the run's {@link CurrentRound}
- * cell (design D10 of make-checkpoint-gate-durable): its token names the
- * carve-out, its attempt commit the snapshot the state commit must sit on. A
- * live round put them there when it opened and snapshotted; a resumed round
- * restored them from the snapshot's durable record. This class keeps no baseline
- * of its own and never re-reads the tip to stand in for a round the cell does not
- * hold: a persist with no closed round throws.
+ * <p>The round being persisted is read whole from the run's {@link CurrentRound} cell (design D10
+ * of make-checkpoint-gate-durable): its token names the carve-out, its attempt commit the snapshot
+ * the state commit must sit on. A live round put them there when it opened and snapshotted; a
+ * resumed round restored them from the snapshot's durable record. This class keeps no baseline of
+ * its own and never re-reads the tip to stand in for a round the cell does not hold: a persist with
+ * no closed round throws.
  *
- * <p>Any violation throws {@link RoundBoundaryViolationException}; the engine
- * turns a thrown persist into {@code Aborted}, the branch keeps the evidence it
- * admitted, and the environment is kept untouched. A verdict git could not
- * produce throws {@link GitPersistFailedException}, the round's infrastructure
- * path. This is a strict port: any failure to durably commit throws, never
+ * <p>Any violation throws {@link RoundBoundaryViolationException}; the engine turns a thrown
+ * persist into {@code Aborted}, the branch keeps the evidence it admitted, and the environment is
+ * kept untouched. A verdict git could not produce throws {@link GitPersistFailedException}, the
+ * round's infrastructure path. This is a strict port: any failure to durably commit throws, never
  * returns.
  *
- * <p>{@link #persistPending} lands an open round's pending commit in the box ({@link
- * InBoxPendingCommit}; design D21 of migrate-verify-to-executor-contract) on the round's last
- * registered commit, and moves that commit in the cell; the state commit then sits on it.
+ * <p>{@link #persistPending} lands a pending commit in the box ({@link InBoxPendingCommit}; D21).
  *
  * <p>Kept in sync with {@link GitAttemptPersistence}: both must close a round with the same durable
  * sequence — {@code state.json} and the round's trace written first, then one commit stamped with
@@ -66,9 +59,14 @@ import java.util.List;
  * write the pending commit alike: exactly {@code state.json}, its tree the registered commit's with
  * that one blob replaced, its only parent the registered commit (here through a private index in the
  * box; there from objects), its register in the same transaction, its subject from {@link
- * PendingWrite} (design D21). The denial cursor ({@link EnvironmentRoundDocuments}) and the round's
- * decision carve-out are environment-side only: the host has no denial source, and its request never
- * enters the working copy.
+ * PendingWrite} (D21; D7, D11 of extract-agent-round-runner): {@code gnomish: pending <stage>#<round>
+ * <token>} for either entry subject, a check's entry above the round's {@code gnomish: snapshot}, the
+ * round's own (a pending round commit) above its {@code gnomish: pending-snapshot} (here closed by
+ * the box's round close, there by the host trigger); and settle the working copy's {@code state.json}
+ * lag right after a pending round commit lands, never after a check's, through the one {@link
+ * PendingStateLag#afterLanding} (here the box's working copy, there the worktree). The denial
+ * cursor ({@link EnvironmentRoundDocuments}) and the round's decision carve-out are environment-side
+ * only: the host has no denial source, and its request never enters the working copy.
  *
  * <p>Kill windows (crash-consistency rule). The durable step of both writes is the admission's
  * ref transaction; the push is {@link PushBestEffortAttemptPersistence}'s. A kill before it freezes
@@ -76,9 +74,9 @@ import java.util.List;
  * pickup resumes the interrupted verification from it. A kill after it, before the push, freezes
  * "closed locally, not pushed", converged by the next push of this branch.
  *
- * <p>Implements FR21, FR22, FR23 of add-sandbox-core; FR13 of
- * harden-logging-observability; FR13, FR15 of make-checkpoint-gate-durable; FR13,
- * NFR-S2 of tighten-spec-contract.
+ * <p>Implements FR21, FR22, FR23 of add-sandbox-core; FR13 of harden-logging-observability; FR13,
+ * FR15 of make-checkpoint-gate-durable; FR13, NFR-S2 of tighten-spec-contract; FR10 of
+ * extract-agent-round-runner.
  */
 public final class EnvironmentAttemptPersistence implements AttemptPersistence {
 
@@ -94,6 +92,7 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
     private final EnvironmentRoundDocuments documents;
     private final ClaimEpochSource epochs;
     private final InBoxPendingCommit pendingCommit;
+    private final PendingStateLag lag;
 
     /**
      * @param environment the task's bound environment; state files and the state commit cross it
@@ -120,6 +119,7 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
         this.documents = new EnvironmentRoundDocuments(environment);
         this.epochs = epochs;
         this.pendingCommit = new InBoxPendingCommit(environment, runner, cloneDir, gitObjects, epochs);
+        this.lag = new PendingStateLag(WorkingCopyGit.inBox(environment));
     }
 
     @Override
@@ -166,8 +166,9 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
     @Override
     public void persistPending(String taskId, TaskState state) {
         PendingWrite write = PendingWrite.of(taskId, state);
-        ClosedRound round = rounds.snapshot().orElseThrow(write::noSnapshot);
+        ClosedRound round = write.landsOn(rounds.snapshot());
         rounds.pendingRegistered(pendingCommit.land(write, state, round));
+        lag.afterLanding(write, rounds.registeredChain());
     }
 
     /** The admission's verdict as this port's outcome: a violation, or the infrastructure path. */

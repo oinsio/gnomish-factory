@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.DoNotMutate;
-import com.github.oinsio.gnomish.adapter.agent.FreshJudgeEnvironments;
 import com.github.oinsio.gnomish.adapter.check.SandboxCheckEnvironmentSource;
 import com.github.oinsio.gnomish.adapter.git.BestEffortClosingPush;
 import com.github.oinsio.gnomish.adapter.git.EnvironmentAttemptPersistence;
@@ -67,12 +66,11 @@ final class ContainerRunSupport implements SandboxRunSupport {
     final ContainerEnvironments environments;
     final EnvironmentLease lease;
     // The run's one round cell (design D10 of make-checkpoint-gate-durable): the round source
-    // opens each round in it, the snapshot closes it, the resume executor restores an interrupted
+    // opens each round in it, the snapshot closes it, the run's assembly restores an interrupted
     // one; the persistence and the check workspace read the closed round from it.
     final CurrentRound rounds = new CurrentRound();
     final GitObjects gitObjects;
     final TaskLifecycleStore taskRepository;
-    final FreshJudgeEnvironments judgeEnvironments;
     final BestEffortClosingPush push;
     final SandboxLifecyclePass sandboxLifecyclePass;
     final ClaimEpochSource epochs;
@@ -116,7 +114,6 @@ final class ContainerRunSupport implements SandboxRunSupport {
                 new GitInfrastructureRetry(
                         time, GitInfrastructureRetry.DEFAULT_ATTEMPTS, GitInfrastructureRetry.DEFAULT_INITIAL_BACKOFF),
                 time.clock());
-        this.judgeEnvironments = new FreshJudgeEnvironments(environments::judgeEnvironment, branch);
         this.push = new BestEffortClosingPush(runner);
         this.sandboxLifecyclePass = sandboxLifecyclePass;
     }
@@ -150,7 +147,6 @@ final class ContainerRunSupport implements SandboxRunSupport {
         var checkEnvironments = new SandboxCheckEnvironmentSource(lease, environments, branch);
         return new SandboxRunPieces(
                 new SandboxRoundEnvironmentSource(lease, runner, cloneDir, taskId, rounds, time.clock()),
-                judgeEnvironments,
                 checkEnvironments,
                 checkEnvironments,
                 gitObjects,
@@ -220,6 +216,12 @@ final class ContainerRunSupport implements SandboxRunSupport {
         // D13, D18 of tighten-spec-contract); either way the clone's two refs go as they are.
         salvage().salvage(taskId);
         push.pushBestEffort(cloneDir, taskId);
+    }
+
+    /** The in-box discard over the leased environment (D11 of extract-agent-round-runner, "Resume"). */
+    @Override
+    public void discardLeftovers() {
+        salvage().discard();
     }
 
     /** The snapshot-without-state classifier of resume (FR21, D15). */

@@ -1,11 +1,14 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.domain.engine.Decision;
-import com.github.oinsio.gnomish.domain.engine.Position;
+import com.github.oinsio.gnomish.domain.engine.DecisionBuilder;
+import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import java.time.Instant;
 import java.util.ArrayList;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The human-reply-to-{@link Decision} plumbing both {@link TakeResumeRunner#appendDecision} and
@@ -13,27 +16,28 @@ import java.util.ArrayList;
  * stamping the escalated stage and author onto the collected reply, then folding it into a copy of
  * the resumed {@link TaskContext} — the part of "commit the decision" that is identical across the
  * two media; each caller still owns its own branch write (a worktree commit vs. a bare-objects
- * write over a disposed environment).
+ * write over a disposed environment). The decision itself is built by {@link DecisionBuilder}, the one
+ * builder the {@code run} path's {@link EscalationResume} calls too, and {@link #appendTo} is the
+ * fold both paths share (design D8 of extract-agent-round-runner).
  */
 final class ResumeDecisionCommit {
 
     private ResumeDecisionCommit() {}
 
     /**
-     * Builds the {@link Decision} for {@code text}, stamped with the park's stage, "tracker" and
-     * {@code at}: the stage named by the position — at a gate, the stage that passed (FR1 of
-     * make-checkpoint-gate-durable) — and none past the pipeline's end; {@code at} is the instant
-     * the caller read from its own time source, never a clock of this class's (FR18 of
+     * Builds the {@link Decision} for {@code text} through the one builder, {@link
+     * DecisionBuilder#answering}, authored "tracker": scoped to the stage the park's position names,
+     * and recording the question and options of {@code consumed} when it is an escalated decision
+     * request (design D4 as amended, D8 of extract-agent-round-runner). {@code consumed} is the
+     * outcome the tip records, as the resume read it from the registered commit's {@code task.json}
+     * — never the carried-forward {@code lastEscalation}. {@code at} is the instant the caller read
+     * from its own time source, never a clock of this class's (FR18 of
      * supervise-daemon-loops-and-embed-dashboard).
      */
-    static Decision decisionFor(TaskState finalState, String text, Instant at) {
-        String stage =
-                switch (finalState.position()) {
-                    case Position.AtStage(String name) -> name;
-                    case Position.AwaitingApproval(String gate) -> gate;
-                    case Position.PipelineEnd() -> null;
-                };
-        return new Decision(text, stage, "tracker", at);
+    static Decision decisionFor(TaskState finalState, @Nullable RecordedOutcome consumed, String text, Instant at) {
+        EscalationReport report =
+                consumed instanceof RecordedOutcome.Escalated(EscalationReport escalated) ? escalated : null;
+        return DecisionBuilder.answering(finalState.position(), report, text, "tracker", at);
     }
 
     /** Returns a copy of {@code context} with {@code decision} appended to its decision history. */

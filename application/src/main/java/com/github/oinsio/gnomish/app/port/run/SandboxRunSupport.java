@@ -82,6 +82,15 @@ public interface SandboxRunSupport {
      */
     void salvageLeftovers(String taskId);
 
+    /**
+     * Resets the box's working copy to its {@code HEAD}, discarding the uncommitted leftovers of the
+     * previous instance — for a pending round resumed in a reattached box, whose next snapshot would
+     * otherwise stage what that instance's polls left behind (design D11 of extract-agent-round-runner,
+     * "Resume": a resumed poll runs in an environment at the registered commit). Best effort, like the
+     * salvage: a lost environment keeps its leftovers with a trace.
+     */
+    void discardLeftovers();
+
     /** Disposes a kept environment left by a previous instance ({@code --discard-work}, FR6). */
     void disposeExistingEnvironment();
 

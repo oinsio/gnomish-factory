@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.check.http.HttpCheckProbe
 import com.github.oinsio.gnomish.adapter.check.http.HttpRunContext
+import com.github.oinsio.gnomish.app.describe.ProgramBounds
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.httpegress.HttpCheckExchange
 import com.github.oinsio.gnomish.httpegress.OperatorEgress
@@ -21,14 +22,14 @@ final class BuiltInEntriesFixture {
     static BuiltInEntries of(InstantSource clock, Map<String, String> secretValues = [:], List<String> inProcess = []) {
         SecretsProvider secrets = secrets(secretValues)
         new BuiltInEntries(new FilesExistCheckRunner(), new ShellCommandCheckRunner(clock),
-                HttpCheckProbe.guarded(new OperatorEgress(inProcess), secrets, HttpRunContext.none()), secrets, clock)
+                HttpCheckProbe.guarded(new OperatorEgress(inProcess), secrets, HttpRunContext.none()), secrets, clock, ProgramBounds.DEFAULTS)
     }
 
     /** The same, with the {@code http} judgement over a scripted exchange instead of the guarded JDK one. */
     static BuiltInEntries scripted(InstantSource clock, Map<String, String> secretValues, HttpCheckExchange exchange) {
         SecretsProvider secrets = secrets(secretValues)
         new BuiltInEntries(new FilesExistCheckRunner(), new ShellCommandCheckRunner(clock),
-                new HttpCheckProbe(exchange, secrets), secrets, clock)
+                new HttpCheckProbe(exchange, secrets), secrets, clock, ProgramBounds.DEFAULTS)
     }
 
     private static SecretsProvider secrets(Map<String, String> values) {

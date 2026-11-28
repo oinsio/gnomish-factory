@@ -24,22 +24,20 @@ class RoundDefaultListenerSpec extends Specification {
         }
 
         @Override
-        Path decisionFilePath() {
+        Path answerFilePath() {
             Path.of('decision.json')
         }
 
         @Override
-        Map<String, String> decisionEnvFragment() {
+        Map<String, String> answerEnvFragment() {
             [:]
         }
 
         @Override
-        void closeRound(RoundClose close) {}
+        void goPending() {}
 
         @Override
-        Optional<RoundDecisionRequest> readDecision() {
-            Optional.empty()
-        }
+        void closeRound(TerminalClose close) {}
 
         @Override
         void discard() {}

@@ -21,9 +21,12 @@ import java.util.Map;
  *       {@code builtin} or {@code command} check names a built-in, which a law never declares, so it
  *       is out of scope; a built-in verdict executor's own token enters no box at all (NFR-S1);
  *   <li>an {@code external} or {@code executor:} check names an executor of the registry: one of the
- *       six {@link BuiltInExecutors} or a law declaration. An unknown name is reported listing exactly
- *       that union, so the built-ins' names are offered whether or not the law names them (design
- *       D18, "The six built-in names have one owner"; FR1, UX2).
+ *       six built-ins a check may name ({@link BuiltInExecutors#CHECK_NAMES}) or a law declaration. An
+ *       unknown name is reported listing exactly that union, so the built-ins' names are offered
+ *       whether or not the law names them (design D18, "The six built-in names have one owner"; FR1,
+ *       UX2). The reserved {@code claude} entry is not among them: an agent reaches a check only
+ *       through a {@code judge} check's executor block, so a check naming it is an unknown executor,
+ *       as it was before the name was reserved (design D12 of extract-agent-round-runner).
  * </ol>
  *
  * <p>Whether the named executor serves role {@code verdict} is not judged here: a program's roles
@@ -33,7 +36,8 @@ import java.util.Map;
  * <p>Problems are located {@link ConfigError}s naming the stage manifest and the check's field;
  * nothing is thrown. Order: stages in pipeline order, checks in check order.
  *
- * <p>Implements FR1, FR4, NFR-S1, UX2 of migrate-verify-to-executor-contract.
+ * <p>Implements FR1, FR4, NFR-S1, UX2 of migrate-verify-to-executor-contract; FR14 of
+ * extract-agent-round-runner.
  */
 public final class VerdictCheckRule {
 
@@ -50,7 +54,7 @@ public final class VerdictCheckRule {
         for (ExecutorDeclaration declaration : model.executors()) {
             grants.put(declaration.name(), declaration.credentials());
         }
-        List<String> registry = new ArrayList<>(BuiltInExecutors.NAMES);
+        List<String> registry = new ArrayList<>(BuiltInExecutors.CHECK_NAMES);
         registry.addAll(grants.keySet());
         List<ConfigError> errors = new ArrayList<>();
         for (StageDefinition stage : model.stages()) {

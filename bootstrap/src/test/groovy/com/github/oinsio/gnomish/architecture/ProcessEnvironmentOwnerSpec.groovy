@@ -7,7 +7,8 @@ import spock.lang.Specification
  * Design D14 of make-checkpoint-gate-durable (D7 enforcement row "test environment"): a test that
  * composes a child process's environment starts from a cleared one. A write layered on top of the
  * inherited environment is how a fake agent spawned by a fixture saw — and wrote into — the
- * {@code GNOMISH_DECISION_FILE} of the gnome round whose build ran the test.
+ * variable naming the decision file (since extract-agent-round-runner, the answer file) of the gnome
+ * round whose build ran the test.
  *
  * <p>The rule, checked by {@link ProcessEnvironmentRule}: every write into a child environment map
  * in a test source, or in {@code :test-fixtures}' own sources, comes after a clearing step in the

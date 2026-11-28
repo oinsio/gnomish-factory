@@ -1,10 +1,14 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.app.port.agent.RoundClose;
+import com.github.oinsio.gnomish.app.port.git.ClosedRound;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.domain.engine.PendingPollRecord;
+import com.github.oinsio.gnomish.domain.engine.PendingSubject;
 import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+import java.util.Optional;
 
 /**
  * One {@code persistPending} call as both persistence ends read it (design D21 of
@@ -15,7 +19,15 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
  * in. Both ends take the subject and the round's key from here, so neither medium can render them
  * differently.
  *
- * <p>Implements FR2, FR20 of migrate-verify-to-executor-contract.
+ * <p>The pair's subject rule (design D7, D11 of extract-agent-round-runner) is judged here once, for
+ * both ends, by {@link #landsOn}: the pending commit's subject is {@code gnomish: pending
+ * <stage>#<round> <token>} for an entry of either subject, and the snapshot below it carries the
+ * close that subject names — a check's entry sits above the round's verifiable snapshot ({@code
+ * gnomish: snapshot}), the round's own entry (a pending round commit) above its pending-round
+ * snapshot ({@code gnomish: pending-snapshot}), so no pickup verifies a pending round or polls a
+ * finished one.
+ *
+ * <p>Implements FR2, FR20 of migrate-verify-to-executor-contract; FR10 of extract-agent-round-runner.
  *
  * @param taskId the task whose round is open
  * @param stage the stage the open round belongs to
@@ -46,7 +58,35 @@ record PendingWrite(String taskId, String stage, PendingPollRecord last) {
 
     /** The pending commit's subject, {@code gnomish: pending <stage>#<round> <token>}. */
     String subject() {
-        return ServiceCommitMessages.pending(stage, last);
+        return RoundSubject.pending(stage, last);
+    }
+
+    /**
+     * The round the pending commit lands on: {@code snapshot}, when its close is the one the last
+     * entry's subject names — {@link RoundClose#VERIFIABLE} under a check's entry, {@link
+     * RoundClose#PENDING} under the round's own.
+     *
+     * @param snapshot the open round's snapshot, as the cell holds it
+     * @return the round to land on; never null
+     * @throws GitPersistFailedException if the round has no snapshot, or its snapshot closed otherwise
+     *     — nothing is written
+     */
+    ClosedRound landsOn(Optional<ClosedRound> snapshot) {
+        ClosedRound round = snapshot.orElseThrow(this::noSnapshot);
+        RoundClose expected =
+                switch (last.subject()) {
+                    case PendingSubject.Check _ -> RoundClose.VERIFIABLE;
+                    case PendingSubject.Round _ -> RoundClose.PENDING;
+                };
+        if (round.close() != expected) {
+            throw refused(
+                    taskId,
+                    stage,
+                    last.attempt(),
+                    "the entry of " + RoundSubject.entryName(last) + " needs a " + expected
+                            + " snapshot below it, the round's closed " + round.close());
+        }
+        return round;
     }
 
     /** The refusal of a round with nothing registered to land the commit on, before any write. */
