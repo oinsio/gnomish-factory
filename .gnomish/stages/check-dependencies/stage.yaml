@@ -18,8 +18,8 @@ executor:
   type: agent-cli
   model: claude-sonnet-5-5
   settings:
-    maxTurns: 40
-    roundTimeout: 1200s
+    maxTurns: 80
+    roundTimeout: 2400s
     # A read-only analysis plus one report file. Bash is allowed for two reads and
     # one echo: the decision-file path reaches the gnome as an environment variable
     # and nothing but a shell can expand it, and `git ls-tree origin/main` is how

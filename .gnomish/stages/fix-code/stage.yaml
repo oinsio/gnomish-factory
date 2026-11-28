@@ -22,9 +22,9 @@ executor:
   model: claude-opus-5-5
   settings:
     # Counts the orchestrator's turns only; the fixes run in subagents.
-    maxTurns: 300
+    maxTurns: 600
     # Red-green per fix plus a full ./gradlew check at the end, possibly more than once.
-    roundTimeout: 28800s
+    roundTimeout: 57600s
     allowedTools:
       - Read
       - Glob
@@ -145,7 +145,8 @@ verify:
     criteriaFile: stages/fix-code/acceptance.md
     model: claude-fable-5-1
     settings:
-      maxTurns: 60
+      maxTurns: 120
+      roundTimeout: 3600s
       disallowedTools:
         - Bash
         - Agent
@@ -159,4 +160,4 @@ verify:
     votes: 1
 advancement: auto
 autonomy:
-  attemptLimit: 3
+  attemptLimit: 6

@@ -15,7 +15,7 @@
 schemaVersion: "1"
 
 autonomy:
-  attemptLimit: 2
+  attemptLimit: 4
 
 tracker:
   type: github

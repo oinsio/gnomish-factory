@@ -14,8 +14,8 @@ executor:
   # One `rm -r`: the cheapest model is enough.
   model: claude-haiku-5-5
   settings:
-    maxTurns: 10
-    roundTimeout: 300s
+    maxTurns: 20
+    roundTimeout: 600s
     allowedTools:
       - Bash
     disallowedTools:
@@ -48,4 +48,4 @@ verify:
       fi
 advancement: auto
 autonomy:
-  attemptLimit: 2
+  attemptLimit: 4

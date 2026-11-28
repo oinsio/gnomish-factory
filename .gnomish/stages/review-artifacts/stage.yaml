@@ -23,8 +23,8 @@ executor:
   settings:
     # Every claim the artifacts make about the codebase is checked by grep/read, and the
     # changes of this repository are large (proposal, design, several delta specs, 50+ tasks).
-    maxTurns: 80
-    roundTimeout: 1800s
+    maxTurns: 160
+    roundTimeout: 3600s
     # Bash is for read-only git (log, show, grep, diff, ls-tree, merge-base), the OpenSpec
     # CLI's read commands and the decision-file echo. Every file is written through Write.
     # `allowedTools` cannot widen what .claude/settings.json denies (git commit, merge, ...).
@@ -153,7 +153,8 @@ verify:
     settings:
       # The judge is read-only (Read/Grep/Glob, hard-wired by the factory) and pays a turn
       # per file it opens; time-zones' judges ran out at 30 on large changes.
-      maxTurns: 60
+      maxTurns: 120
+      roundTimeout: 3600s
       disallowedTools:
         - Bash
         - Agent
@@ -167,6 +168,6 @@ verify:
     votes: 1
 advancement: auto
 # The judge reviews the whole report adversarially, so a sound review can still need one
-# correction round; one extra attempt before escalating to a human.
+# correction round or more; the limit leaves room for several before escalating to a human.
 autonomy:
-  attemptLimit: 3
+  attemptLimit: 6

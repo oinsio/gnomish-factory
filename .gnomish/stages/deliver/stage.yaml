@@ -19,8 +19,8 @@ executor:
   # Reads the branch's diff and the archived change, writes a short title and body.
   model: claude-sonnet-5-5
   settings:
-    maxTurns: 60
-    roundTimeout: 1800s
+    maxTurns: 120
+    roundTimeout: 3600s
     # Bash is for read-only git, `gh pr list|create|edit` and the decision-file echo. `gh` authenticates with GH_TOKEN, which reaches the round through
     # factory.sandbox.env-passthrough (project.yaml.example.host).
     allowedTools:
@@ -84,4 +84,4 @@ verify:
       fi
 advancement: auto
 autonomy:
-  attemptLimit: 2
+  attemptLimit: 4

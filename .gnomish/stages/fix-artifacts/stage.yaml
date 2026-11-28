@@ -25,8 +25,8 @@ executor:
   settings:
     # Each recommendation is re-verified against the source before it is applied, and
     # every edit is reconciled across the change's other artifacts.
-    maxTurns: 80
-    roundTimeout: 1800s
+    maxTurns: 160
+    roundTimeout: 3600s
     # Bash is for read-only git, the OpenSpec CLI (status, instructions, show, validate)
     # and the decision-file echo. `allowedTools` cannot widen .claude/settings.json.
     allowedTools:
@@ -188,7 +188,8 @@ verify:
     criteriaFile: stages/fix-artifacts/acceptance.md
     model: claude-fable-5-1
     settings:
-      maxTurns: 60
+      maxTurns: 120
+      roundTimeout: 3600s
       disallowedTools:
         - Bash
         - Agent
@@ -202,4 +203,4 @@ verify:
     votes: 1
 advancement: auto
 autonomy:
-  attemptLimit: 3
+  attemptLimit: 6
