@@ -1,6 +1,0 @@
-{"seq":0,"tool":"Bash","start":"2026-11-20T11:52:18.137538Z","durationMillis":562}
-{"seq":1,"tool":"Bash","start":"2026-11-20T11:52:20.531669Z","durationMillis":38}
-{"seq":2,"tool":"Bash","start":"2026-11-20T11:52:23.800834Z","durationMillis":70}
-{"seq":3,"tool":"Bash","start":"2026-11-20T11:52:27.888986Z","durationMillis":92}
-{"seq":4,"tool":"Write","start":"2026-11-20T11:52:30.596759Z","durationMillis":1334}
-{"seq":5,"tool":"Bash","start":"2026-11-20T11:52:35.801840Z","durationMillis":31}
