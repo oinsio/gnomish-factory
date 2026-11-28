@@ -15,8 +15,8 @@ The CLI `StageExecutor` adapter SHALL run one `execute()` call as one fresh CLI 
 - **THEN** a new CLI process starts via the task environment with no session-resume flag and its prompt contains the rendered findings of attempt 1
 
 ### Requirement: Round prompt composition
-The round prompt SHALL be built from the shared briefing sections (task goal, input artifacts, prior-attempt feedback, decisions, control-file content) followed by the executor epilogue: the stage's full verify plan including judge acceptance-criteria content, the decision-file instruction, and — on attempts after the first — a rework preamble stating that the working copy already contains the prior attempt's result and must be reworked, not restarted.
-**Implements**: FR2, D8, D9 of add-agent-executor
+The round prompt SHALL be built from the shared briefing sections (task goal, input artifacts, prior-attempt feedback, decisions, control-file content) followed by the executor epilogue: the stage's full verify plan including judge acceptance-criteria content, the dialect's answer instruction, and — on attempts after the first — a rework preamble stating that the working copy already contains the prior attempt's result and must be reworked, not restarted.
+**Implements**: FR2, D8, D9 of add-agent-executor; FR19 of extract-agent-round-runner
 
 #### Scenario: Verify plan is visible to the agent
 - **WHEN** a stage with a command check and a judge check executes
@@ -25,64 +25,6 @@ The round prompt SHALL be built from the shared briefing sections (task goal, in
 #### Scenario: Rework preamble on retry only
 - **WHEN** attempt 1 and attempt 2 prompts of the same stage are compared
 - **THEN** only the attempt 2 prompt contains the rework preamble
-
-### Requirement: Decision-file protocol
-In git modes the decision request SHALL live in the working copy at `.gnomish-task/decisions/<stage>-a<attempt>-<token>.json` — the single gnome-writable path under `.gnomish-task/` — where `<token>` is the *round token*, the task branch's tip at the moment the round opened. The adapter SHALL pass that exact path via `$GNOMISH_DECISION_FILE`, read it through the environment after process exit, and map: that path present → `DecisionNeeded`, absent → `Completed`.
-**Implements**: FR13, FR15, NFR-R4 of make-checkpoint-gate-durable; FR3, NFR-R3, NFR-O2, D1 of add-agent-executor; FR23 of add-sandbox-core
-**Notes**: The factory mints the round token and no later round of the task repeats it, so the token names one round; the request rides the round's commit, which is how a pending escalation survives factory death and is resumable by any instance from the branch alone.
-
-#### Scenario: Agent asks for a decision
-- **WHEN** the agent writes `{"question": "Refactor or patch?", "options": ["refactor", "patch"]}` to the path `$GNOMISH_DECISION_FILE` names and exits
-- **THEN** the adapter returns `DecisionNeeded` with that question and both options
-
-#### Scenario: No signal means Completed
-- **WHEN** the process exits without creating a file at the path `$GNOMISH_DECISION_FILE` names
-- **THEN** the adapter returns `Completed`
-
-#### Scenario: Garbage decision file is not lost
-- **WHEN** the decision file contains unparseable text
-- **THEN** the adapter returns `DecisionNeeded` whose question is the raw content, with empty options, and logs the content at WARN
-
-#### Scenario: Pending decision survives factory death
-- **WHEN** a factory dies after the snapshot commit carrying a decision request but before the escalation is recorded
-- **THEN** a resuming instance reads the request from the snapshot's tree at the round's token path and escalates with that question, without replaying the round
-- **AND** the resumed round carries the token and the snapshot commit that record names — no new token is minted, no tip is re-read — so the state commit it lands is checked against that token as a live round's would be
-
-#### Scenario: An answered request is not asked again
-- **WHEN** a container-mode task parked on a decision request is answered, the stage restarts at attempt 0, and the next round's box is cloned from a tip that still carries the earlier request file
-- **THEN** the next round is given a path under its own token, reads only that path, and maps to `Completed` unless the gnome wrote a new request there
-
-#### Scenario: Stale request from another round is ignored
-- **WHEN** a decision file named for a previous round — another stage, another attempt number, or the same stage and attempt number under an earlier round's token — is present in the working copy
-- **THEN** the current round maps to `Completed` and the stale file changes nothing
-
-#### Scenario: A decision file beside the real one changes nothing
-- **WHEN** the gnome writes a decision file under any name other than the path `$GNOMISH_DECISION_FILE` names, or a killed round left one behind, and the round's own path holds nothing
-- **THEN** the round maps to `Completed`, whether or not the other file was removed
-
-#### Scenario: A salvage commit carries the request
-- **WHEN** a round that wrote a decision request ends in a salvage commit instead of a snapshot commit
-- **THEN** the request is on the branch under its token, as it would be after a snapshot commit
-
-#### Scenario: A snapshot without a request resumes as Completed
-- **WHEN** an interrupted verification resumes from a snapshot commit whose tree holds nothing at the round's token path
-- **THEN** the resumed round maps to `Completed`
-
-#### Scenario: A garbage request in a snapshot is re-raised as raw text
-- **WHEN** an interrupted verification resumes from a snapshot commit whose token path holds unparseable text
-- **THEN** the resumed round returns `DecisionNeeded` whose question is the raw content, with empty options, read as tolerantly as a live round
-
-#### Scenario: Empty decision file asks a fallback question
-- **WHEN** the decision file at the round's path is empty
-- **THEN** the adapter returns `DecisionNeeded` with a fallback question text and empty options, and logs the parse trouble at WARN
-
-#### Scenario: A decision round keeps its telemetry
-- **WHEN** a live round ends with a decision request
-- **THEN** the `DecisionNeeded` result carries the round's usage and trace, as a `Completed` result would
-
-#### Scenario: In-place mode uses a temp file outside the workspace
-- **WHEN** a round runs in the git-less in-place mode
-- **THEN** `$GNOMISH_DECISION_FILE` names a per-round temp file outside the workspace, and the file is deleted after the adapter reads it
 
 ### Requirement: Result event is essential, telemetry is best-effort
 The adapter SHALL treat the stream-json result event as essential — a missing or unparseable result event is an infrastructure failure of the round — while telemetry parsing is best-effort: on telemetry parse trouble the round SHALL still complete with no tool usage and no token usage — the wall time is still the adapter's own measurement — and an empty trace.
@@ -152,71 +94,6 @@ The trace SHALL contain top-level tool calls only, with nested subagent calls ex
 - **WHEN** a round's stream yields no usable telemetry
 - **THEN** the round's `wallTime` still spans process start to process exit, as measured by the adapter
 
-### Requirement: Live progress listener SPI
-The adapter's parse loop SHALL emit sealed progress events — round started (model, session id), top-level tool started (name, no input payload), round finished (result subtype, token summary, the agent's final-message summary) — to registered listeners synchronously as each line is read, while the process is still running — never as a post-exit burst.
-**Implements**: FR7, NFR-O1, UX1, D9, D10 of add-agent-executor; FR4, NFR-O1, UX1 of fix-round-stdout-drain
-
-#### Scenario: Progress observable without logs
-- **WHEN** a recording listener subscribes to a round with three tool calls
-- **THEN** it observes round-started, three tool-started events, and round-finished with the final summary
-
-#### Scenario: Broken listener does not break the round
-- **WHEN** a listener throws on every event
-- **THEN** the round completes normally
-
-#### Scenario: Progress is live, not post-mortem
-- **WHEN** the CLI emits a tool-started line while the process is still running
-- **THEN** subscribed listeners observe the event before the process exits
-
-#### Scenario: Listeners are invoked from the drain thread
-- **WHEN** a round's stream is parsed while the process runs
-- **THEN** listeners are invoked synchronously on the round's drain thread as each line is read, and a listener that tolerates that thread observes every event
-
-#### Scenario: The log renderer writes the feed under the attempt's keys
-- **WHEN** a round runs with the shipped SLF4J renderer subscribed
-- **THEN** each progress event is logged under the attempt's MDC keys
-- **AND** the raw stream events are logged at DEBUG
-
-#### Scenario: The log renderer is the one shipped listener
-- **WHEN** the factory wires an executor round or a judge vote
-- **THEN** it subscribes the shipped SLF4J renderer and no other listener
-
-#### Scenario: Judge rounds feed the same listeners
-- **WHEN** a judge vote runs
-- **THEN** its progress events reach the same listeners as an executor round's
-
-### Requirement: CLI judge vote
-The CLI `JudgeVoter` adapter SHALL run one `vote()` as one CLI round via `exec()` of a task environment with the check's pinned model — in sandboxed mode a fresh environment materialized from the attempt commit, never the gnome-touched round environment (votes of one attempt may share it); in host mode the stage workspace, as today.
-**Implements**: FR8, NFR-R1, NFR-O2, D5, D8 of add-agent-executor; FR4, FR15, FR19 of add-sandbox-core
-
-#### Scenario: Fenced verdict accepted
-- **WHEN** the judge's final message wraps `{"passed": false, "findings": [...]}` in a markdown code fence
-- **THEN** the vote is Fail with the parsed findings
-
-#### Scenario: No verdict is never a pass
-- **WHEN** the judge process exits without a parseable verdict in its final message
-- **THEN** the vote is `CannotVerify` and the raw message is logged at WARN
-
-#### Scenario: Feedback is withheld from the judge
-- **WHEN** a judge vote runs on attempt 3 after two quality failures
-- **THEN** its prompt contains no prior-attempt findings
-
-#### Scenario: Judge criteria come from the law, not the working copy
-- **WHEN** the gnome has rewritten the acceptance-criteria file in the working copy before a vote
-- **THEN** the vote's prompt carries the criteria content of the pipeline law bound at invocation start
-
-#### Scenario: The judge prompt carries the task context and the verdict instruction
-- **WHEN** a judge vote's prompt is built
-- **THEN** it contains the task goal, the human decisions, the acceptance criteria and a structured-verdict instruction
-
-#### Scenario: The first JSON object is the verdict
-- **WHEN** the judge's final message carries prose around a JSON object, or more than one JSON object
-- **THEN** the vote is read from the first JSON object in the message
-
-#### Scenario: A dead judge process cannot verify
-- **WHEN** the judge process dies, or exits without a result event
-- **THEN** the vote is `CannotVerify`, never a pass, and the raw final message, if any, is logged at WARN
-
 ### Requirement: Judge votes report per-model tokens
 A CLI judge vote SHALL report its token usage per resolved model id in the same form as executor rounds (four token counts per model, empty map = unreported), preserving per-vote granularity in the recorded judge usage.
 **Implements**: FR9, NFR-C1, D4 of add-agent-executor
@@ -224,83 +101,6 @@ A CLI judge vote SHALL report its token usage per resolved model id in the same 
 #### Scenario: Vote tokens keyed by model
 - **WHEN** a judge vote's result event reports `modelUsage`
 - **THEN** the vote carries `tokensByModel` with those resolved model ids
-
-### Requirement: Manifest settings with strict validation
-The manifest `settings` map of an `agent-cli` executor and of a judge check SHALL accept exactly `allowedTools`, `disallowedTools`, `maxTurns`, and `roundTimeout`; any unknown key SHALL be a startup error raised before any dialog, naming the stage/check and the offending key.
-**Implements**: FR11, UX2, D7 of add-agent-executor; NFR-S1 of add-tracker-port; FR9 of add-sandbox-core
-**Notes**: Refusing the tracker's credential variables in the passthrough is what keeps tracker credentials from the gnome by construction.
-
-#### Scenario: Typo fails fast
-- **WHEN** a stage's settings contain `allowedTols`
-- **THEN** startup fails before any dialog with a message naming the stage and the unknown key
-
-#### Scenario: Binary path is installation config
-- **WHEN** application properties point the CLI binary at a fake agent script
-- **THEN** rounds execute that binary with no manifest change
-
-#### Scenario: Credential variable cannot be allowlisted
-- **WHEN** application properties allowlist a variable the active tracker adapter declares as a credential
-- **THEN** startup fails before any dialog with an error naming the variable
-
-#### Scenario: The binary defaults to claude on the PATH
-- **WHEN** no application property names the CLI binary
-- **THEN** rounds execute `claude` resolved from `PATH`
-
-#### Scenario: The child-environment allowlist is installation config
-- **WHEN** a stage's `settings` name an environment allowlist or a passthrough variable
-- **THEN** startup fails before any dialog with the unknown-settings-key error, since the allowlist lives in application properties
-
-#### Scenario: Passthrough names match exactly
-- **WHEN** the operator passthrough names a variable, and the factory environment also holds variables whose names merely share a prefix with it
-- **THEN** the round's environment receives the named variable only, beside the adapter base set and the factory-set variables, and inherits nothing else implicitly
-
-### Requirement: Hard-wired adapter policy
-The CLI adapters SHALL hard-wire, as adapter policy and never as configuration, the judge's read-only tool set, the executor round's write allowance for its own decision file, the transport flags, the per-role CLI permission mode, and the exclusion of all MCP server configuration; none of these SHALL be settable from the manifest or from operator configuration.
-**Implements**: FR12, NFR-S1, NFR-S2, D7 of add-agent-executor; FR1, FR2, FR3, FR4, NFR-S1, NFR-S2, NFR-C1 of fix-operator-blockers
-**Notes**: `acceptEdits` auto-approves file edits inside the working directory; `dontAsk` denies every tool call outside the pre-approved set without waiting for an answer; the MCP exclusion keeps both the operator's own servers and a working-copy `.mcp.json` out of a round.
-
-#### Scenario: Judge cannot widen its tools
-- **WHEN** a judge check's settings request a write-capable tool in `allowedTools`
-- **THEN** the effective tool set for the vote remains read-only
-
-#### Scenario: Executor round can edit files with no wrapper
-- **WHEN** an executor round launches with the stock `claude` binary and a stage whose `allowedTools` lists `Edit` and `Write`
-- **THEN** its command line carries `--permission-mode acceptEdits` and `--strict-mcp-config`
-- **AND** the gnome's edits inside the working directory are applied without any approval prompt
-
-#### Scenario: Judge never auto-approves an edit
-- **WHEN** a judge vote launches
-- **THEN** its command line carries `--permission-mode dontAsk` and `--strict-mcp-config`
-- **AND** never `acceptEdits` or `bypassPermissions`
-
-#### Scenario: Manifest cannot set the permission mode
-- **WHEN** a stage's `settings` contain `permissionMode`
-- **THEN** startup fails before any round with the existing unknown-settings-key error naming the stage and the key
-
-#### Scenario: Project MCP configuration starts nothing
-- **WHEN** the working copy contains a `.mcp.json` declaring a server command
-- **THEN** no round or vote starts that server
-
-#### Scenario: No command line skips all permission checks
-- **WHEN** any executor round or judge vote command line is rendered
-- **THEN** it never carries `bypassPermissions`
-
-#### Scenario: A judge check may narrow its tools
-- **WHEN** a judge check's settings list only `Read` in `allowedTools`
-- **THEN** the effective tool set for the vote is `Read` alone, a subset of the Read/Grep/Glob-class set
-
-#### Scenario: The executor may write exactly its decision file
-- **WHEN** an executor round launches, whatever the stage's `allowedTools`
-- **THEN** its allowed tools end with a `Write` allowance for exactly the decision-file path the adapter generated for that round, and for no other path
-
-#### Scenario: Transport flags are not configurable
-- **WHEN** an executor round or a judge vote launches
-- **THEN** its command line carries `-p` and `--output-format stream-json --verbose`, whatever the manifest and the operator configuration say
-
-#### Scenario: The model is manifest data, not a setting
-- **WHEN** a stage names `executor.model`, or a judge check names its `model`
-- **THEN** the round's command line carries that model as `--model`
-- **AND** a `model` key in `settings` is rejected with the unknown-settings-key error
 
 ### Requirement: Round timeout and control-file preflight
 `roundTimeout` expiry SHALL kill the CLI process and classify the round as an infrastructure failure (no verdict exists, no attempt burned). The adapter SHALL obtain the stage's control file from the pipeline law bound at invocation start — never from the gnome-writable working copy at use time; an unreadable control file SHALL be an infrastructure failure before any process starts (a "cannot execute" escalation), never a silently control-less prompt.
@@ -329,14 +129,6 @@ The briefing section renderer SHALL be a shared component with an explicit publi
 #### Scenario: Extraction is invisible to the console
 - **WHEN** the executor prompt and a spec render the same section over the same pre-read data
 - **THEN** the rendered text is identical
-
-### Requirement: Contract compliance via fake agent
-Both CLI adapters SHALL pass the existing `StageExecutorContract` and `JudgeVoterContract` suites driven by a fake agent binary substituted through the configurable CLI path, covering at minimum: decision file present/absent/garbage, verdict clean/fenced/garbage, and a killed process.
-**Implements**: FR15, G4 of add-agent-executor
-
-#### Scenario: One suite, real machinery
-- **WHEN** the contract suites run against the CLI adapters with the fake binary
-- **THEN** every suite scenario passes through a real subprocess, pipes, and exit codes
 
 ### Requirement: CLI processes run through the task environment
 Agent-CLI rounds and CLI judge votes SHALL be spawned via `exec()` of the bound `TaskExecutionEnvironment`, never as direct host subprocesses. The stream-json contract, decision-file semantics, timeouts, and telemetry SHALL be unchanged — the adapter consumes the same stdout stream and exit code regardless of where the process runs.
@@ -451,23 +243,6 @@ Both CLI round executions (executor and judge) SHALL consume and parse the proce
 - **WHEN** the drain has not finished when the post-exit bound of the round's handle runs out
 - **THEN** the round is an infrastructure failure, never a round completed on a partial stream
 
-### Requirement: Decision file is read through the shared result reader
-The adapter SHALL read the decision file through the executor contract's single result reader,
-with its size cap and untrusted-text wrapping, and SHALL surface the request as a
-`decision-request` answer on a `completed` status. The decision-file path, naming and tolerant
-fallbacks of the existing protocol SHALL be unchanged.
-**Implements**: FR6 of define-executor-contract
-
-#### Scenario: Decision file read is capped
-- **WHEN** the gnome writes a decision file larger than the result cap
-- **THEN** at most the cap is read, truncation is recorded, and the round still resolves as a
-  decision request
-
-#### Scenario: Adapter constructs no failure class
-- **WHEN** the agent process is killed on its round timeout
-- **THEN** the adapter reports the run with the contract's status and the engine, not the
-  adapter, classifies it as infrastructure
-
 ### Requirement: Per-model cost mapping
 The adapter SHALL map each `modelUsage` entry's `costUSD` beside that model's four token
 counts, for stage rounds and judge votes alike; an entry without `costUSD` SHALL carry no
@@ -522,3 +297,102 @@ the `permission_denials` array, or any per-event `uuid` or `request_id`; cost fi
 #### Scenario: Home-directory paths lose their username
 - **WHEN** a captured line embeds a home-directory path outside the workspace (`/Users/<name>/…`, `/home/<name>/…`)
 - **THEN** the path's prefix is collapsed to `/workspace-scrubbed` and the username does not survive
+
+### Requirement: Agent CLI is a named executor of the contract
+The agent CLI SHALL be one executor in the executor registry implementing the contract's
+interface in roles `transform`, `verdict`, `decision`, built from the agent round runner and a
+dialect; role-specific round classes SHALL NOT exist.
+**Implements**: FR1, FR2, G2 of extract-agent-round-runner
+
+#### Scenario: Round through the registry
+- **WHEN** a stage names the Claude executor
+- **THEN** its round runs through the registry-resolved executor and the one runner
+
+### Requirement: Decision request is the answer file
+The gnome's decision request SHALL be the `decision-request` answer at the round's answer file
+path, read by the one answer read on the live path and at recovery alike; the decision file
+SHALL have no transport of its own, and no reader SHALL turn content that is not a valid answer
+into a decision request.
+**Implements**: FR9, FR21, NFR-R5 of extract-agent-round-runner
+
+#### Scenario: Pending decision survives factory death
+- **WHEN** a factory dies after the snapshot commit carrying the answer file
+- **THEN** a resuming instance finds the decision request in the branch and escalates it
+
+#### Scenario: Answer file read is capped
+- **WHEN** an answer file larger than the result cap is read
+- **THEN** at most the cap is read and the answer is refused as over the cap, never read as a
+  decision request
+
+#### Scenario: Recovery reads a snapshot's answer as the live round does
+- **WHEN** an interrupted verification resumes from a snapshot commit whose answer path holds
+  the bytes a live round would have refused
+- **THEN** the resumed round has the outcome the live round would have had, and no decision
+  request is raised from them
+
+#### Scenario: A salvage commit carries the request
+- **WHEN** a round whose answer is a decision request ends in a salvage commit instead of a
+  snapshot commit
+- **THEN** the request is on the branch under its token, as it would be after a snapshot commit
+
+#### Scenario: A snapshot without a request resumes as Completed
+- **WHEN** an interrupted verification resumes from a snapshot commit whose tree holds nothing
+  at the round's token path
+- **THEN** the resumed round maps to `Completed`
+
+### Requirement: The answer file is named by the round that wrote it
+In branch modes the answer file SHALL live at `.gnomish-task/decisions/<stage>-a<attempt>-<token>.json`,
+`<token>` being the round token, and a round SHALL read that path only; in the in-place mode it
+SHALL be a per-round file outside the workspace, removed with the round.
+**Implements**: FR9 of extract-agent-round-runner
+
+#### Scenario: An answered request is not asked again
+- **WHEN** a container-mode task parked on a decision request is answered, the stage restarts at
+  attempt 0, and the next round's box is cloned from a tip that still carries the earlier file
+- **THEN** the next round is given a path under its own token, reads only that path, and maps to
+  `Completed` unless a new request is at that path
+
+#### Scenario: Stale request from another round is ignored
+- **WHEN** an answer file named for a previous round — another stage, another attempt number,
+  or the same stage and attempt number under an earlier round's token — is in the working copy
+- **THEN** the current round maps to `Completed` and the stale file changes nothing
+
+#### Scenario: A decision file beside the real one changes nothing
+- **WHEN** a file under `.gnomish-task/decisions/` with any name other than the round's own path
+  is present, and the round's own path holds nothing
+- **THEN** the round maps to `Completed`, whether or not the other file was removed
+
+#### Scenario: The in-place answer file leaves with the round
+- **WHEN** a round runs in the git-less in-place mode
+- **THEN** its answer path is a per-round file outside the workspace, gone after the round's
+  close or discard
+
+### Requirement: The answer instruction is the dialect's
+The round prompt of a `transform` request SHALL tell the agent how to ask for a decision in the
+words of the dialect's declared answer form: its final structured reply for a schema-enforced
+answer, the answer file path for a file answer. No vendor-neutral prompt builder SHALL spell
+either.
+**Implements**: FR19 of extract-agent-round-runner
+
+#### Scenario: A schema-enforced dialect is not told to write a file
+- **WHEN** the prompt of a `transform` round of a dialect declaring a schema-enforced answer is
+  built
+- **THEN** it tells the agent to ask through its final reply and names no answer file path
+
+### Requirement: A decision is rendered with the question it answers
+The briefing's decisions section SHALL render a decision that answers a decision request as the
+question, its options and the reply, through the one shared renderer, in the stage round prompt
+and the judge prompt alike; a decision that answers no request SHALL render as author and body.
+**Implements**: FR9, NFR-R2 of extract-agent-round-runner
+
+#### Scenario: Question, options and reply reach the next round
+- **WHEN** a task parked on a decision request is answered and the next round starts
+- **THEN** the round's prompt carries the question, each option and the reply in its decisions section
+
+#### Scenario: A decision without a question renders as author and body
+- **WHEN** the briefing renders a decision that records no question
+- **THEN** its line carries the author and the body only
+
+#### Scenario: Any instance starts the round after an answer alike
+- **WHEN** a task parked on a decision request is answered and a second instance with a fresh clone, or a fresh box, starts the next round
+- **THEN** the round's prompt equals the one the parking instance would have built, and no argv carries a session flag

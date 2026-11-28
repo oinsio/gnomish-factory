@@ -180,11 +180,19 @@ When the factory can see that denials were lost — the tail cap saturated a rea
 
 ### Requirement: Guard outage is an infrastructure failure
 When the guard is unreachable or down, in-flight checks SHALL classify as infrastructure failures (retried per existing policy, no stage attempt burned), and the factory SHALL restart the guard.
-**Implements**: NFR-R1 of add-sandbox-core
+**Implements**: NFR-R1 of add-sandbox-core; FR15 of extract-agent-round-runner
 
 #### Scenario: Guard crash burns no attempt
 - **WHEN** the guard dies while a stage round is in progress
 - **THEN** the round fails as an infrastructure failure, the attempt counter is unchanged, and the guard is restarted before retry
+
+#### Scenario: A dead guard around a check in a box is cannot-verify
+- **WHEN** the guard of the box a `program` or `judge` check runs in is not running before the check's request or after it
+- **THEN** the check is cannot-verify naming the guard, whatever the executor answered, and the attempt counter is unchanged
+
+#### Scenario: A stage round and a check round are probed by one owner
+- **WHEN** a stage round and a check round each run in a box with a guard
+- **THEN** each is probed before and after its request by the same component, and no executor or round class probes for itself
 
 ### Requirement: Image carries the egress plumbing
 The sandbox base image SHALL bake in everything egress needs at build time: the CA drop folder and `gnomish-trust-ca` (seam for later TLS interception), proxy settings for tools that ignore proxy env vars (JVM: `JAVA_TOOL_OPTIONS`, `GRADLE_OPTS`; Maven: a root-owned `settings.xml` selected by `MAVEN_ARGS`), and registry endpoints as build parameters rather than hardcoded values.

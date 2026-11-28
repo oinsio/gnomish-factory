@@ -141,9 +141,10 @@ A `schemaVersion` SHALL be declared in `config.yaml` — one version for the who
 
 ### Requirement: Local sanity validation of mechanism and check configs
 The loader SHALL apply catalog-free sanity rules, needing no live target, to the executor types `api`, `agent-cli`, `program` and `command`. The executor `model` SHALL be present and non-blank for the agent executor types (`api`, `agent-cli`), and `settings` SHALL be a well-formed mapping whose keys and values only the executor's schema checks. The loader SHALL NOT validate target liveness — whether a CI-check name exists, whether a `model` is real, or whether `judge` criteria are gradeable.
-**Implements**: FR11 of load-pipeline-config; FR6 of add-plugin-architecture; FR13 of add-plugin-architecture; UX1 of add-plugin-architecture; FR9, FR10 of define-executor-contract; FR1, FR2, UX2 of add-command-executor; FR1, FR13 of migrate-verify-to-executor-contract
+**Implements**: FR11 of load-pipeline-config; FR6 of add-plugin-architecture; FR13 of add-plugin-architecture; UX1 of add-plugin-architecture; FR9, FR10 of define-executor-contract; FR1, FR2, UX2 of add-command-executor; FR1, FR13 of migrate-verify-to-executor-contract; FR4, FR13 of extract-agent-round-runner
 **Notes**: The model is pinned in the stage manifest so any instance reproduces the stage identically, never left to an executor default.
 **Notes**: Executor existence is in-process knowledge (the executor registry: law declarations plus core's built-ins), not target liveness.
+**Notes**: The scenario "Judge vote count must be positive and odd" keeps its title from before votes were removed; no count is accepted now.
 
 #### Scenario: Missing model is rejected
 - **WHEN** an `api` or `agent-cli` stage's `model` is absent or blank
@@ -151,7 +152,7 @@ The loader SHALL apply catalog-free sanity rules, needing no live target, to the
 - **AND** the sanity rule accepts `settings` present as a mapping without inspecting its keys or values
 
 #### Scenario: Agent settings are checked against the executor's schema
-- **WHEN** an `agent-cli` stage or a `judge` check declares a `settings` key
+- **WHEN** an `agent-cli` executor block, a stage's or a `judge` check's, declares a `settings` key
   other than `allowedTools`, `disallowedTools`, `maxTurns` or `roundTimeout`,
   or a malformed value for one of them
 - **THEN** the load fails with a located error naming the stage or check and
@@ -210,7 +211,7 @@ The loader SHALL apply catalog-free sanity rules, needing no live target, to the
 - **AND** a param problem is reported as a located `ConfigError` identifying the check
 
 #### Scenario: Judge vote count must be positive and odd
-- **WHEN** a `judge` check declares `votes` that is less than 1 or even
+- **WHEN** a `judge` check declares `votes`, whatever its value
 - **THEN** validation reports a located error identifying the check
 
 #### Scenario: Target liveness is not validated
@@ -222,7 +223,7 @@ The loader SHALL apply catalog-free sanity rules, needing no live target, to the
 - **THEN** validation reports a located error
 
 #### Scenario: Settings key with no value is rejected
-- **WHEN** a stage's executor `settings`, a `judge` check's `settings`, a check's `params` or an
+- **WHEN** a stage's executor `settings`, a `judge` check's executor `settings`, a check's `params` or an
   executor declaration's `settings` declares a key with no value
 - **THEN** the load fails with a located error naming the file and `<where>.<key>`, before any
   stage runs
@@ -686,3 +687,36 @@ A check whose executor describe declares credentials SHALL be a located error wh
 #### Scenario: Same-box with a secret is refused
 - **WHEN** a check names an executor declaring `SONAR_TOKEN` and `verify-in: same-box`
 - **THEN** validation reports a located error naming the check and the credential
+
+### Requirement: A judge check declares the stage's executor block
+A `judge` check SHALL declare who judges with the `executor:` block a stage declares, parsed and
+validated by the same owner and the same rules. No judge SHALL be defaulted: a `judge` check
+with no `executor:` block, an agent block with no `model`, or a block whose executor does not
+support the `verdict` role SHALL be a located load error, and the factory SHALL NOT start.
+**Implements**: FR13, FR14, UX1 of extract-agent-round-runner
+**Notes**: The executor, the judge and the arbiter are one mechanism configured one way; they differ in instructions and role.
+
+#### Scenario: A judge check with an agent block is accepted
+- **WHEN** a `judge` check declares `criteriaFile` and `executor: {type: agent-cli, model: m, settings: {maxTurns: 60}}`
+- **THEN** validation passes and the typed check carries the same executor type a stage's block maps to
+
+#### Scenario: A judge check without an executor block is rejected
+- **WHEN** a `judge` check declares no `executor:` block
+- **THEN** the load fails with a located error naming the stage, the check and `executor`
+
+#### Scenario: A judge block without a model is rejected
+- **WHEN** a `judge` check's `agent-cli` block declares no `model`
+- **THEN** the load fails with the located error a stage's block without a model gets
+
+#### Scenario: A judge executor without the verdict role is rejected
+- **WHEN** a `judge` check's block names a `program` whose describe lists no `verdict` role
+- **THEN** the load fails with a located error naming the check, the executor and the role
+
+#### Scenario: Removed judge keys are rejected
+- **WHEN** a `judge` check declares `votes`, or `model` or `settings` beside its `executor:` block
+- **THEN** the load fails with a located error naming the check and the unknown field
+
+#### Scenario: An agent block resolves to the reserved executor name
+- **WHEN** a stage or a `judge` check declares `type: agent-cli`
+- **THEN** it resolves in the executor registry to the entry named `claude`
+- **AND** a law that declares an executor named `claude` is refused at load as a built-in's name
